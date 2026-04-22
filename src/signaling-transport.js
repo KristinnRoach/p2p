@@ -10,7 +10,7 @@
  * @typedef {Object} IceTransport
  * @property {(candidate: RTCIceCandidateInit) => void|Promise<void>} sendCandidate
  *   Publish a local ICE candidate to the remote peer.
- * @property {(callback: (candidate: RTCIceCandidateInit) => void) => void} onRemoteCandidate
+ * @property {(callback: (candidate: RTCIceCandidateInit) => void) => void|(() => void)} onRemoteCandidate
  *   Subscribe to incoming remote ICE candidates. The callback may be invoked
  *   many times. The transport is responsible for listener lifetime/cleanup.
  */
@@ -22,10 +22,10 @@
  * @typedef {Object} DataSignalingChannel
  * @property {(offer: RTCSessionDescriptionInit) => void|Promise<void>} sendOffer
  * @property {(answer: RTCSessionDescriptionInit) => void|Promise<void>} sendAnswer
- * @property {(callback: (offer: RTCSessionDescriptionInit) => void) => void} onOffer
- * @property {(callback: (answer: RTCSessionDescriptionInit) => void) => void} onAnswer
+ * @property {(callback: (offer: RTCSessionDescriptionInit) => void) => void|(() => void)} onOffer
+ * @property {(callback: (answer: RTCSessionDescriptionInit) => void) => void|(() => void)} onAnswer
  * @property {(candidate: RTCIceCandidateInit) => void|Promise<void>} sendCandidate
- * @property {(callback: (candidate: RTCIceCandidateInit) => void) => void} onRemoteCandidate
+ * @property {(callback: (candidate: RTCIceCandidateInit) => void) => void|(() => void)} onRemoteCandidate
  */
 
 export {};

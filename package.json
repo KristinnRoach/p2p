@@ -10,8 +10,10 @@
     "./ice": "./src/ice.js",
     "./logger": "./src/logger.js",
     "./peer": "./src/peer.js",
+    "./remote-stream": "./src/remote-stream.js",
     "./rtt": "./src/rtt.js",
     "./sdp": "./src/sdp.js",
+    "./signaling-channel": "./src/signaling-channel.js",
     "./signaling-transport": "./src/signaling-transport.js",
     "./tracks": "./src/tracks.js",
     "./utils": "./src/utils.js"
