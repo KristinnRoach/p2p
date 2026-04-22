@@ -1,0 +1,50 @@
+{
+  "name": "@kidlib/p2p",
+  "version": "0.1.0",
+  "description": "Signaling-agnostic WebRTC peer and data-channel helpers.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./config": "./src/config.js",
+    "./data-channel": "./src/data-channel.js",
+    "./ice": "./src/ice.js",
+    "./logger": "./src/logger.js",
+    "./peer": "./src/peer.js",
+    "./rtt": "./src/rtt.js",
+    "./sdp": "./src/sdp.js",
+    "./signaling-transport": "./src/signaling-transport.js",
+    "./tracks": "./src/tracks.js",
+    "./utils": "./src/utils.js"
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "webrtc",
+    "peer-to-peer",
+    "datachannel"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "changeset": "EDITOR='code --wait' changeset",
+    "bump": "changeset version",
+    "release": "pnpm test && changeset publish"
+  },
+  "homepage": "https://github.com/KristinnRoach/p2p#readme",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KristinnRoach/p2p.git"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@vitest/browser-playwright": "^4.1.0",
+    "playwright": "^1.57.0",
+    "vitest": "^4.1.0"
+  }
+}
