@@ -35,13 +35,50 @@ await peer.start();
 `signaling` must implement the `DataSignalingChannel` contract documented in
 `src/signaling-transport.js`.
 
+Provider adapters can be normalized before passing them to `Peer`:
+
+```js
+import { createSignalingChannel } from '@kidlib/p2p';
+
+const signaling = createSignalingChannel({
+  sendOffer,
+  sendAnswer,
+  onOffer,
+  onAnswer,
+  sendCandidate,
+  onRemoteCandidate,
+});
+```
+
+`createSignalingChannel()` returns a normalized signaling object with a
+`close()` method. Calling `close()` prevents callbacks registered through the
+wrapper (`onOffer`, `onAnswer`, `onRemoteCandidate`) from firing again and
+prevents new subscriptions. If the provider returned unsubscribe functions, they
+are called too. It does not close the underlying provider connection unless
+those provider unsubscribe functions do so.
+
+Remote media can be assembled without touching DOM elements:
+
+```js
+import { attachRemoteStream } from '@kidlib/p2p';
+
+const detach = attachRemoteStream(peer, {
+  onStream({ stream }) {
+    renderRemoteStream(stream);
+  },
+});
+```
+
 ## Exports
 
 - `Peer`, `PEER_STATES`
 - `createDataChannel`, `joinDataChannel`, `closeDataConnection`
 - `generateRoomId`
 - `setLogger`
-- Power-user subpaths for `config`, `ice`, `rtt`, `sdp`, `tracks`, and `utils`
+- `createSignalingChannel`
+- `attachRemoteStream`
+- Power-user subpaths for `config`, `ice`, `remote-stream`, `rtt`, `sdp`,
+  `signaling-channel`, `signaling-transport`, `tracks`, and `utils`
 
 ## Development
 

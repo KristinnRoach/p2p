@@ -14,6 +14,8 @@
 
 export { generateRoomId } from './utils.js';
 export { setLogger } from './logger.js';
+export { createSignalingChannel } from './signaling-channel.js';
+export { attachRemoteStream } from './remote-stream.js';
 
 export {
   createDataChannel,
