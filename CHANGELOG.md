@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.1.3
+
+### Patch Changes
+
+- Harden helper cleanup behavior.
+
 ## 0.1.2
 
 ### Patch Changes
