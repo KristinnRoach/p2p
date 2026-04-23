@@ -1,8 +1,7 @@
 # @kidlib/p2p
 
 Signaling-agnostic WebRTC helpers for peer connections, data channels, ICE
-candidate exchange, SDP handling, track attachment, RTT diagnostics, and room ID
-generation.
+candidate exchange, SDP handling, track attachment, and RTT diagnostics.
 
 The package does not include a signaling backend. Consumers provide a transport
 for offer, answer, and ICE candidate exchange, so it can be used with Firebase,
@@ -73,12 +72,11 @@ const detach = attachRemoteStream(peer, {
 
 - `Peer`, `PEER_STATES`
 - `createDataChannel`, `joinDataChannel`, `closeDataConnection`
-- `generateRoomId`
 - `setLogger`
 - `createSignalingChannel`
 - `attachRemoteStream`
 - Power-user subpaths for `config`, `ice`, `remote-stream`, `rtt`, `sdp`,
-  `signaling-channel`, `signaling-transport`, `tracks`, and `utils`
+  `signaling-channel`, `signaling-transport`, and `tracks`
 
 ## Development
 

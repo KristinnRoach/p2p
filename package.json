@@ -15,8 +15,7 @@
     "./sdp": "./src/sdp.js",
     "./signaling-channel": "./src/signaling-channel.js",
     "./signaling-transport": "./src/signaling-transport.js",
-    "./tracks": "./src/tracks.js",
-    "./utils": "./src/utils.js"
+    "./tracks": "./src/tracks.js"
   },
   "files": [
     "src"

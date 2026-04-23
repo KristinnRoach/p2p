@@ -12,7 +12,6 @@
 //   for in-lib tests and future evolution.
 // - Logging defaults to no-op; wire via setLogger() if desired.
 
-export { generateRoomId } from './utils.js';
 export { setLogger } from './logger.js';
 export { createSignalingChannel } from './signaling-channel.js';
 export { attachRemoteStream } from './remote-stream.js';
