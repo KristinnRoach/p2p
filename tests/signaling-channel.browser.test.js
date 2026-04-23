@@ -120,6 +120,49 @@ describe('createSignalingChannel', () => {
     expect(() => channel.onOffer(() => {})).toThrow(/after close/);
   });
 
+  it('attempts every active cleanup when one unsubscribe throws on close', () => {
+    const error = new Error('unsubscribe failed');
+    const firstUnsubscribe = vi.fn(() => {
+      throw error;
+    });
+    const secondUnsubscribe = vi.fn();
+    const source = createSource({
+      onOffer: vi.fn(() => firstUnsubscribe),
+      onAnswer: vi.fn(() => secondUnsubscribe),
+    });
+    const channel = createSignalingChannel(source);
+
+    channel.onOffer(() => {});
+    channel.onAnswer(() => {});
+
+    expect(() => channel.close()).toThrow(error);
+    expect(firstUnsubscribe).toHaveBeenCalledTimes(1);
+    expect(secondUnsubscribe).toHaveBeenCalledTimes(1);
+    expect(() => channel.close()).not.toThrow();
+  });
+
+  it('rethrows falsy cleanup errors from close', () => {
+    const secondUnsubscribe = vi.fn();
+    const source = createSource({
+      onOffer: vi.fn(() => () => {
+        throw 0;
+      }),
+      onAnswer: vi.fn(() => secondUnsubscribe),
+    });
+    const channel = createSignalingChannel(source);
+
+    channel.onOffer(() => {});
+    channel.onAnswer(() => {});
+
+    try {
+      channel.close();
+      throw new Error('Expected close() to throw');
+    } catch (error) {
+      expect(error).toBe(0);
+    }
+    expect(secondUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects listener methods that return invalid cleanup values', () => {
     const source = createSource({
       onOffer: vi.fn(() => ({ unsubscribe: vi.fn() })),

@@ -73,6 +73,40 @@ describe('attachRemoteStream', () => {
     track.stop();
   });
 
+  it('returns an idempotent detach function for Peer-style subscriptions', () => {
+    const unsubscribe = vi.fn();
+    const peer = {
+      on: vi.fn(() => unsubscribe),
+    };
+
+    const detach = attachRemoteStream(peer);
+    detach();
+    detach();
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats non-function Peer-style unsubscribe values as no-op cleanup', () => {
+    const peer = {
+      on: vi.fn(() => undefined),
+    };
+
+    const detach = attachRemoteStream(peer);
+
+    expect(() => detach()).not.toThrow();
+  });
+
+  it('returns an idempotent detach function for EventTarget listeners', () => {
+    const peer = new EventTarget();
+    const removeEventListener = vi.spyOn(peer, 'removeEventListener');
+
+    const detach = attachRemoteStream(peer);
+    detach();
+    detach();
+
+    expect(removeEventListener).toHaveBeenCalledTimes(1);
+  });
+
   it('throws when callbacks are not functions', () => {
     expect(() =>
       attachRemoteStream(new EventTarget(), { onTrack: 'not a function' }),

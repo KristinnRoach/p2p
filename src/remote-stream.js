@@ -63,17 +63,27 @@ function resolveTrackTarget(peerOrPc) {
 }
 
 function attachTrackListener(target, handleTrack, onCleanup) {
+  let detached = false;
+
   if (typeof target.on === 'function') {
-    const unsubscribe = target.on('track', handleTrack);
+    const rawUnsubscribe = target.on('track', handleTrack);
+    const unsubscribe =
+      typeof rawUnsubscribe === 'function' ? rawUnsubscribe : () => {};
+
     return () => {
+      if (detached) return;
+      detached = true;
       onCleanup();
-      unsubscribe?.();
+      unsubscribe();
     };
   }
 
   const listener = (event) => handleTrack(event, event);
   target.addEventListener('track', listener);
+
   return () => {
+    if (detached) return;
+    detached = true;
     onCleanup();
     target.removeEventListener('track', listener);
   };
