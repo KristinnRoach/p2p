@@ -141,6 +141,28 @@ describe('createSignalingChannel', () => {
     expect(() => channel.close()).not.toThrow();
   });
 
+  it('rethrows falsy cleanup errors from close', () => {
+    const secondUnsubscribe = vi.fn();
+    const source = createSource({
+      onOffer: vi.fn(() => () => {
+        throw 0;
+      }),
+      onAnswer: vi.fn(() => secondUnsubscribe),
+    });
+    const channel = createSignalingChannel(source);
+
+    channel.onOffer(() => {});
+    channel.onAnswer(() => {});
+
+    try {
+      channel.close();
+      throw new Error('Expected close() to throw');
+    } catch (error) {
+      expect(error).toBe(0);
+    }
+    expect(secondUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects listener methods that return invalid cleanup values', () => {
     const source = createSource({
       onOffer: vi.fn(() => ({ unsubscribe: vi.fn() })),
