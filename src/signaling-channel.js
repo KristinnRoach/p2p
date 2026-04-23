@@ -67,10 +67,20 @@ export function createSignalingChannel(source) {
     close() {
       if (closed) return;
       closed = true;
+      let firstError = null;
+
       for (const unsubscribe of [...subscriptions]) {
-        unsubscribe();
+        try {
+          unsubscribe();
+        } catch (error) {
+          firstError ??= error;
+        }
       }
+
       subscriptions.clear();
+      if (firstError) {
+        throw firstError;
+      }
     },
   };
 }
