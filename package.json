@@ -1,6 +1,6 @@
 {
   "name": "@kidlib/p2p",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Signaling-agnostic WebRTC peer and data-channel helpers.",
   "type": "module",
   "exports": {
