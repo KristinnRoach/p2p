@@ -19,6 +19,7 @@ const pendingRemoteCandidates = new WeakMap();
  *
  * @param {RTCPeerConnection} pc
  * @param {IceTransport} transport
+ * @returns {() => void} cleanup function
  */
 export function setupIceCandidates(pc, transport) {
   if (!pc) {
@@ -38,8 +39,13 @@ export function setupIceCandidates(pc, transport) {
     pendingRemoteCandidates.set(pc, []);
   }
 
-  setupLocalCandidateSender(pc, transport);
-  setupRemoteCandidateListener(pc, transport);
+  const cleanupLocal = setupLocalCandidateSender(pc, transport);
+  const cleanupRemote = setupRemoteCandidateListener(pc, transport);
+
+  return () => {
+    cleanupLocal();
+    cleanupRemote();
+  };
 }
 
 function setupLocalCandidateSender(pc, transport) {
@@ -60,25 +66,33 @@ function setupLocalCandidateSender(pc, transport) {
       log('❄ ICE gathering complete');
     }
   };
+
+  return () => {
+    if (pc.onicecandidate) {
+      pc.onicecandidate = null;
+    }
+  };
 }
 
 function setupRemoteCandidateListener(pc, transport) {
   let drainListenerAttached = false;
+  let autoDrainListener = null;
   const attachAutoDrain = () => {
     if (drainListenerAttached) return;
     drainListenerAttached = true;
 
-    const autoDrain = () => {
+    autoDrainListener = () => {
       if (pc.remoteDescription) {
         drainIceCandidateQueue(pc);
-        pc.removeEventListener('signalingstatechange', autoDrain);
+        pc.removeEventListener('signalingstatechange', autoDrainListener);
+        autoDrainListener = null;
       }
     };
 
-    pc.addEventListener('signalingstatechange', autoDrain);
+    pc.addEventListener('signalingstatechange', autoDrainListener);
   };
 
-  transport.onRemoteCandidate((candidate) => {
+  const rawUnsubscribe = transport.onRemoteCandidate((candidate) => {
     log('❄ Remote ICE candidate added');
 
     if (!pc || pc.signalingState === 'closed') {
@@ -110,6 +124,16 @@ function setupRemoteCandidateListener(pc, transport) {
       }
     }
   });
+  const unsubscribe =
+    typeof rawUnsubscribe === 'function' ? rawUnsubscribe : () => {};
+
+  return () => {
+    unsubscribe();
+    if (autoDrainListener) {
+      pc.removeEventListener('signalingstatechange', autoDrainListener);
+      autoDrainListener = null;
+    }
+  };
 }
 
 /**

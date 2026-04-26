@@ -13,6 +13,7 @@
     "./remote-stream": "./src/remote-stream.js",
     "./rtt": "./src/rtt.js",
     "./sdp": "./src/sdp.js",
+    "./session": "./src/session.js",
     "./signaling-channel": "./src/signaling-channel.js",
     "./signaling-transport": "./src/signaling-transport.js",
     "./tracks": "./src/tracks.js"

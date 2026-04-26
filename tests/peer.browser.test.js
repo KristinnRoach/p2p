@@ -280,6 +280,49 @@ describe('Peer', () => {
       expect(peer._pendingStartReject).toBeNull();
       expect(peer.state).toBe(PEER_STATES.CLOSED);
     });
+
+    it('rejects and closes when startTimeoutMs elapses', async () => {
+      const { b } = createLoopbackPair();
+      const joiner = new Peer({ role: 'joiner', signaling: b });
+      peers = [joiner];
+
+      await expect(joiner.start({ startTimeoutMs: 1 })).rejects.toThrow(
+        /timed out/,
+      );
+      expect(joiner.state).toBe(PEER_STATES.CLOSED);
+    });
+
+    it('rejects and closes when connectedTimeoutMs elapses', async () => {
+      const { a } = createLoopbackPair();
+      const initiator = new Peer({
+        role: 'initiator',
+        signaling: a,
+        dataChannel: true,
+        rtcConfig: loopbackRtcConfig,
+      });
+      peers = [initiator];
+
+      await expect(
+        initiator.start({ connectedTimeoutMs: 1 }),
+      ).rejects.toThrow(/connection timed out/);
+      expect(initiator.state).toBe(PEER_STATES.CLOSED);
+    });
+
+    it('rejects and closes when start() is aborted', async () => {
+      const { b } = createLoopbackPair();
+      const controller = new AbortController();
+      const joiner = new Peer({ role: 'joiner', signaling: b });
+      peers = [joiner];
+
+      const startPromise = joiner.start({ signal: controller.signal });
+      await Promise.resolve();
+      controller.abort();
+
+      await expect(startPromise).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(joiner.state).toBe(PEER_STATES.CLOSED);
+    });
   });
 
   describe('send()', () => {
@@ -316,6 +359,32 @@ describe('Peer', () => {
       // Second call is a no-op
       peer.close();
       expect(peer.state).toBe(PEER_STATES.CLOSED);
+    });
+
+    it('cleans up signaling subscriptions created during start()', async () => {
+      const answerUnsubscribe = vi.fn();
+      const candidateUnsubscribe = vi.fn();
+      const signaling = {
+        sendOffer: vi.fn(() => Promise.resolve()),
+        sendAnswer: vi.fn(() => Promise.resolve()),
+        onOffer: vi.fn(),
+        onAnswer: vi.fn(() => answerUnsubscribe),
+        sendCandidate: vi.fn(),
+        onRemoteCandidate: vi.fn(() => candidateUnsubscribe),
+      };
+      const peer = new Peer({
+        role: 'initiator',
+        signaling,
+        dataChannel: true,
+        rtcConfig: loopbackRtcConfig,
+      });
+
+      await peer.start();
+      peer.close();
+      peer.close();
+
+      expect(answerUnsubscribe).toHaveBeenCalledTimes(1);
+      expect(candidateUnsubscribe).toHaveBeenCalledTimes(1);
     });
   });
 
