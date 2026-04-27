@@ -1,4 +1,4 @@
-import { Peer } from './peer.js';
+import { Peer, PEER_STATES } from './peer.js';
 import { attachRemoteStream } from './remote-stream.js';
 
 /**
@@ -172,19 +172,31 @@ class P2PSession extends EventTarget {
   async _start(options) {
     await this.peer.start(options);
     if (options.dataChannelOpenTimeoutMs > 0) {
-      await this._waitForDataChannelOpen(options.dataChannelOpenTimeoutMs);
+      await this._waitForDataChannelOpen(
+        options.dataChannelOpenTimeoutMs,
+        options.signal,
+      );
     }
   }
 
-  _waitForDataChannelOpen(timeoutMs) {
+  _waitForDataChannelOpen(timeoutMs, signal = null) {
     if (this.peer.dataChannel?.readyState === 'open') {
       return Promise.resolve();
+    }
+    if (signal?.aborted) {
+      return Promise.reject(createAbortError());
+    }
+    const terminalError = getTerminalPeerError(this.peer.state);
+    if (terminalError) {
+      return Promise.reject(terminalError);
     }
     return new Promise((resolve, reject) => {
       let timer = null;
       let offOpen = () => {};
       let offClose = () => {};
       let offError = () => {};
+      let offState = () => {};
+      let abortCleanup = () => {};
 
       const cleanup = () => {
         if (timer) {
@@ -194,6 +206,8 @@ class P2PSession extends EventTarget {
         offOpen();
         offClose();
         offError();
+        offState();
+        abortCleanup();
       };
       const fail = (error) => {
         cleanup();
@@ -210,6 +224,21 @@ class P2PSession extends EventTarget {
       offError = this.once('error', ({ error }) => {
         fail(error);
       });
+      offState = this.on('statechange', ({ state }) => {
+        const error = getTerminalPeerError(state);
+        if (error) {
+          fail(error);
+        }
+      });
+      if (signal) {
+        const abortHandler = () => {
+          fail(createAbortError());
+        };
+        signal.addEventListener('abort', abortHandler, { once: true });
+        abortCleanup = () => {
+          signal.removeEventListener('abort', abortHandler);
+        };
+      }
       timer = setTimeout(() => {
         fail(
           new Error(
@@ -238,4 +267,23 @@ class P2PSession extends EventTarget {
       this._listenerMap.get(type)?.delete(callback);
     }
   }
+}
+
+function createAbortError() {
+  try {
+    return new DOMException('P2PSession: aborted', 'AbortError');
+  } catch (_) {
+    const error = new Error('P2PSession: aborted');
+    error.name = 'AbortError';
+    return error;
+  }
+}
+
+function getTerminalPeerError(state) {
+  if (state === PEER_STATES.FAILED || state === PEER_STATES.CLOSED) {
+    return new Error(
+      `P2PSession: peer ${state} before data channel open`,
+    );
+  }
+  return null;
 }
