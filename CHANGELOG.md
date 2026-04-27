@@ -1,5 +1,12 @@
 # @kidlib/p2p
 
+## 0.1.4
+
+### Patch Changes
+
+- 7fa7db2: Remove unnecessary utils (generic id generation)
+- 625bd31: Expose high-level helpers: startP2PSession() and joinP2PSession()
+
 ## 0.1.3
 
 ### Patch Changes

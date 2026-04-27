@@ -16,6 +16,49 @@ pnpm add @kidlib/p2p
 ## Usage
 
 ```js
+import { startP2PSession } from '@kidlib/p2p';
+
+const session = await startP2PSession({
+  signaling,
+  localStream,
+  dataChannel: true,
+  startTimeoutMs: 10000,
+  dataChannelOpenTimeoutMs: 10000,
+});
+
+session.on('remoteStream', ({ stream }) => {
+  renderRemoteStream(stream);
+});
+
+session.on('message', ({ data }) => {
+  console.log(data);
+});
+
+session.send('hello');
+```
+
+`signaling` must implement the `DataSignalingChannel` contract documented in
+`src/signaling-transport.js`.
+
+Joining an existing session uses the same options but hides the joiner role:
+
+```js
+import { joinP2PSession } from '@kidlib/p2p';
+
+const session = await joinP2PSession({
+  signaling,
+  localStream,
+  dataChannel: true,
+});
+```
+
+When `dataChannel: true` is set, the session helpers wait for the data channel
+to open before resolving. Pass `dataChannelOpenTimeoutMs: 0` to skip that wait.
+
+The lower-level `Peer` class remains available when consumers need direct
+control over the WebRTC lifecycle:
+
+```js
 import { Peer } from '@kidlib/p2p';
 
 const peer = new Peer({
@@ -24,15 +67,12 @@ const peer = new Peer({
   dataChannel: true,
 });
 
-peer.on('message', ({ data }) => {
-  console.log(data);
+await peer.start({
+  startTimeoutMs: 10000,
+  connectedTimeoutMs: 15000,
+  signal: abortController.signal,
 });
-
-await peer.start();
 ```
-
-`signaling` must implement the `DataSignalingChannel` contract documented in
-`src/signaling-transport.js`.
 
 Provider adapters can be normalized before passing them to `Peer`:
 
@@ -71,12 +111,13 @@ const detach = attachRemoteStream(peer, {
 ## Exports
 
 - `Peer`, `PEER_STATES`
+- `startP2PSession`, `joinP2PSession`
 - `createDataChannel`, `joinDataChannel`, `closeDataConnection`
 - `setLogger`
 - `createSignalingChannel`
 - `attachRemoteStream`
 - Power-user subpaths for `config`, `ice`, `remote-stream`, `rtt`, `sdp`,
-  `signaling-channel`, `signaling-transport`, and `tracks`
+  `session`, `signaling-channel`, `signaling-transport`, and `tracks`
 
 ## Development
 

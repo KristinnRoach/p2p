@@ -87,6 +87,7 @@ export class Peer extends EventTarget {
     this._closed = false;
     this._pendingStartReject = null;
     this._listenerMap = new Map();
+    this._signalingCleanups = new Set();
   }
 
   // ─── Public API ───────────────────────────────────────────────────────
@@ -108,21 +109,82 @@ export class Peer extends EventTarget {
    * Kick off the connection. Idempotent: repeat calls return the same promise.
    * Resolves after SDP + local signaling complete (peers may still be
    * negotiating ICE; listen for 'connected' to know when media is flowing).
+   *
+   * @param {Object} [options]
+   * @param {number} [options.startTimeoutMs=0]
+   *   Reject if SDP startup does not complete within this many ms. `0`
+   *   disables the timeout.
+   * @param {number} [options.connectedTimeoutMs=0]
+   *   When set, wait for the peer connection to reach `connected` before
+   *   resolving, and reject if it does not happen within this many ms.
+   * @param {AbortSignal} [options.signal]
    */
-  start() {
+  start(options = {}) {
     if (this._state === PEER_STATES.CLOSED) return Promise.resolve();
     if (this._started) return this._startPromise;
     this._started = true;
 
+    const {
+      startTimeoutMs = 0,
+      connectedTimeoutMs = 0,
+      signal = null,
+    } = options ?? {};
+
     this._startPromise = new Promise((resolve, reject) => {
       this._pendingStartReject = reject;
       const rejectStart = reject;
+      let settled = false;
+      let startTimer = null;
+      let abortCleanup = () => {};
+
+      const cleanupStartGuards = () => {
+        if (startTimer) {
+          clearTimeout(startTimer);
+          startTimer = null;
+        }
+        abortCleanup();
+        abortCleanup = () => {};
+      };
+
       const settle = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        cleanupStartGuards();
         if (this._pendingStartReject === rejectStart) {
           this._pendingStartReject = null;
         }
         fn(value);
       };
+      const failAndClose = (error) => {
+        if (settled) return;
+        cleanupStartGuards();
+        if (this._pendingStartReject === rejectStart) {
+          this._pendingStartReject = null;
+        }
+        this.close();
+        settled = true;
+        reject(error);
+      };
+
+      if (signal) {
+        if (signal.aborted) {
+          failAndClose(createAbortError());
+          return;
+        }
+        const abortHandler = () => failAndClose(createAbortError());
+        signal.addEventListener('abort', abortHandler, { once: true });
+        abortCleanup = () => {
+          signal.removeEventListener('abort', abortHandler);
+        };
+      }
+
+      if (startTimeoutMs > 0) {
+        startTimer = setTimeout(() => {
+          failAndClose(
+            new Error(`Peer.start: timed out after ${startTimeoutMs}ms`),
+          );
+        }, startTimeoutMs);
+      }
 
       (async () => {
         this._setState(PEER_STATES.CONNECTING);
@@ -131,6 +193,18 @@ export class Peer extends EventTarget {
           await this._startInitiator();
         } else {
           await this._startJoiner();
+        }
+        if (startTimer) {
+          clearTimeout(startTimer);
+          startTimer = null;
+        }
+        if (connectedTimeoutMs > 0) {
+          try {
+            await this._waitForConnected(connectedTimeoutMs);
+          } catch (error) {
+            this._closeWithoutRejectingStart();
+            throw error;
+          }
         }
       })().then(
         (value) => settle(resolve, value),
@@ -142,6 +216,7 @@ export class Peer extends EventTarget {
     this._startPromise.catch((error) => {
       this._emit('error', { error, phase: 'start' });
       if (this._state !== PEER_STATES.CLOSED) {
+        this._cleanupSignaling();
         this._setState(PEER_STATES.FAILED);
       }
     });
@@ -172,6 +247,8 @@ export class Peer extends EventTarget {
   close() {
     if (this._closed) return;
     this._closed = true;
+
+    this._cleanupSignaling();
 
     try {
       this._dataChannel?.close();
@@ -284,20 +361,22 @@ export class Peer extends EventTarget {
     }
     this._throwIfClosedDuringStart();
 
-    this._signaling.onAnswer(async (answer) => {
-      if (!answer || this._closed) return;
-      try {
-        const applied = await setRemoteDescription(
-          this._pc,
-          answer,
-          drainIceCandidateQueue,
-        );
-        if (!applied) return;
-        log('[Peer] Remote answer applied');
-      } catch (err) {
-        this._emit('error', { error: err, phase: 'answer' });
-      }
-    });
+    this._rememberSignalingCleanup(
+      this._signaling.onAnswer(async (answer) => {
+        if (!answer || this._closed) return;
+        try {
+          const applied = await setRemoteDescription(
+            this._pc,
+            answer,
+            drainIceCandidateQueue,
+          );
+          if (!applied) return;
+          log('[Peer] Remote answer applied');
+        } catch (err) {
+          this._emit('error', { error: err, phase: 'answer' });
+        }
+      }),
+    );
 
     const offer = await createOffer(this._pc);
     this._throwIfClosedDuringStart();
@@ -316,7 +395,7 @@ export class Peer extends EventTarget {
       const settle = (fn, value) => {
         fn(value);
       };
-      this._signaling.onOffer(async (offer) => {
+      this._rememberSignalingCleanup(this._signaling.onOffer(async (offer) => {
         if (offerHandled || !offer || this._closed) return;
         offerHandled = true;
         try {
@@ -338,7 +417,7 @@ export class Peer extends EventTarget {
           this._emit('error', { error: err, phase: 'offer' });
           settle(reject, err);
         }
-      });
+      }));
     });
   }
 
@@ -368,7 +447,7 @@ export class Peer extends EventTarget {
       }
     }
 
-    setupIceCandidates(pc, this._signaling);
+    this._rememberSignalingCleanup(setupIceCandidates(pc, this._signaling));
 
     pc.addEventListener('track', (event) => {
       this._emit('track', { track: event.track, streams: event.streams });
@@ -429,9 +508,92 @@ export class Peer extends EventTarget {
   _emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
+
+  _rememberSignalingCleanup(cleanup) {
+    if (typeof cleanup !== 'function') return;
+    let active = true;
+    const wrapped = () => {
+      if (!active) return;
+      active = false;
+      this._signalingCleanups.delete(wrapped);
+      cleanup();
+    };
+    this._signalingCleanups.add(wrapped);
+  }
+
+  _cleanupSignaling() {
+    for (const cleanup of [...this._signalingCleanups]) {
+      try {
+        cleanup();
+      } catch (err) {
+        log('[Peer] Error cleaning up signaling listener:', err);
+      }
+    }
+    this._signalingCleanups.clear();
+  }
+
+  _closeWithoutRejectingStart() {
+    const pendingStartReject = this._pendingStartReject;
+    this._pendingStartReject = null;
+    this.close();
+    this._pendingStartReject = pendingStartReject;
+  }
+
+  _waitForConnected(timeoutMs) {
+    if (this._state === PEER_STATES.CONNECTED) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      let timer = null;
+      let offState = () => {};
+      let offConnected = () => {};
+
+      const cleanup = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        offState();
+        offConnected();
+        offState = () => {};
+        offConnected = () => {};
+      };
+      const fail = (error) => {
+        cleanup();
+        reject(error);
+      };
+
+      offConnected = this.once('connected', () => {
+        cleanup();
+        resolve();
+      });
+      offState = this.on('statechange', ({ state }) => {
+        if (state === PEER_STATES.FAILED || state === PEER_STATES.CLOSED) {
+          fail(new Error(`Peer.start: connection ${state}`));
+        }
+      });
+      timer = setTimeout(() => {
+        fail(
+          new Error(
+            `Peer.start: connection timed out after ${timeoutMs}ms`,
+          ),
+        );
+      }, timeoutMs);
+    });
+  }
 }
 
 export { PEER_STATES };
+
+function createAbortError() {
+  try {
+    return new DOMException('Peer.start: aborted', 'AbortError');
+  } catch (_) {
+    const error = new Error('Peer.start: aborted');
+    error.name = 'AbortError';
+    return error;
+  }
+}
 
 function assertSignaling(signaling) {
   if (!signaling) {
