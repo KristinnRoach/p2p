@@ -180,8 +180,14 @@ class P2PSession extends EventTarget {
   }
 
   _waitForDataChannelOpen(timeoutMs, signal = null) {
-    if (this.peer.dataChannel?.readyState === 'open') {
+    const readyState = this.peer.dataChannel?.readyState;
+    if (readyState === 'open') {
       return Promise.resolve();
+    }
+    if (readyState === 'closing' || readyState === 'closed') {
+      return Promise.reject(
+        new Error('P2PSession: data channel closed before open'),
+      );
     }
     if (signal?.aborted) {
       return Promise.reject(createAbortError());
