@@ -1,6 +1,9 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { startP2PSession, joinP2PSession } from '@kidlib/p2p';
-import { createBrowserTabSignaling } from '@shared';
+import {
+  clearBrowserTabSignalingRoom,
+  createBrowserTabSignaling,
+} from '@shared';
 
 export type CallRole = 'initiator' | 'joiner';
 
@@ -14,6 +17,7 @@ export function useP2PCall() {
   const [error, setError] = createSignal<string>();
 
   let session: P2PSession | undefined;
+  let sessionAbortController: AbortController | undefined;
 
   function handleRemoteStream({ stream }: { stream: MediaStream }) {
     setRemoteStream(() => stream);
@@ -22,60 +26,91 @@ export function useP2PCall() {
   async function start(roomId: string, role: CallRole) {
     if (session || isStarting()) return;
 
+    const controller = new AbortController();
+    sessionAbortController = controller;
     setIsStarting(true);
     setError(undefined);
 
+    let local: MediaStream | undefined;
+    let signaling: ReturnType<typeof createBrowserTabSignaling> | undefined;
+
     try {
-      const local = await navigator.mediaDevices.getUserMedia({
+      local = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
 
-      setLocalStream(local);
+      if (controller.signal.aborted) {
+        stopStream(local);
+        return;
+      }
 
       const signalingRole = role === 'initiator' ? 'host' : 'guest';
 
-      const signaling = createBrowserTabSignaling({
+      if (role === 'initiator') {
+        clearBrowserTabSignalingRoom(roomId);
+      }
+
+      signaling = createBrowserTabSignaling({
         roomId,
         role: signalingRole,
       });
 
-      session =
+      const nextSession =
         role === 'initiator'
           ? await startP2PSession({
               signaling,
               localStream: local,
               dataChannel: false,
+              signal: controller.signal,
               onRemoteStream: handleRemoteStream,
             })
           : await joinP2PSession({
               signaling,
               localStream: local,
               dataChannel: false,
+              signal: controller.signal,
               onRemoteStream: handleRemoteStream,
             });
 
+      if (controller.signal.aborted) {
+        nextSession.close();
+        signaling.close();
+        stopStream(local);
+        return;
+      }
+
+      session = nextSession;
+      setLocalStream(local);
       setIsInCall(true);
     } catch (err) {
-      console.error(err);
-      setError('Could not start call.');
-      stop();
+      signaling?.close();
+      stopStream(local);
+      if (!controller.signal.aborted) {
+        console.error(err);
+        setError('Could not start call.');
+        if (sessionAbortController === controller) {
+          stop();
+        }
+      }
     } finally {
-      setIsStarting(false);
+      if (sessionAbortController === controller) {
+        sessionAbortController = undefined;
+        setIsStarting(false);
+      }
     }
   }
 
   function stop() {
+    sessionAbortController?.abort();
+    sessionAbortController = undefined;
     session?.close();
     session = undefined;
+    setIsStarting(false);
     setIsInCall(false);
 
-    localStream()
-      ?.getTracks()
-      .forEach((track) => track.stop());
-    remoteStream()
-      ?.getTracks()
-      .forEach((track) => track.stop());
+    stopStream(localStream());
+    stopStream(remoteStream());
 
     setLocalStream(undefined);
     setRemoteStream(undefined);
@@ -92,4 +127,8 @@ export function useP2PCall() {
     stop,
     isInCall,
   };
+}
+
+function stopStream(stream: MediaStream | undefined) {
+  stream?.getTracks().forEach((track) => track.stop());
 }

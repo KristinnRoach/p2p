@@ -88,7 +88,7 @@ export class Peer extends EventTarget {
     this._pendingStartReject = null;
     this._listenerMap = new Map();
     this._signalingCleanups = new Set();
-    this._emittedRemoteTracks = new WeakSet();
+    this._remoteTrackInfo = new WeakMap();
   }
 
   // ─── Public API ───────────────────────────────────────────────────────
@@ -459,7 +459,7 @@ export class Peer extends EventTarget {
         track: event.track,
         streams: event.streams,
       });
-      this._emitRemoteTrack(event.track, event.streams);
+      this._emitRemoteTrack(event.track, event.streams, 'native');
     });
 
     pc.addEventListener('connectionstatechange', () => {
@@ -514,15 +514,27 @@ export class Peer extends EventTarget {
     for (const receiver of receivers) {
       const track = receiver?.track;
       if (track && track.readyState !== 'ended') {
-        this._emitRemoteTrack(track, []);
+        this._emitRemoteTrack(track, [], 'fallback');
       }
     }
   }
 
-  _emitRemoteTrack(track, streams = []) {
-    if (!track || this._emittedRemoteTracks.has(track)) return;
-    this._emittedRemoteTracks.add(track);
-    this._emit('track', { track, streams });
+  _emitRemoteTrack(track, streams = [], emittedFrom = 'native') {
+    if (!track) return;
+    const normalizedStreams = Array.from(streams ?? []);
+    const previous = this._remoteTrackInfo.get(track);
+    if (
+      previous &&
+      (previous.emittedFrom === 'native' ||
+        sameStreams(previous.streams, normalizedStreams))
+    ) {
+      return;
+    }
+    this._remoteTrackInfo.set(track, {
+      emittedFrom,
+      streams: normalizedStreams,
+    });
+    this._emit('track', { track, streams: normalizedStreams });
   }
 
   // ─── Private: emit + state helpers ────────────────────────────────────
@@ -608,6 +620,11 @@ export class Peer extends EventTarget {
       }, timeoutMs);
     });
   }
+}
+
+function sameStreams(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((stream, index) => stream === right[index]);
 }
 
 export { PEER_STATES };

@@ -113,9 +113,15 @@ describe('P2P session helpers', () => {
 
       try {
         const guestRemoteStream = await waitForRemoteStream(guest);
+        const onLateRemoteStream = vi.fn();
+        guest.on('remoteStream', onLateRemoteStream);
 
         expect(guestRemoteStream.getVideoTracks()).toHaveLength(1);
         expect(guestRemoteStream.getVideoTracks()[0].readyState).toBe('live');
+        expect(onLateRemoteStream).toHaveBeenCalledWith(
+          expect.objectContaining({ stream: guestRemoteStream }),
+          expect.any(CustomEvent),
+        );
       } finally {
         host.close();
         guest.close();

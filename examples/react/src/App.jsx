@@ -21,7 +21,9 @@ export function App() {
   const signalingRef = useRef(null);
   const sessionRef = useRef(null);
   const localStreamRef = useRef(null);
+  const isStartingRef = useRef(false);
   const [session, setSession] = useState(null);
+  const [isStarting, setIsStarting] = useState(false);
   const [role, setRole] = useState(initialRole);
   const [roomId, setRoomId] = useState(initialRoomId);
   const [localStream, setLocalStream] = useState(null);
@@ -35,69 +37,83 @@ export function App() {
   )}&role=guest`;
 
   async function start(roleToStart) {
+    if (isStartingRef.current || sessionRef.current) return;
+    isStartingRef.current = true;
+    setIsStarting(true);
     setLog((items) => [...items, 'requesting camera']);
 
-    closeCurrentSession({
-      session: sessionRef.current,
-      signaling: signalingRef.current,
-      localStream: localStreamRef.current,
-    });
+    let stream = null;
+    let signaling = null;
 
-    if (roleToStart === 'host') {
-      clearBrowserTabSignalingRoom(roomId);
+    try {
+      closeCurrentSession({
+        session: sessionRef.current,
+        signaling: signalingRef.current,
+        localStream: localStreamRef.current,
+      });
+
+      if (roleToStart === 'host') {
+        clearBrowserTabSignalingRoom(roomId);
+      }
+
+      stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      signaling = createBrowserTabSignaling({
+        roomId,
+        role: roleToStart,
+      });
+
+      const createSession =
+        roleToStart === 'host' ? startP2PSession : joinP2PSession;
+
+      const nextSession = await createSession({
+        signaling,
+        localStream: stream,
+        dataChannel: true,
+        dataChannelOpenTimeoutMs: 0,
+        rtcConfig,
+        onRemoteStream: ({ stream }) => {
+          setRemoteStream(stream);
+          setLog((items) => [...items, 'received remote video']);
+        },
+      });
+
+      nextSession.on('open', () => {
+        setDataChannelOpen(true);
+        setLog((items) => [...items, 'data channel open']);
+      });
+      nextSession.on('message', ({ data }) => {
+        setLog((items) => [...items, `received: ${data}`]);
+      });
+      nextSession.on('close', () => {
+        setDataChannelOpen(false);
+      });
+
+      signalingRef.current = signaling;
+      sessionRef.current = nextSession;
+      localStreamRef.current = stream;
+      setSession(nextSession);
+      setRole(roleToStart);
+      setLocalStream(stream);
+      setRemoteStream(nextSession.remoteStream);
+      setDataChannelOpen(nextSession.dataChannel?.readyState === 'open');
+      setLog((items) => [
+        ...items,
+        roleToStart === 'host'
+          ? `created room ${roomId}`
+          : `joined room ${roomId}`,
+      ]);
+      window.history.replaceState(
+        null,
+        '',
+        `?room=${roomId}&role=${roleToStart}`,
+      );
+    } catch (error) {
+      closeCurrentSession({ session: null, signaling, localStream: stream });
+      setLog((items) => [...items, `start failed: ${error.message}`]);
+    } finally {
+      isStartingRef.current = false;
+      setIsStarting(false);
     }
-
-    const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
-    const signaling = createBrowserTabSignaling({
-      roomId,
-      role: roleToStart,
-    });
-
-    const createSession =
-      roleToStart === 'host' ? startP2PSession : joinP2PSession;
-
-    const nextSession = await createSession({
-      signaling,
-      localStream: stream,
-      dataChannel: true,
-      dataChannelOpenTimeoutMs: 0,
-      rtcConfig,
-      onRemoteStream: ({ stream }) => {
-        setRemoteStream(stream);
-        setLog((items) => [...items, 'received remote video']);
-      },
-    });
-
-    nextSession.on('open', () => {
-      setDataChannelOpen(true);
-      setLog((items) => [...items, 'data channel open']);
-    });
-    nextSession.on('message', ({ data }) => {
-      setLog((items) => [...items, `received: ${data}`]);
-    });
-    nextSession.on('close', () => {
-      setDataChannelOpen(false);
-    });
-
-    signalingRef.current = signaling;
-    sessionRef.current = nextSession;
-    localStreamRef.current = stream;
-    setSession(nextSession);
-    setRole(roleToStart);
-    setLocalStream(stream);
-    setRemoteStream(nextSession.remoteStream);
-    setDataChannelOpen(nextSession.dataChannel?.readyState === 'open');
-    setLog((items) => [
-      ...items,
-      roleToStart === 'host'
-        ? `created room ${roomId}`
-        : `joined room ${roomId}`,
-    ]);
-    window.history.replaceState(
-      null,
-      '',
-      `?room=${roomId}&role=${roleToStart}`,
-    );
   }
 
   function send() {
@@ -140,13 +156,19 @@ export function App() {
         <input
           aria-label='Room id'
           value={roomId}
-          disabled={Boolean(session)}
+          disabled={Boolean(session) || isStarting}
           onChange={(event) => setRoomId(event.target.value)}
         />
-        <button onClick={() => start('host')} disabled={Boolean(session)}>
+        <button
+          onClick={() => start('host')}
+          disabled={Boolean(session) || isStarting}
+        >
           Create room
         </button>
-        <button onClick={() => start('guest')} disabled={Boolean(session)}>
+        <button
+          onClick={() => start('guest')}
+          disabled={Boolean(session) || isStarting}
+        >
           Join room
         </button>
         <button onClick={disconnect} disabled={!session}>

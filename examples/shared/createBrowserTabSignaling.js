@@ -37,10 +37,10 @@ export function createBrowserTabSignaling({ roomId, role }) {
   };
 
   const readRoom = () => ({
-    offer: readJson(keys.offer, null),
-    answer: readJson(keys.answer, null),
-    hostCandidates: readJson(keys.hostCandidates, []),
-    guestCandidates: readJson(keys.guestCandidates, []),
+    offer: readJson(keys.offer, undefined),
+    answer: readJson(keys.answer, undefined),
+    hostCandidates: readJson(keys.hostCandidates, undefined),
+    guestCandidates: readJson(keys.guestCandidates, undefined),
   });
 
   const writeRoom = (nextRoom) => {
@@ -65,16 +65,20 @@ export function createBrowserTabSignaling({ roomId, role }) {
   };
 
   const updateRoom = (update) => {
-    const nextRoom = { ...readLegacyRoom(), ...readRoom() };
+    const nextRoom = { ...readLegacyRoom(), ...definedFields(readRoom()) };
     update(nextRoom);
     writeRoom(nextRoom);
   };
 
   const subscribe = (readValue, callback) => {
-    let latestJson = JSON.stringify(readValue(readRoom()));
+    const readMergedRoom = () => ({
+      ...readLegacyRoom(),
+      ...definedFields(readRoom()),
+    });
+    let latestJson = JSON.stringify(readValue(readMergedRoom()));
 
     const emitIfChanged = () => {
-      const value = readValue(readRoom());
+      const value = readValue(readMergedRoom());
       const nextJson = JSON.stringify(value);
       if (nextJson === latestJson) return;
       latestJson = nextJson;
@@ -91,7 +95,7 @@ export function createBrowserTabSignaling({ roomId, role }) {
     window.addEventListener('storage', onStorage);
     broadcast?.addEventListener('message', onBroadcast);
     queueMicrotask(() => {
-      const value = readValue(readRoom());
+      const value = readValue(readMergedRoom());
       if (value != null) callback(value);
     });
 
@@ -157,4 +161,10 @@ function createEmptyRoom() {
     hostCandidates: [],
     guestCandidates: [],
   };
+}
+
+function definedFields(room) {
+  return Object.fromEntries(
+    Object.entries(room).filter(([, value]) => value !== undefined),
+  );
 }

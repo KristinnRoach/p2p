@@ -123,7 +123,8 @@ class P2PSession extends EventTarget {
 
   on(type, callback) {
     if (type === 'remoteStream' && this._remoteStream) {
-      callback({ stream: this._remoteStream, track: null, event: null });
+      const detail = { stream: this._remoteStream, track: null, event: null };
+      callback(detail, new CustomEvent('remoteStream', { detail }));
     }
     const handler = (event) => callback(event.detail, event);
     this._trackListener(type, callback, handler);

@@ -4,8 +4,24 @@ export function createLoopbackSignaling() {
   const candidates = { host: [], guest: [] };
 
   const side = (self, other) => ({
-    sendOffer: async (offer) => offers[other]?.(offer),
-    sendAnswer: async (answer) => answers[other]?.(answer),
+    sendOffer: async (offer) => {
+      const handler = offers[other];
+      if (!handler) {
+        throw new Error(
+          `createLoopbackSignaling: ${self} cannot send offer; ${other} has no offer handler`,
+        );
+      }
+      return handler(offer);
+    },
+    sendAnswer: async (answer) => {
+      const handler = answers[other];
+      if (!handler) {
+        throw new Error(
+          `createLoopbackSignaling: ${self} cannot send answer; ${other} has no answer handler`,
+        );
+      }
+      return handler(answer);
+    },
     onOffer: (cb) => {
       offers[self] = cb;
     },

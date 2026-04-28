@@ -7,6 +7,7 @@
 import { server } from 'vitest/browser';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Peer, PEER_STATES } from '../src/peer.js';
+import { createLoopbackSignaling as createSharedLoopbackSignaling } from '../examples/shared/createLoopbackSignaling.js';
 
 const loopbackRtcConfig = { iceServers: [] };
 // Firefox headless in Playwright applies stricter local WebRTC restrictions for
@@ -15,33 +16,16 @@ const loopbackRtcConfig = { iceServers: [] };
 // the Peer lifecycle/unit coverage in Firefox below.
 const itNeedsDataChannelLoopback = server.browser === 'firefox' ? it.skip : it;
 
-/**
- * Build a pair of loopback SignalingChannels that wire two Peers together.
- * Whatever side A sends, side B receives, and vice-versa.
- */
 function createLoopbackSignaling() {
-  const offerListeners = { a: null, b: null };
-  const answerListeners = { a: null, b: null };
-  const candidateListeners = { a: [], b: [] };
+  const { host, guest } = createSharedLoopbackSignaling();
+  return { a: host, b: guest };
+}
 
-  const makeSide = (self, other) => ({
-    sendOffer: async (offer) => offerListeners[other]?.(offer),
-    sendAnswer: async (answer) => answerListeners[other]?.(answer),
-    onOffer: (cb) => {
-      offerListeners[self] = cb;
-    },
-    onAnswer: (cb) => {
-      answerListeners[self] = cb;
-    },
-    sendCandidate: async (candidate) => {
-      for (const cb of candidateListeners[other]) cb(candidate);
-    },
-    onRemoteCandidate: (cb) => {
-      candidateListeners[self].push(cb);
-    },
-  });
-
-  return { a: makeSide('a', 'b'), b: makeSide('b', 'a') };
+function createVideoTrack() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  return canvas.captureStream().getVideoTracks()[0];
 }
 
 describe('Peer', () => {
@@ -86,6 +70,30 @@ describe('Peer', () => {
       expect(peer.state).toBe(PEER_STATES.IDLE);
       expect(peer.role).toBe('initiator');
       peer.close();
+    });
+
+    it('re-emits a native track event that upgrades fallback streams', () => {
+      const { a } = createLoopbackSignaling();
+      const peer = new Peer({ role: 'initiator', signaling: a });
+      const track = createVideoTrack();
+      const stream = new MediaStream([track]);
+      const onTrack = vi.fn();
+
+      try {
+        peer.addEventListener('track', onTrack);
+
+        peer._emitRemoteTrack(track, [], 'fallback');
+        peer._emitRemoteTrack(track, [], 'fallback');
+        peer._emitRemoteTrack(track, [stream], 'native');
+        peer._emitRemoteTrack(track, [stream], 'native');
+
+        expect(onTrack).toHaveBeenCalledTimes(2);
+        expect(onTrack.mock.calls[0][0].detail.streams).toEqual([]);
+        expect(onTrack.mock.calls[1][0].detail.streams).toEqual([stream]);
+      } finally {
+        peer.close();
+        track.stop();
+      }
     });
   });
 
@@ -292,10 +300,17 @@ describe('Peer', () => {
     });
 
     it('rejects and closes when connectedTimeoutMs elapses', async () => {
-      const { a } = createLoopbackSignaling();
+      const signaling = {
+        sendOffer: vi.fn(),
+        sendAnswer: vi.fn(),
+        onOffer: vi.fn(),
+        onAnswer: vi.fn(),
+        sendCandidate: vi.fn(),
+        onRemoteCandidate: vi.fn(),
+      };
       const initiator = new Peer({
         role: 'initiator',
-        signaling: a,
+        signaling,
         dataChannel: true,
         rtcConfig: loopbackRtcConfig,
       });
