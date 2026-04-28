@@ -46,6 +46,9 @@ class P2PSession extends EventTarget {
       connectedTimeoutMs = 0,
       dataChannelOpenTimeoutMs = dataChannel ? 10000 : 0,
       signal = null,
+      onRemoteStream = null,
+      onRemoteTrack = null,
+      onDataChannel = null,
     } = options;
 
     this.peer = new Peer({
@@ -73,6 +76,15 @@ class P2PSession extends EventTarget {
         },
       }),
     );
+    if (onRemoteStream) {
+      this._cleanups.push(this.on('remoteStream', onRemoteStream));
+    }
+    if (onRemoteTrack) {
+      this._cleanups.push(this.on('remoteTrack', onRemoteTrack));
+    }
+    if (onDataChannel) {
+      this._cleanups.push(this.on('datachannel', onDataChannel));
+    }
 
     this.ready = this._start({
       startTimeoutMs,
@@ -110,6 +122,10 @@ class P2PSession extends EventTarget {
   }
 
   on(type, callback) {
+    if (type === 'remoteStream' && this._remoteStream) {
+      const detail = { stream: this._remoteStream, track: null, event: null };
+      callback(detail, new CustomEvent('remoteStream', { detail }));
+    }
     const handler = (event) => callback(event.detail, event);
     this._trackListener(type, callback, handler);
     this.addEventListener(type, handler);

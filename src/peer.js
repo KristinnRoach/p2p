@@ -88,6 +88,7 @@ export class Peer extends EventTarget {
     this._pendingStartReject = null;
     this._listenerMap = new Map();
     this._signalingCleanups = new Set();
+    this._remoteTrackInfo = new WeakMap();
   }
 
   // ─── Public API ───────────────────────────────────────────────────────
@@ -371,6 +372,7 @@ export class Peer extends EventTarget {
             drainIceCandidateQueue,
           );
           if (!applied) return;
+          this._emitReceiverTracks();
           log('[Peer] Remote answer applied');
         } catch (err) {
           this._emit('error', { error: err, phase: 'answer' });
@@ -395,29 +397,32 @@ export class Peer extends EventTarget {
       const settle = (fn, value) => {
         fn(value);
       };
-      this._rememberSignalingCleanup(this._signaling.onOffer(async (offer) => {
-        if (offerHandled || !offer || this._closed) return;
-        offerHandled = true;
-        try {
-          const applied = await setRemoteDescription(
-            this._pc,
-            offer,
-            drainIceCandidateQueue,
-          );
-          if (!applied) return;
+      this._rememberSignalingCleanup(
+        this._signaling.onOffer(async (offer) => {
+          if (offerHandled || !offer || this._closed) return;
+          offerHandled = true;
+          try {
+            const applied = await setRemoteDescription(
+              this._pc,
+              offer,
+              drainIceCandidateQueue,
+            );
+            if (!applied) return;
+            this._emitReceiverTracks();
 
-          const answer = await createAnswer(this._pc);
-          await this._signaling.sendAnswer({
-            type: answer.type,
-            sdp: answer.sdp,
-          });
-          log('[Peer] Answer sent (joiner)');
-          settle(resolve);
-        } catch (err) {
-          this._emit('error', { error: err, phase: 'offer' });
-          settle(reject, err);
-        }
-      }));
+            const answer = await createAnswer(this._pc);
+            await this._signaling.sendAnswer({
+              type: answer.type,
+              sdp: answer.sdp,
+            });
+            log('[Peer] Answer sent (joiner)');
+            settle(resolve);
+          } catch (err) {
+            this._emit('error', { error: err, phase: 'offer' });
+            settle(reject, err);
+          }
+        }),
+      );
     });
   }
 
@@ -450,13 +455,18 @@ export class Peer extends EventTarget {
     this._rememberSignalingCleanup(setupIceCandidates(pc, this._signaling));
 
     pc.addEventListener('track', (event) => {
-      this._emit('track', { track: event.track, streams: event.streams });
+      log('[Peer] Track event:', {
+        track: event.track,
+        streams: event.streams,
+      });
+      this._emitRemoteTrack(event.track, event.streams, 'native');
     });
 
     pc.addEventListener('connectionstatechange', () => {
       const connState = pc.connectionState;
       log(`[Peer] connectionState → ${connState}`);
       if (connState === 'connected') {
+        this._emitReceiverTracks();
         this._setState(PEER_STATES.CONNECTED);
         this._emit('connected', {});
       } else if (connState === 'disconnected') {
@@ -494,6 +504,37 @@ export class Peer extends EventTarget {
     channel.addEventListener('error', (event) => {
       this._emit('error', { error: event.error, phase: 'datachannel' });
     });
+  }
+
+  _emitReceiverTracks() {
+    const receivers =
+      typeof this._pc?.getReceivers === 'function'
+        ? this._pc.getReceivers()
+        : [];
+    for (const receiver of receivers) {
+      const track = receiver?.track;
+      if (track && track.readyState !== 'ended') {
+        this._emitRemoteTrack(track, [], 'fallback');
+      }
+    }
+  }
+
+  _emitRemoteTrack(track, streams = [], emittedFrom = 'native') {
+    if (!track) return;
+    const normalizedStreams = Array.from(streams ?? []);
+    const previous = this._remoteTrackInfo.get(track);
+    if (
+      previous &&
+      (previous.emittedFrom === 'native' ||
+        sameStreams(previous.streams, normalizedStreams))
+    ) {
+      return;
+    }
+    this._remoteTrackInfo.set(track, {
+      emittedFrom,
+      streams: normalizedStreams,
+    });
+    this._emit('track', { track, streams: normalizedStreams });
   }
 
   // ─── Private: emit + state helpers ────────────────────────────────────
@@ -574,13 +615,16 @@ export class Peer extends EventTarget {
       });
       timer = setTimeout(() => {
         fail(
-          new Error(
-            `Peer.start: connection timed out after ${timeoutMs}ms`,
-          ),
+          new Error(`Peer.start: connection timed out after ${timeoutMs}ms`),
         );
       }, timeoutMs);
     });
   }
+}
+
+function sameStreams(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((stream, index) => stream === right[index]);
 }
 
 export { PEER_STATES };
