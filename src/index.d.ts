@@ -163,6 +163,18 @@ export declare const PEER_STATES: Readonly<{
   CLOSED: 'closed';
 }>;
 
+export interface PeerEvents {
+  statechange: StateChangeDetail;
+  connected: Record<string, never>;
+  disconnected: Record<string, never>;
+  datachannel: DataChannelDetail;
+  open: Record<string, never>;
+  message: MessageDetail;
+  close: Record<string, never>;
+  error: ErrorDetail;
+  track: { track: MediaStreamTrack; streams: MediaStream[] };
+}
+
 export declare class Peer extends EventTarget {
   constructor(options: {
     role: 'initiator' | 'joiner';
@@ -176,20 +188,21 @@ export declare class Peer extends EventTarget {
 
   readonly role: 'initiator' | 'joiner';
   readonly state: PeerState;
+  readonly pc: RTCPeerConnection | null;
   readonly dataChannel: RTCDataChannel | null;
 
-  on<K extends keyof P2PSessionEvents>(
+  on<K extends keyof PeerEvents>(
     type: K,
-    callback: (detail: P2PSessionEvents[K], event: CustomEvent) => void,
+    callback: (detail: PeerEvents[K], event: CustomEvent) => void,
   ): () => void;
   on(
     type: string,
     callback: (detail: unknown, event: CustomEvent) => void,
   ): () => void;
 
-  once<K extends keyof P2PSessionEvents>(
+  once<K extends keyof PeerEvents>(
     type: K,
-    callback: (detail: P2PSessionEvents[K], event: CustomEvent) => void,
+    callback: (detail: PeerEvents[K], event: CustomEvent) => void,
   ): () => void;
 
   off(type: string, callback: (...args: unknown[]) => void): void;
