@@ -178,7 +178,7 @@ describe('P2P session helpers', () => {
   );
 
   itNeedsDataChannelLoopback(
-    'calls onRemoteStream during startup before the session promise resolves',
+    'calls onRemoteStream after session resolves',
     async () => {
       const { a, b } = createLoopbackSignaling();
       const initiatorStream = createVideoStream();
@@ -206,9 +206,9 @@ describe('P2P session helpers', () => {
           }),
           expect.any(CustomEvent),
         );
-        expect(onRemoteStream.mock.calls[0][0].stream.getVideoTracks()).toHaveLength(
-          1,
-        );
+        expect(
+          onRemoteStream.mock.calls[0][0].stream.getVideoTracks(),
+        ).toHaveLength(1);
       } finally {
         host.close();
         guest.close();
