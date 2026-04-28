@@ -5,6 +5,7 @@ export function localP2PConfig(configUrl) {
     resolve: {
       alias: {
         '@kidlib/p2p': fileURLToPath(new URL('../../src/index.js', configUrl)),
+        '@shared': fileURLToPath(new URL('./shared', import.meta.url)),
       },
     },
     optimizeDeps: {
