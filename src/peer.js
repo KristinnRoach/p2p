@@ -80,22 +80,19 @@ export class Peer extends EventTarget {
     this._rtcConfig = rtcConfig;
 
     this._pc = null;
-        if (this._localStream) {
-          const health = addLocalTracks(pc, this._localStream, {
-            audioOnly: this._audioOnly,
-          });
-          log(`[Peer] [${this._role}] addLocalTracks:`, this._localStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
-          if (!health.allHealthy) {
-            this._emit('error', {
-              error: new Error(
-                `Unhealthy local tracks: ${health.unhealthyKinds.join(', ')}`,
-              ),
-              phase: 'tracks',
-            });
-          }
-        } else {
-          log(`[Peer] [${this._role}] No localStream provided`);
-        }
+    this._dataChannel = null;
+    this._state = PEER_STATES.IDLE;
+    this._started = false;
+    this._startPromise = null;
+    this._closed = false;
+    this._pendingStartReject = null;
+    this._listenerMap = new Map();
+    this._signalingCleanups = new Set();
+    this._emittedRemoteTracks = new WeakSet();
+  }
+
+  // ─── Public API ───────────────────────────────────────────────────────
+
   get role() {
     return this._role;
   }
@@ -375,6 +372,7 @@ export class Peer extends EventTarget {
             drainIceCandidateQueue,
           );
           if (!applied) return;
+          this._emitReceiverTracks();
           log('[Peer] Remote answer applied');
         } catch (err) {
           this._emit('error', { error: err, phase: 'answer' });
@@ -410,6 +408,7 @@ export class Peer extends EventTarget {
               drainIceCandidateQueue,
             );
             if (!applied) return;
+            this._emitReceiverTracks();
 
             const answer = await createAnswer(this._pc);
             await this._signaling.sendAnswer({
@@ -455,15 +454,19 @@ export class Peer extends EventTarget {
 
     this._rememberSignalingCleanup(setupIceCandidates(pc, this._signaling));
 
-        pc.addEventListener('track', (event) => {
-          log(`[Peer] [${this._role}] 'track' event:`, event.track.kind, event.streams);
-          this._emit('track', { track: event.track, streams: event.streams });
-        });
+    pc.addEventListener('track', (event) => {
+      log('[Peer] Track event:', {
+        track: event.track,
+        streams: event.streams,
+      });
+      this._emitRemoteTrack(event.track, event.streams);
+    });
 
     pc.addEventListener('connectionstatechange', () => {
       const connState = pc.connectionState;
       log(`[Peer] connectionState → ${connState}`);
       if (connState === 'connected') {
+        this._emitReceiverTracks();
         this._setState(PEER_STATES.CONNECTED);
         this._emit('connected', {});
       } else if (connState === 'disconnected') {
@@ -501,6 +504,25 @@ export class Peer extends EventTarget {
     channel.addEventListener('error', (event) => {
       this._emit('error', { error: event.error, phase: 'datachannel' });
     });
+  }
+
+  _emitReceiverTracks() {
+    const receivers =
+      typeof this._pc?.getReceivers === 'function'
+        ? this._pc.getReceivers()
+        : [];
+    for (const receiver of receivers) {
+      const track = receiver?.track;
+      if (track && track.readyState !== 'ended') {
+        this._emitRemoteTrack(track, []);
+      }
+    }
+  }
+
+  _emitRemoteTrack(track, streams = []) {
+    if (!track || this._emittedRemoteTracks.has(track)) return;
+    this._emittedRemoteTracks.add(track);
+    this._emit('track', { track, streams });
   }
 
   // ─── Private: emit + state helpers ────────────────────────────────────

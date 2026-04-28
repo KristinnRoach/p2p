@@ -3,6 +3,7 @@ import { createEffect, onCleanup } from 'solid-js';
 type Props = {
   stream?: MediaStream;
   muted?: boolean;
+  label?: string;
 };
 
 export function VideoStream(props: Props) {
@@ -10,10 +11,14 @@ export function VideoStream(props: Props) {
 
   createEffect(() => {
     const stream = props.stream;
-    if (!video || !stream) return;
+    console.info(`VideoStream for ${props.label} - stream changed: ${stream}`);
 
-    video.srcObject = stream;
-    video.play().catch(() => {});
+    if (!video) return;
+
+    video.srcObject = stream ?? null;
+    if (stream) {
+      video.play().catch(() => {});
+    }
 
     onCleanup(() => {
       video.srcObject = null;

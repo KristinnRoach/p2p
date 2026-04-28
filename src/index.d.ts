@@ -106,6 +106,9 @@ export interface P2PSessionOptions {
   connectedTimeoutMs?: number;
   dataChannelOpenTimeoutMs?: number;
   signal?: AbortSignal | null;
+  onRemoteStream?: (detail: RemoteStreamDetail, event: CustomEvent) => void;
+  onRemoteTrack?: (detail: RemoteStreamDetail, event: CustomEvent) => void;
+  onDataChannel?: (detail: DataChannelDetail, event: CustomEvent) => void;
 }
 
 export function startP2PSession(options: P2PSessionOptions): Promise<P2PSession>;

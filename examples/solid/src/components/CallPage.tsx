@@ -9,39 +9,40 @@ export default function CallPage() {
   async function startCall() {
     const roomId = createRoomId();
     const joinUrl = createJoinUrl(roomId);
-    await navigator.clipboard.writeText(joinUrl);
 
-    console.warn('role: initiator', 'roomId', roomId, 'joinUrl', joinUrl);
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+    } catch (err) {
+      console.warn('Could not copy join URL to clipboard', err);
+    }
 
+    console.info('Starting call with roomId', roomId, 'joinUrl', joinUrl);
     await call.start(roomId, 'initiator');
   }
 
-  onMount(() => {
+  async function joinCall(roomId: string) {
+    console.info('Joining call with roomId', roomId);
+    await call.start(roomId, 'joiner');
+  }
+
+  onMount(async () => {
     const params = readJoinParams();
 
     if (params) {
-      console.warn(
-        '[MOUNT] role: ',
-        params.role,
-        'roomId',
-        params.roomId,
-        'params',
-        params,
-      );
-
-      call.start(params.roomId, params.role);
+      console.info('[MOUNT] join params: ', params);
+      await joinCall(params.roomId);
     }
   });
 
   return (
     <div>
-      <Show when={!call.isInCall}>
+      <Show when={!call.isInCall()}>
         <button onClick={startCall} disabled={call.isStarting()}>
           {call.isStarting() ? 'Starting...' : 'Start call'}
         </button>
       </Show>
 
-      <Show when={call.isInCall}>
+      <Show when={call.isInCall()}>
         <button onClick={call.stop}>End call</button>
       </Show>
 
@@ -49,8 +50,8 @@ export default function CallPage() {
         <p>{call.error()}</p>
       </Show>
 
-      <VideoStream stream={call.localStream()} muted />
-      <VideoStream stream={call.remoteStream()} />
+      <VideoStream label='local' stream={call.localStream()} muted />
+      <VideoStream label='remote' stream={call.remoteStream()} />
     </div>
   );
 }

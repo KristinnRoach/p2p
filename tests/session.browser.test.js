@@ -1,6 +1,10 @@
 import { server } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { startP2PSession, joinP2PSession } from '../src/session.js';
+import {
+  clearBrowserTabSignalingRoom,
+  createBrowserTabSignaling,
+} from '../examples/shared/createBrowserTabSignaling.js';
 
 const loopbackRtcConfig = { iceServers: [] };
 const itNeedsDataChannelLoopback = server.browser === 'firefox' ? it.skip : it;
@@ -35,6 +39,23 @@ async function waitForOpen(session) {
   await new Promise((resolve) => session.once('open', resolve));
 }
 
+function createVideoStream() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#f00';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return canvas.captureStream(5);
+}
+
+function waitForRemoteStream(session) {
+  if (session.remoteStream) return Promise.resolve(session.remoteStream);
+  return new Promise((resolve) => {
+    session.once('remoteStream', ({ stream }) => resolve(stream));
+  });
+}
+
 describe('P2P session helpers', () => {
   itNeedsDataChannelLoopback(
     'start and join a data-channel session with the friendly API',
@@ -64,6 +85,320 @@ describe('P2P session helpers', () => {
         expect(await received).toBe('hello from session');
         expect(host.role).toBe('initiator');
         expect(guest.role).toBe('joiner');
+      } finally {
+        host.close();
+        guest.close();
+      }
+    },
+  );
+
+  itNeedsDataChannelLoopback(
+    'delivers initiator media tracks to the joiner',
+    async () => {
+      const { a, b } = createLoopbackSignaling();
+      const initiatorStream = createVideoStream();
+      const joinerStream = createVideoStream();
+      const [host, guest] = await Promise.all([
+        startP2PSession({
+          signaling: a,
+          localStream: initiatorStream,
+          rtcConfig: loopbackRtcConfig,
+        }),
+        joinP2PSession({
+          signaling: b,
+          localStream: joinerStream,
+          rtcConfig: loopbackRtcConfig,
+        }),
+      ]);
+
+      try {
+        const guestRemoteStream = await waitForRemoteStream(guest);
+
+        expect(guestRemoteStream.getVideoTracks()).toHaveLength(1);
+        expect(guestRemoteStream.getVideoTracks()[0].readyState).toBe('live');
+      } finally {
+        host.close();
+        guest.close();
+        for (const track of initiatorStream.getTracks()) track.stop();
+        for (const track of joinerStream.getTracks()) track.stop();
+      }
+    },
+  );
+
+  itNeedsDataChannelLoopback(
+    'delivers initiator media tracks when using browser tab signaling',
+    async () => {
+      const roomId = `test-${crypto.randomUUID()}`;
+      clearBrowserTabSignalingRoom(roomId);
+      const hostSignaling = createBrowserTabSignaling({
+        roomId,
+        role: 'host',
+      });
+      const guestSignaling = createBrowserTabSignaling({
+        roomId,
+        role: 'guest',
+      });
+      const initiatorStream = createVideoStream();
+      const joinerStream = createVideoStream();
+
+      const host = await startP2PSession({
+        signaling: hostSignaling,
+        localStream: initiatorStream,
+        rtcConfig: loopbackRtcConfig,
+      });
+      const guest = await joinP2PSession({
+        signaling: guestSignaling,
+        localStream: joinerStream,
+        rtcConfig: loopbackRtcConfig,
+      });
+
+      try {
+        const guestRemoteStream = await waitForRemoteStream(guest);
+
+        expect(guestRemoteStream.getVideoTracks()).toHaveLength(1);
+        expect(guestRemoteStream.getVideoTracks()[0].readyState).toBe('live');
+      } finally {
+        host.close();
+        guest.close();
+        hostSignaling.close();
+        guestSignaling.close();
+        clearBrowserTabSignalingRoom(roomId);
+        for (const track of initiatorStream.getTracks()) track.stop();
+        for (const track of joinerStream.getTracks()) track.stop();
+      }
+    },
+  );
+
+  itNeedsDataChannelLoopback(
+    'calls onRemoteStream during startup before the session promise resolves',
+    async () => {
+      const { a, b } = createLoopbackSignaling();
+      const initiatorStream = createVideoStream();
+      const joinerStream = createVideoStream();
+      const onRemoteStream = vi.fn();
+      const [host, guest] = await Promise.all([
+        startP2PSession({
+          signaling: a,
+          localStream: initiatorStream,
+          rtcConfig: loopbackRtcConfig,
+        }),
+        joinP2PSession({
+          signaling: b,
+          localStream: joinerStream,
+          rtcConfig: loopbackRtcConfig,
+          onRemoteStream,
+        }),
+      ]);
+
+      try {
+        expect(onRemoteStream).toHaveBeenCalledWith(
+          expect.objectContaining({
+            stream: expect.any(MediaStream),
+            track: expect.any(MediaStreamTrack),
+          }),
+          expect.any(CustomEvent),
+        );
+        expect(onRemoteStream.mock.calls[0][0].stream.getVideoTracks()).toHaveLength(
+          1,
+        );
+      } finally {
+        host.close();
+        guest.close();
+        for (const track of initiatorStream.getTracks()) track.stop();
+        for (const track of joinerStream.getTracks()) track.stop();
+      }
+    },
+  );
+
+  itNeedsDataChannelLoopback(
+    'calls onRemoteTrack during startup before the session promise resolves',
+    async () => {
+      const { a, b } = createLoopbackSignaling();
+      const initiatorStream = createVideoStream();
+      const joinerStream = createVideoStream();
+      const onRemoteTrack = vi.fn();
+      const [host, guest] = await Promise.all([
+        startP2PSession({
+          signaling: a,
+          localStream: initiatorStream,
+          rtcConfig: loopbackRtcConfig,
+        }),
+        joinP2PSession({
+          signaling: b,
+          localStream: joinerStream,
+          rtcConfig: loopbackRtcConfig,
+          onRemoteTrack,
+        }),
+      ]);
+
+      try {
+        expect(onRemoteTrack).toHaveBeenCalledWith(
+          expect.objectContaining({
+            stream: expect.any(MediaStream),
+            track: expect.any(MediaStreamTrack),
+          }),
+          expect.any(CustomEvent),
+        );
+      } finally {
+        host.close();
+        guest.close();
+        for (const track of initiatorStream.getTracks()) track.stop();
+        for (const track of joinerStream.getTracks()) track.stop();
+      }
+    },
+  );
+
+  it('assembles a remote stream from receiver tracks when no track event fires', async () => {
+    const OriginalRTCPeerConnection = globalThis.RTCPeerConnection;
+    const remoteTrack = createVideoStream().getVideoTracks()[0];
+    let offerHandler;
+    const onRemoteStream = vi.fn();
+
+    class FakePeerConnection extends EventTarget {
+      constructor() {
+        super();
+        this.signalingState = 'stable';
+        this.connectionState = 'new';
+        this.remoteDescription = null;
+        this.localDescription = null;
+        this.onicecandidate = null;
+        this.receivers = [];
+      }
+
+      setRemoteDescription(description) {
+        this.remoteDescription = description;
+        this.signalingState = 'have-remote-offer';
+        this.receivers = [{ track: remoteTrack }];
+        return Promise.resolve();
+      }
+
+      createAnswer() {
+        return Promise.resolve({ type: 'answer', sdp: 'answer-sdp' });
+      }
+
+      setLocalDescription(description) {
+        this.localDescription = description;
+        this.signalingState = 'stable';
+        return Promise.resolve();
+      }
+
+      addIceCandidate() {
+        return Promise.resolve();
+      }
+
+      getReceivers() {
+        return this.receivers;
+      }
+
+      close() {
+        this.signalingState = 'closed';
+      }
+    }
+
+    globalThis.RTCPeerConnection = FakePeerConnection;
+
+    try {
+      const sessionPromise = joinP2PSession({
+        signaling: {
+          sendOffer: vi.fn(),
+          sendAnswer: vi.fn(),
+          onOffer: (callback) => {
+            offerHandler = callback;
+          },
+          onAnswer: vi.fn(),
+          sendCandidate: vi.fn(),
+          onRemoteCandidate: vi.fn(),
+        },
+        onRemoteStream,
+      });
+
+      await Promise.resolve();
+      offerHandler({ type: 'offer', sdp: 'offer-sdp' });
+      const session = await sessionPromise;
+
+      try {
+        expect(onRemoteStream).toHaveBeenCalledWith(
+          expect.objectContaining({
+            stream: expect.any(MediaStream),
+            track: remoteTrack,
+          }),
+          expect.any(CustomEvent),
+        );
+        expect(session.remoteStream.getTracks()).toContain(remoteTrack);
+      } finally {
+        session.close();
+      }
+    } finally {
+      globalThis.RTCPeerConnection = OriginalRTCPeerConnection;
+      remoteTrack.stop();
+    }
+  });
+
+  itNeedsDataChannelLoopback(
+    'calls onDataChannel when the initiator creates a data channel during startup',
+    async () => {
+      const { a, b } = createLoopbackSignaling();
+      const onDataChannel = vi.fn();
+      const [host, guest] = await Promise.all([
+        startP2PSession({
+          signaling: a,
+          dataChannel: true,
+          rtcConfig: loopbackRtcConfig,
+          onDataChannel,
+        }),
+        joinP2PSession({
+          signaling: b,
+          rtcConfig: loopbackRtcConfig,
+        }),
+      ]);
+
+      try {
+        expect(onDataChannel).toHaveBeenCalledWith(
+          expect.objectContaining({
+            channel: expect.any(RTCDataChannel),
+          }),
+          expect.any(CustomEvent),
+        );
+        expect(onDataChannel.mock.calls[0][0].channel.label).toBe('data');
+      } finally {
+        host.close();
+        guest.close();
+      }
+    },
+  );
+
+  itNeedsDataChannelLoopback(
+    'calls onDataChannel when the joiner receives a data channel',
+    async () => {
+      const { a, b } = createLoopbackSignaling();
+      let resolveDataChannel;
+      const dataChannelReceived = new Promise((resolve) => {
+        resolveDataChannel = resolve;
+      });
+      const onDataChannel = vi.fn((detail) => {
+        resolveDataChannel(detail.channel);
+      });
+      const [host, guest] = await Promise.all([
+        startP2PSession({
+          signaling: a,
+          dataChannel: true,
+          rtcConfig: loopbackRtcConfig,
+        }),
+        joinP2PSession({
+          signaling: b,
+          rtcConfig: loopbackRtcConfig,
+          onDataChannel,
+        }),
+      ]);
+
+      try {
+        const channel = await dataChannelReceived;
+
+        expect(onDataChannel).toHaveBeenCalledWith(
+          expect.objectContaining({ channel }),
+          expect.any(CustomEvent),
+        );
+        expect(channel.label).toBe('data');
       } finally {
         host.close();
         guest.close();

@@ -1,6 +1,11 @@
 ---
-"@kidlib/p2p": patch
+'@kidlib/p2p': patch
 ---
 
-Fix race condition where remoteStream event could fire before listener was attached by  
+Add startup-safe `onRemoteStream`, `onRemoteTrack`, and `onDataChannel`
+callbacks to the session helpers so consumers can subscribe before async
+session startup begins.
 
+Also make remote media delivery more robust by emitting receiver tracks from
+`RTCPeerConnection.getReceivers()` when a browser exposes live receiver tracks
+without dispatching a `track` event.

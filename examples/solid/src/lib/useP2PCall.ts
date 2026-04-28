@@ -10,9 +10,14 @@ export function useP2PCall() {
   const [localStream, setLocalStream] = createSignal<MediaStream>();
   const [remoteStream, setRemoteStream] = createSignal<MediaStream>();
   const [isStarting, setIsStarting] = createSignal(false);
+  const [isInCall, setIsInCall] = createSignal(false);
   const [error, setError] = createSignal<string>();
 
   let session: P2PSession | undefined;
+
+  function handleRemoteStream({ stream }: { stream: MediaStream }) {
+    setRemoteStream(() => stream);
+  }
 
   async function start(roomId: string, role: CallRole) {
     if (session || isStarting()) return;
@@ -41,16 +46,16 @@ export function useP2PCall() {
               signaling,
               localStream: local,
               dataChannel: false,
+              onRemoteStream: handleRemoteStream,
             })
           : await joinP2PSession({
               signaling,
               localStream: local,
               dataChannel: false,
+              onRemoteStream: handleRemoteStream,
             });
 
-      session.on('remoteStream', ({ stream }) => {
-        setRemoteStream(stream);
-      });
+      setIsInCall(true);
     } catch (err) {
       console.error(err);
       setError('Could not start call.');
@@ -63,6 +68,7 @@ export function useP2PCall() {
   function stop() {
     session?.close();
     session = undefined;
+    setIsInCall(false);
 
     localStream()
       ?.getTracks()
@@ -84,8 +90,6 @@ export function useP2PCall() {
     error,
     start,
     stop,
-    get isInCall() {
-      return !!session;
-    },
+    isInCall,
   };
 }

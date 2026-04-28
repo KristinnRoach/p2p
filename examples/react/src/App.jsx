@@ -62,15 +62,12 @@ export function App() {
       dataChannel: true,
       dataChannelOpenTimeoutMs: 0,
       rtcConfig,
+      onRemoteStream: ({ stream }) => {
+        setRemoteStream(stream);
+        setLog((items) => [...items, 'received remote video']);
+      },
     });
 
-    nextSession.on('remoteStream', ({ stream }) => {
-      setRemoteStream(stream);
-      setLog((items) => [...items, 'received remote video']);
-    });
-    nextSession.on('remoteTrack', ({ stream }) => {
-      setRemoteStream(stream);
-    });
     nextSession.on('open', () => {
       setDataChannelOpen(true);
       setLog((items) => [...items, 'data channel open']);

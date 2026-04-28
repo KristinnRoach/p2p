@@ -33,6 +33,8 @@
   ],
   "scripts": {
     "example:react": "pnpm --dir examples/react dev",
+    "dev:react": "pnpm --dir examples/react dev",
+    "dev:solid": "pnpm --dir examples/solid dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "changeset": "EDITOR='code --wait' changeset",
