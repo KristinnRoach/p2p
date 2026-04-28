@@ -1,4 +1,4 @@
-export type CallRole = 'initiator' | 'joiner';
+import type { CallRole } from './useP2PCall';
 
 export function createRoomId() {
   return crypto.randomUUID();

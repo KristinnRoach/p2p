@@ -1,4 +1,4 @@
 import { render } from 'solid-js/web';
-import CallPage from './components/CallPage';
+import App from './App';
 
-render(() => <CallPage />, document.getElementById('root')!);
+render(() => <App />, document.getElementById('root')!);

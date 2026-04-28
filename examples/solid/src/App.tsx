@@ -3,7 +3,7 @@ import CallPage from './components/CallPage';
 export default function App() {
   return (
     <div>
-      <h1>KidLib P2P Example - Solid</h1>
+      <h1> @kidlib/p2p - SolidJS Example App</h1>
       <p>
         This is a simple example of a peer-to-peer video call application built
         with SolidJS and KidLib P2P. Click the button below to start a call, and
