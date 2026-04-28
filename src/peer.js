@@ -80,18 +80,22 @@ export class Peer extends EventTarget {
     this._rtcConfig = rtcConfig;
 
     this._pc = null;
-    this._dataChannel = null;
-    this._state = PEER_STATES.IDLE;
-    this._started = false;
-    this._startPromise = null;
-    this._closed = false;
-    this._pendingStartReject = null;
-    this._listenerMap = new Map();
-    this._signalingCleanups = new Set();
-  }
-
-  // ─── Public API ───────────────────────────────────────────────────────
-
+        if (this._localStream) {
+          const health = addLocalTracks(pc, this._localStream, {
+            audioOnly: this._audioOnly,
+          });
+          log(`[Peer] [${this._role}] addLocalTracks:`, this._localStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
+          if (!health.allHealthy) {
+            this._emit('error', {
+              error: new Error(
+                `Unhealthy local tracks: ${health.unhealthyKinds.join(', ')}`,
+              ),
+              phase: 'tracks',
+            });
+          }
+        } else {
+          log(`[Peer] [${this._role}] No localStream provided`);
+        }
   get role() {
     return this._role;
   }
@@ -395,29 +399,31 @@ export class Peer extends EventTarget {
       const settle = (fn, value) => {
         fn(value);
       };
-      this._rememberSignalingCleanup(this._signaling.onOffer(async (offer) => {
-        if (offerHandled || !offer || this._closed) return;
-        offerHandled = true;
-        try {
-          const applied = await setRemoteDescription(
-            this._pc,
-            offer,
-            drainIceCandidateQueue,
-          );
-          if (!applied) return;
+      this._rememberSignalingCleanup(
+        this._signaling.onOffer(async (offer) => {
+          if (offerHandled || !offer || this._closed) return;
+          offerHandled = true;
+          try {
+            const applied = await setRemoteDescription(
+              this._pc,
+              offer,
+              drainIceCandidateQueue,
+            );
+            if (!applied) return;
 
-          const answer = await createAnswer(this._pc);
-          await this._signaling.sendAnswer({
-            type: answer.type,
-            sdp: answer.sdp,
-          });
-          log('[Peer] Answer sent (joiner)');
-          settle(resolve);
-        } catch (err) {
-          this._emit('error', { error: err, phase: 'offer' });
-          settle(reject, err);
-        }
-      }));
+            const answer = await createAnswer(this._pc);
+            await this._signaling.sendAnswer({
+              type: answer.type,
+              sdp: answer.sdp,
+            });
+            log('[Peer] Answer sent (joiner)');
+            settle(resolve);
+          } catch (err) {
+            this._emit('error', { error: err, phase: 'offer' });
+            settle(reject, err);
+          }
+        }),
+      );
     });
   }
 
@@ -449,9 +455,10 @@ export class Peer extends EventTarget {
 
     this._rememberSignalingCleanup(setupIceCandidates(pc, this._signaling));
 
-    pc.addEventListener('track', (event) => {
-      this._emit('track', { track: event.track, streams: event.streams });
-    });
+        pc.addEventListener('track', (event) => {
+          log(`[Peer] [${this._role}] 'track' event:`, event.track.kind, event.streams);
+          this._emit('track', { track: event.track, streams: event.streams });
+        });
 
     pc.addEventListener('connectionstatechange', () => {
       const connState = pc.connectionState;
@@ -574,9 +581,7 @@ export class Peer extends EventTarget {
       });
       timer = setTimeout(() => {
         fail(
-          new Error(
-            `Peer.start: connection timed out after ${timeoutMs}ms`,
-          ),
+          new Error(`Peer.start: connection timed out after ${timeoutMs}ms`),
         );
       }, timeoutMs);
     });
