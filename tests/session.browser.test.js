@@ -147,16 +147,18 @@ describe('P2P session helpers', () => {
       const initiatorStream = createVideoStream();
       const joinerStream = createVideoStream();
 
-      const host = await startP2PSession({
-        signaling: hostSignaling,
-        localStream: initiatorStream,
-        rtcConfig: loopbackRtcConfig,
-      });
-      const guest = await joinP2PSession({
-        signaling: guestSignaling,
-        localStream: joinerStream,
-        rtcConfig: loopbackRtcConfig,
-      });
+      const [host, guest] = await Promise.all([
+        startP2PSession({
+          signaling: hostSignaling,
+          localStream: initiatorStream,
+          rtcConfig: loopbackRtcConfig,
+        }),
+        joinP2PSession({
+          signaling: guestSignaling,
+          localStream: joinerStream,
+          rtcConfig: loopbackRtcConfig,
+        }),
+      ]);
 
       try {
         const guestRemoteStream = await waitForRemoteStream(guest);
