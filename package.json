@@ -3,6 +3,7 @@
   "version": "0.1.4",
   "description": "Signaling-agnostic WebRTC peer and data-channel helpers.",
   "type": "module",
+  "types": "./src/index.d.ts",
   "exports": {
     ".": "./src/index.js",
     "./config": "./src/config.js",
@@ -31,6 +32,7 @@
     "datachannel"
   ],
   "scripts": {
+    "example:react": "pnpm --dir examples/react dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "changeset": "EDITOR='code --wait' changeset",
