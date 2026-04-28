@@ -28,7 +28,14 @@ export function createBrowserTabSignaling({ roomId, role }) {
 
   const readJson = (storageKey, fallback) => {
     const raw = localStorage.getItem(storageKey);
-    return raw ? JSON.parse(raw) : fallback;
+    if (raw == null) return fallback;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      localStorage.removeItem(storageKey);
+      return fallback;
+    }
+    return fallback;
   };
 
   const writeJson = (storageKey, value) => {
@@ -61,7 +68,14 @@ export function createBrowserTabSignaling({ roomId, role }) {
 
   const readLegacyRoom = () => {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : createEmptyRoom();
+    if (raw == null) return createEmptyRoom();
+    try {
+      return JSON.parse(raw);
+    } catch {
+      localStorage.removeItem(key);
+      return createEmptyRoom();
+    }
+    return createEmptyRoom();
   };
 
   const updateRoom = (update) => {
