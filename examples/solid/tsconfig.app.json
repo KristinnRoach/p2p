@@ -14,7 +14,10 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@shared/*": ["../../shared/*"]
+    }
   },
   "include": ["src", "../../shared"],
   "references": []

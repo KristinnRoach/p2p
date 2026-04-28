@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { startP2PSession, joinP2PSession } from '@kidlib/p2p';
-import { createBrowserTabSignaling } from '../../../shared/createBrowserTabSignaling';
+import { createBrowserTabSignaling } from '@shared';
 
 export type CallRole = 'initiator' | 'joiner';
 

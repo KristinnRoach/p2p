@@ -3,10 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { startP2PSession, joinP2PSession } from '../src/session.js';
 
 const loopbackRtcConfig = { iceServers: [] };
-const itNeedsDataChannelLoopback =
-  server.browser === 'firefox' ? it.skip : it;
+const itNeedsDataChannelLoopback = server.browser === 'firefox' ? it.skip : it;
 
-function createLoopbackPair() {
+function createLoopbackSignaling() {
   const offerListeners = { a: null, b: null };
   const answerListeners = { a: null, b: null };
   const candidateListeners = { a: [], b: [] };
@@ -40,7 +39,7 @@ describe('P2P session helpers', () => {
   itNeedsDataChannelLoopback(
     'start and join a data-channel session with the friendly API',
     async () => {
-      const { a, b } = createLoopbackPair();
+      const { a, b } = createLoopbackSignaling();
       const [host, guest] = await Promise.all([
         startP2PSession({
           signaling: a,
@@ -73,7 +72,7 @@ describe('P2P session helpers', () => {
   );
 
   it('propagates start timeout errors', async () => {
-    const { b } = createLoopbackPair();
+    const { b } = createLoopbackSignaling();
 
     await expect(
       joinP2PSession({ signaling: b, startTimeoutMs: 1 }),
@@ -81,7 +80,7 @@ describe('P2P session helpers', () => {
   });
 
   it('aborts while waiting for the data channel to open', async () => {
-    const { a } = createLoopbackPair();
+    const { a } = createLoopbackSignaling();
     const controller = new AbortController();
     let resolveSendOffer;
     const sendOfferCalled = new Promise((resolve) => {
