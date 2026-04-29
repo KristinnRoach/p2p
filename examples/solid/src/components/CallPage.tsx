@@ -1,4 +1,4 @@
-import { Show, onMount } from 'solid-js';
+import { For, Show, onMount } from 'solid-js';
 import { VideoStream } from './VideoStream';
 import { useP2PCall } from '../lib/useP2PCall';
 import { createRoomId, createJoinUrl, readJoinParams } from '../lib/callLink';
@@ -51,7 +51,14 @@ export default function CallPage() {
       </Show>
 
       <VideoStream label='local' stream={call.localStream()} muted />
-      <VideoStream label='remote' stream={call.remoteStream()} />
+      <For each={call.remoteStreams()}>
+        {(remote) => (
+          <VideoStream
+            label={`remote ${remote.peerId.slice(0, 8)}`}
+            stream={remote.stream}
+          />
+        )}
+      </For>
     </div>
   );
 }
