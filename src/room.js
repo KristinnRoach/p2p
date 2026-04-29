@@ -141,15 +141,30 @@ export class P2PRoom extends EventTarget {
     });
     if (typeof cleanup === 'function') this._cleanups.push(cleanup);
 
+    let abortPromise = null;
     if (this.signal) {
-      const abortHandler = () => this.close();
-      this.signal.addEventListener('abort', abortHandler, { once: true });
-      this._cleanups.push(() => {
-        this.signal.removeEventListener('abort', abortHandler);
+      abortPromise = new Promise((_, reject) => {
+        const abortHandler = () => {
+          this.close();
+          reject(createAbortError());
+        };
+        this.signal.addEventListener('abort', abortHandler, { once: true });
+        this._cleanups.push(() => {
+          this.signal.removeEventListener('abort', abortHandler);
+        });
       });
     }
 
-    await this.signaling.join(this.peerId);
+    const joinPromise = Promise.resolve(this.signaling.join(this.peerId));
+    if (abortPromise) {
+      await Promise.race([joinPromise, abortPromise]);
+    } else {
+      await joinPromise;
+    }
+
+    if (this._closed || this.signal?.aborted) {
+      throw createAbortError();
+    }
   }
 
   _syncPeers(peerIds) {

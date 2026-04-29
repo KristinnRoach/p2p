@@ -7,7 +7,7 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock('../src/session.js', () => sessionMocks);
 
-import { P2PRoom } from '../src/room.js';
+import { P2PRoom, joinP2PRoom } from '../src/room.js';
 
 function createPairSignaling() {
   return {
@@ -45,6 +45,16 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('P2PRoom', () => {
   beforeEach(() => {
     sessionMocks.startP2PSession.mockReset();
@@ -74,5 +84,27 @@ describe('P2PRoom', () => {
     expect(peerLeft).toHaveLength(0);
 
     room.close();
+  });
+
+  it('rejects joinP2PRoom when the signal aborts during room join', async () => {
+    const join = createDeferred();
+    const signaling = createTestRoomSignaling();
+    signaling.join.mockReturnValue(join.promise);
+    const controller = new AbortController();
+
+    const roomPromise = joinP2PRoom({
+      signaling,
+      peerId: 'a',
+      signal: controller.signal,
+    });
+    await flushAsyncWork();
+
+    controller.abort();
+
+    await expect(roomPromise).rejects.toMatchObject({ name: 'AbortError' });
+    expect(signaling.leave).toHaveBeenCalledWith('a');
+
+    join.resolve();
+    await flushAsyncWork();
   });
 });
