@@ -8,7 +8,7 @@
 
 import { log } from './logger.js';
 
-/** @typedef {import('./signaling-transport.js').IceTransport} IceTransport */
+/** @typedef {import('./signaling.js').IceTransport} IceTransport */
 
 // WeakMap of queued remote candidates keyed by peer connection.
 const pendingRemoteCandidates = new WeakMap();

@@ -1,5 +1,5 @@
 import { startP2PSession, joinP2PSession } from './session.js';
-import { createRoomSignaling } from './signaling-channel.js';
+import { createRoomSignaling } from './signaling.js';
 
 /**
  * Join a mesh room for N-way group calls. Each remote peer gets its own

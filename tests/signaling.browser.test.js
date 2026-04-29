@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createPairSignaling,
   createRoomSignaling,
-} from '../src/signaling-channel.js';
+} from '../src/signaling.js';
 
 function createSource(overrides = {}) {
   return {

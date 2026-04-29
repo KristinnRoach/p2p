@@ -4,7 +4,7 @@
 // traffic isolated from a media PeerConnection so large transfers don't
 // compete with video/audio for SCTP bandwidth.
 //
-// Signaling-agnostic: callers provide a DataSignalingChannel implementation.
+// Signaling-agnostic: callers provide an RtcSignalingSource implementation.
 
 import { rtcConfig as defaultRtcConfig } from './config.js';
 import { createOffer, createAnswer, setRemoteDescription } from './sdp.js';
@@ -12,7 +12,7 @@ import { setupIceCandidates, drainIceCandidateQueue } from './ice.js';
 import { checkAndWarnRTT } from './rtt.js';
 import { log } from './logger.js';
 
-/** @typedef {import('./signaling-transport.js').DataSignalingChannel} DataSignalingChannel */
+/** @typedef {import('./signaling.js').RtcSignalingSource} RtcSignalingSource */
 
 const DEFAULT_LABEL = 'data';
 const DEFAULT_RTT_CHECK_DELAY_MS = 1000;
@@ -22,7 +22,7 @@ const DEFAULT_DATA_CHANNEL_READY_TIMEOUT_MS = 10000;
  * Initiator side: create a data-only PeerConnection and DataChannel, send
  * the offer through `signaling`, and wait for the remote answer.
  *
- * @param {DataSignalingChannel} signaling
+ * @param {RtcSignalingSource} signaling
  * @param {Object} [options]
  * @param {string} [options.label='data'] - DataChannel label.
  * @param {RTCConfiguration} [options.rtcConfig] - Override RTCConfiguration.
@@ -76,7 +76,7 @@ export async function createDataChannel(signaling, options = {}) {
  * Joiner side: wait for the remote offer via `signaling`, create a
  * data-only PeerConnection, apply the offer, and send back an answer.
  *
- * @param {DataSignalingChannel} signaling
+ * @param {RtcSignalingSource} signaling
  * @param {Object} [options] - See {@link createDataChannel}.
  * @param {number} [options.dataChannelTimeoutMs=10000] - Reject if
  *   `ondatachannel` has not fired within this many ms after the answer is

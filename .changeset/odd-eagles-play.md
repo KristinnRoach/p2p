@@ -10,6 +10,9 @@ Make remote media delivery more robust by emitting receiver tracks from
 `RTCPeerConnection.getReceivers()` when a browser exposes live receiver tracks
 without dispatching a `track` event.
 
-Add a minimal draft `createRoomSignaling` plus `joinP2PRoom`/`P2PRoom` mesh
-abstraction that manages one `P2PSession` per remote peer through an injected
-room signaling adapter, with peer-scoped media and data channel callbacks.
+Add `createRoomSignaling` plus `joinP2PRoom`/`P2PRoom` mesh APIs that manage
+one `P2PSession` pair per remote peer through an injected room signaling
+adapter, with peer-scoped media and data channel callbacks.
+
+Rename the normalized 1:1 signaling helper to `createPairSignaling` and the
+raw signaling contract to `RtcSignalingSource` for clearer pair-vs-room naming.

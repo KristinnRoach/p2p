@@ -7,7 +7,8 @@ export interface IceTransport {
   ): void | (() => void);
 }
 
-export interface DataSignalingChannel extends IceTransport {
+/** Raw 1:1 WebRTC signaling source: offer/answer + ICE exchange between two peers. */
+export interface RtcSignalingSource extends IceTransport {
   sendOffer(offer: RTCSessionDescriptionInit): void | Promise<void>;
   sendAnswer(answer: RTCSessionDescriptionInit): void | Promise<void>;
   onOffer(
@@ -16,7 +17,11 @@ export interface DataSignalingChannel extends IceTransport {
   onAnswer(
     callback: (answer: RTCSessionDescriptionInit) => void,
   ): void | (() => void);
-  close?(): void;
+}
+
+/** Normalized pair signaling returned by {@link createPairSignaling} — close always provided. */
+export interface RtcPairSignaling extends RtcSignalingSource {
+  close(): void;
 }
 
 export type PeerState =
@@ -96,7 +101,7 @@ export interface P2PSession {
 }
 
 export interface P2PSessionOptions {
-  signaling: DataSignalingChannel;
+  signaling: RtcSignalingSource;
   localStream?: MediaStream | null;
   audioOnly?: boolean;
   dataChannel?: boolean;
@@ -111,7 +116,9 @@ export interface P2PSessionOptions {
   onDataChannel?: (detail: DataChannelDetail, event: CustomEvent) => void;
 }
 
-export function startP2PSession(options: P2PSessionOptions): Promise<P2PSession>;
+export function startP2PSession(
+  options: P2PSessionOptions,
+): Promise<P2PSession>;
 export function joinP2PSession(options: P2PSessionOptions): Promise<P2PSession>;
 
 export interface P2PRoomPeerSignalingOptions {
@@ -123,7 +130,7 @@ export interface P2PRoomSignaling {
   join(peerId: string): void | Promise<void>;
   leave(peerId: string): void | Promise<void>;
   onPeers(callback: (peerIds: string[]) => void): void | (() => void);
-  createPeerSignaling(options: P2PRoomPeerSignalingOptions): DataSignalingChannel;
+  createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcSignalingSource;
   close?(): void;
 }
 
@@ -178,12 +185,18 @@ export interface P2PRoomOptions {
   onPeerJoined?: (detail: { peerId: string }, event: CustomEvent) => void;
   onPeerLeft?: (detail: PeerLeftDetail, event: CustomEvent) => void;
   onDataChannel?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
-  onDataChannelOpen?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
+  onDataChannelOpen?: (
+    detail: RoomDataChannelDetail,
+    event: CustomEvent,
+  ) => void;
   onDataChannelMessage?: (
     detail: RoomDataChannelMessageDetail,
     event: CustomEvent,
   ) => void;
-  onDataChannelClose?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
+  onDataChannelClose?: (
+    detail: RoomDataChannelDetail,
+    event: CustomEvent,
+  ) => void;
 }
 
 export interface P2PRoom {
@@ -210,22 +223,16 @@ export interface P2PRoom {
 
 export function joinP2PRoom(options: P2PRoomOptions): Promise<P2PRoom>;
 
-export interface PairSignalingWithClose extends DataSignalingChannel {
-  close(): void;
-}
-
 export function createPairSignaling(
-  source: DataSignalingChannel,
-): PairSignalingWithClose;
-
-export interface RoomSignalingWithClose extends P2PRoomSignaling {
-  createPeerSignaling(options: P2PRoomPeerSignalingOptions): PairSignalingWithClose;
-  close(): void;
-}
+  source: RtcSignalingSource,
+): RtcPairSignaling;
 
 export function createRoomSignaling(
   source: P2PRoomSignaling,
-): RoomSignalingWithClose;
+): P2PRoomSignaling & {
+  createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcPairSignaling;
+  close(): void;
+};
 
 export interface AttachRemoteStreamOptions {
   onStream?: (detail: RemoteStreamDetail) => void;
@@ -233,7 +240,9 @@ export interface AttachRemoteStreamOptions {
 }
 
 export function attachRemoteStream(
-  peerOrPc: EventTarget | { on?: (...args: unknown[]) => unknown; pc?: RTCPeerConnection },
+  peerOrPc:
+    | EventTarget
+    | { on?: (...args: unknown[]) => unknown; pc?: RTCPeerConnection },
   options?: AttachRemoteStreamOptions,
 ): () => void;
 
@@ -251,12 +260,12 @@ export interface DataChannelResult {
 }
 
 export function createDataChannel(
-  signaling: DataSignalingChannel,
+  signaling: RtcSignalingSource,
   options?: DataChannelOptions,
 ): Promise<DataChannelResult>;
 
 export function joinDataChannel(
-  signaling: DataSignalingChannel,
+  signaling: RtcSignalingSource,
   options?: DataChannelOptions,
 ): Promise<DataChannelResult>;
 
@@ -286,7 +295,7 @@ export interface PeerEvents {
 export declare class Peer extends EventTarget {
   constructor(options: {
     role: 'initiator' | 'joiner';
-    signaling: DataSignalingChannel;
+    signaling: RtcSignalingSource;
     localStream?: MediaStream | null;
     audioOnly?: boolean;
     dataChannel?: boolean;
