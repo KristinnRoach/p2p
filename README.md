@@ -27,6 +27,26 @@ room.on('peerLeft',   ({ peerId })         => removeStream(peerId));
 room.close();
 ```
 
+Use `watchP2PRoom` to observe room presence before joining. This lets an app
+detect incoming calls or capacity without announcing the local peer.
+
+```js
+import { watchP2PRoom } from '@kidlib/p2p';
+
+const room = await watchP2PRoom({
+  signaling,
+  peerId: crypto.randomUUID(),
+  localStream,
+  maxPeers: 2,
+});
+
+room.on('full', ({ peerIds, maxPeers }) => showRoomFull(peerIds, maxPeers));
+
+await room.join();  // enter presence and connect
+await room.leave(); // leave presence, close sessions, keep watching
+room.close();       // permanent teardown
+```
+
 ## 1:1 calls — P2PSession
 
 For direct connections between exactly two peers.
