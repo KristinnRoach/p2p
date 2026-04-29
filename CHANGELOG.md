@@ -21,6 +21,10 @@
 
   Add TypeScript declarations for the root package and published subpath exports.
 
+  Add `watchP2PRoom`, explicit `join()`/`leave()` room lifecycle controls,
+  lazy `createSignaling`/`roomId` and `getLocalStream` factories, `maxPeers`
+  room-full handling, and related room cleanup/retry fixes.
+
 ## 0.1.4
 
 ### Patch Changes
