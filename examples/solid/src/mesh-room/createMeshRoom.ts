@@ -1,6 +1,5 @@
 import { createMemo, createSignal, onCleanup } from 'solid-js';
-import { joinP2PRoom } from '@kidlib/p2p';
-import { createLocalMedia } from './createLocalMedia';
+import { watchP2PRoom } from '@kidlib/p2p';
 import {
   removePeer,
   removeRemoteStream,
@@ -16,13 +15,13 @@ import type {
   RoomStatus,
 } from './roomTypes';
 
-type P2PRoom = Awaited<ReturnType<typeof joinP2PRoom>>;
+type P2PRoom = Awaited<ReturnType<typeof watchP2PRoom>>;
 
 export function createMeshRoom(
   options: CreateMeshRoomOptions,
 ): MeshRoomController {
   const peerId = options.peerId ?? crypto.randomUUID();
-  const media = createLocalMedia();
+  const [localStream, setLocalStream] = createSignal<MediaStream>();
   const [status, setStatus] = createSignal<RoomStatus>('idle');
   const [error, setError] = createSignal<string>();
   const [peers, setPeers] = createSignal<RoomPeer[]>([]);
@@ -49,12 +48,14 @@ export function createMeshRoom(
     }
 
     try {
-      const localStream = await media.start(joinOptions.media);
-      const nextRoom = await joinP2PRoom({
-        signaling: options.createSignaling(joinOptions.roomId),
+      const nextRoom = await watchP2PRoom({
+        roomId: joinOptions.roomId,
+        createSignaling: options.createSignaling,
         peerId,
-        localStream,
+        getLocalStream: () =>
+          navigator.mediaDevices.getUserMedia(joinOptions.media ?? defaultMedia),
         maxPeers: options.maxPeers ?? Infinity,
+        onLocalStream: ({ stream }) => setLocalStream(stream),
         onPeerJoined: ({ peerId }) => {
           setPeers((items) => upsertPeer(items, peerId));
         },
@@ -73,25 +74,28 @@ export function createMeshRoom(
           setError('Room is full.');
         },
       });
+      room = nextRoom;
       nextRoom.on('error', ({ error }) => {
         console.error(error);
         setError('A peer connection failed.');
       });
 
-      if (status() === 'full') {
-        nextRoom.close();
-        media.stop();
-        return;
-      }
+      await nextRoom.join();
 
-      room = nextRoom;
       setStatus('joined');
     } catch (err) {
       console.error(err);
       closeRoomOnly();
-      media.stop();
-      setStatus('error');
-      setError(media.error() ?? 'Could not join room.');
+      if (isRoomFullError(err) || status() === 'full') {
+        setStatus('full');
+        setError('Room is full.');
+      } else if (isMediaError(err)) {
+        setStatus('error');
+        setError('Could not access camera or microphone.');
+      } else {
+        setStatus('error');
+        setError('Could not join room.');
+      }
     }
   }
 
@@ -108,7 +112,6 @@ export function createMeshRoom(
 
   function close() {
     closeRoomOnly();
-    media.stop();
     setPeers([]);
     setRemoteStreams([]);
     setStatus('idle');
@@ -125,6 +128,7 @@ export function createMeshRoom(
   function closeRoomOnly() {
     room?.close();
     room = undefined;
+    setLocalStream(undefined);
   }
 
   onCleanup(close);
@@ -133,7 +137,7 @@ export function createMeshRoom(
     peerId,
     status,
     error,
-    localStream: media.stream,
+    localStream,
     peers,
     remoteStreams,
     isJoining,
@@ -145,3 +149,24 @@ export function createMeshRoom(
     broadcast,
   };
 }
+
+function isRoomFullError(error: unknown) {
+  return error instanceof Error && error.name === 'RoomFullError';
+}
+
+function isMediaError(error: unknown) {
+  return (
+    error instanceof DOMException &&
+    [
+      'AbortError',
+      'NotAllowedError',
+      'NotFoundError',
+      'NotReadableError',
+    ].includes(error.name)
+  );
+}
+
+const defaultMedia: MediaStreamConstraints = {
+  video: true,
+  audio: true,
+};

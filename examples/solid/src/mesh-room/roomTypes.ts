@@ -1,5 +1,5 @@
 import type { Accessor } from 'solid-js';
-import type { P2PRoomSignaling } from '@kidlib/p2p';
+import type { CreateRoomSignalingOptions, P2PRoomSignaling } from '@kidlib/p2p';
 
 export type RoomStatus =
   | 'idle'
@@ -27,7 +27,7 @@ export type JoinRoomOptions = {
 export type CreateMeshRoomOptions = {
   peerId?: string;
   maxPeers?: number;
-  createSignaling: (roomId: string) => P2PRoomSignaling;
+  createSignaling: (options: CreateRoomSignalingOptions) => P2PRoomSignaling;
   resetRoom?: (roomId: string) => void;
 };
 

@@ -1,5 +1,5 @@
 import { createSignal, onCleanup } from 'solid-js';
-import { joinP2PRoom } from '@kidlib/p2p';
+import { watchP2PRoom } from '@kidlib/p2p';
 import {
   clearBrowserMeshRoom,
   createBrowserMeshRoomSignaling,
@@ -7,7 +7,7 @@ import {
 
 export type CallRole = 'initiator' | 'joiner';
 
-type P2PRoom = Awaited<ReturnType<typeof joinP2PRoom>>;
+type P2PRoom = Awaited<ReturnType<typeof watchP2PRoom>>;
 type RemoteStream = { peerId: string; stream: MediaStream };
 
 export function useP2PRoom() {
@@ -19,7 +19,6 @@ export function useP2PRoom() {
 
   const localPeerId = crypto.randomUUID();
   let room: P2PRoom | undefined;
-  let local: MediaStream | undefined;
 
   async function start(roomId: string, role: CallRole) {
     if (isStarting() || isInCall()) return;
@@ -29,16 +28,16 @@ export function useP2PRoom() {
     if (role === 'initiator') clearBrowserMeshRoom(roomId);
 
     try {
-      local = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-      setLocalStream(local);
-
-      room = await joinP2PRoom({
-        signaling: createBrowserMeshRoomSignaling(roomId),
+      room = await watchP2PRoom({
+        roomId,
+        createSignaling: ({ roomId }) => createBrowserMeshRoomSignaling(roomId),
+        getLocalStream: () =>
+          navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          }),
         peerId: localPeerId,
-        localStream: local,
+        onLocalStream: ({ stream }) => setLocalStream(stream),
         onPeerStream: ({ peerId, stream }) => {
           setRemoteStreams((items) => [
             ...items.filter((item) => item.peerId !== peerId),
@@ -51,6 +50,7 @@ export function useP2PRoom() {
           );
         },
       });
+      await room.join();
 
       setIsInCall(true);
     } catch (err) {
@@ -65,8 +65,6 @@ export function useP2PRoom() {
   function stop() {
     room?.close();
     room = undefined;
-    stopStream(local);
-    local = undefined;
     for (const { stream } of remoteStreams()) stopStream(stream);
 
     setLocalStream(undefined);

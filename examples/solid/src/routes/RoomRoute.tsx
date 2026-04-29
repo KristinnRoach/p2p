@@ -11,7 +11,7 @@ import {
 
 export function RoomRoute() {
   const room = createMeshRoom({
-    createSignaling: createBrowserMeshRoomSignaling,
+    createSignaling: ({ roomId }) => createBrowserMeshRoomSignaling(roomId),
     resetRoom: clearBrowserMeshRoom,
   });
   const invite = createRoomInvite();
