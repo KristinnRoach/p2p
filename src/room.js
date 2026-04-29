@@ -11,8 +11,13 @@ import { createRoomSignaling } from './signaling.js';
  */
 export async function joinP2PRoom(options = {}) {
   const room = new P2PRoom(options);
-  await room.ready;
-  return room;
+  try {
+    await room.ready;
+    return room;
+  } catch (error) {
+    room.close();
+    throw error;
+  }
 }
 
 export class P2PRoom extends EventTarget {
