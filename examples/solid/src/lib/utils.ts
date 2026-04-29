@@ -1,4 +1,4 @@
-import type { CallRole } from './useP2PCall';
+import type { CallRole } from './useP2PRoom';
 
 export function createRoomId() {
   return crypto.randomUUID();
