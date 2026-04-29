@@ -1,4 +1,4 @@
-import Room from './components/Room';
+import { RoomRoute } from './routes/RoomRoute';
 
 export default function App() {
   return (
@@ -14,7 +14,7 @@ export default function App() {
         to be on the same browser for it to work.
       </p>
       <hr />
-      <Room />
+      <RoomRoute />
     </div>
   );
 }

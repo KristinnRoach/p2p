@@ -1,0 +1,22 @@
+import { Show } from 'solid-js';
+import type { RoomStatus as RoomStatusValue } from '../mesh-room/roomTypes';
+
+type Props = {
+  status: RoomStatusValue;
+  error?: string;
+  peerCount: number;
+};
+
+export function RoomStatus(props: Props) {
+  return (
+    <div>
+      <p>Remote peers: {props.peerCount}</p>
+      <Show when={props.status === 'full'}>
+        <p>Room is full.</p>
+      </Show>
+      <Show when={props.error}>
+        <p>{props.error}</p>
+      </Show>
+    </div>
+  );
+}

@@ -595,7 +595,9 @@ export class P2PRoom extends EventTarget {
 }
 
 function createRoomFullError() {
-  return new Error('P2PRoom.join: room is full');
+  const error = new Error('P2PRoom.join: room is full');
+  error.name = 'RoomFullError';
+  return error;
 }
 
 function createAbortError() {

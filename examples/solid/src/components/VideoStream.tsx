@@ -11,8 +11,6 @@ export function VideoStream(props: Props) {
 
   createEffect(() => {
     const stream = props.stream;
-    console.info(`VideoStream for ${props.label} - stream changed: ${stream}`);
-
     if (!video) return;
 
     video.srcObject = stream ?? null;
