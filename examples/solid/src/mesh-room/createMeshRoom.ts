@@ -30,9 +30,11 @@ export function createMeshRoom(
   );
 
   let room: P2PRoom | undefined;
+  let unsubscribeRoomError: (() => void) | undefined;
 
   const isJoining = createMemo(() => status() === 'joining');
   const isJoined = createMemo(() => status() === 'joined');
+  const isLeaving = createMemo(() => status() === 'leaving');
 
   async function join(joinOptions: JoinRoomOptions) {
     if (status() === 'joining' || status() === 'joined') return;
@@ -75,7 +77,7 @@ export function createMeshRoom(
         },
       });
       room = nextRoom;
-      nextRoom.on('error', ({ error }) => {
+      unsubscribeRoomError = nextRoom.on('error', ({ error }) => {
         console.error(error);
         setError('A peer connection failed.');
       });
@@ -106,8 +108,15 @@ export function createMeshRoom(
     }
 
     setStatus('leaving');
-    await room.leave();
-    close();
+    try {
+      await room.leave();
+      close();
+    } catch (err) {
+      console.error(err);
+      close();
+      setStatus('error');
+      setError('Could not leave room.');
+    }
   }
 
   function close() {
@@ -126,6 +135,8 @@ export function createMeshRoom(
   }
 
   function closeRoomOnly() {
+    unsubscribeRoomError?.();
+    unsubscribeRoomError = undefined;
     room?.close();
     room = undefined;
     setLocalStream(undefined);
@@ -142,6 +153,7 @@ export function createMeshRoom(
     remoteStreams,
     isJoining,
     isJoined,
+    isLeaving,
     join,
     leave,
     close,
@@ -162,6 +174,7 @@ function isMediaError(error: unknown) {
       'NotAllowedError',
       'NotFoundError',
       'NotReadableError',
+      'OverconstrainedError',
     ].includes(error.name)
   );
 }

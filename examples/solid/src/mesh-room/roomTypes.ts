@@ -40,6 +40,7 @@ export type MeshRoomController = {
   remoteStreams: Accessor<RoomRemoteStream[]>;
   isJoining: Accessor<boolean>;
   isJoined: Accessor<boolean>;
+  isLeaving: Accessor<boolean>;
   join: (options: JoinRoomOptions) => Promise<void>;
   leave: () => Promise<void>;
   close: () => void;

@@ -296,8 +296,13 @@ export class P2PRoom extends EventTarget {
     if (this._state === 'closed' || this.signal?.aborted) {
       throw createAbortError();
     }
+    let signaling;
     try {
-      await Promise.resolve(this.signaling.join(this.peerId));
+      signaling = await this._ensureSignaling();
+      if (this._state === 'closed' || this.signal?.aborted) {
+        throw createAbortError();
+      }
+      await Promise.resolve(signaling.join(this.peerId));
     } catch (error) {
       this._joinStarted = false;
       this._releaseOwnedLocalStream();
@@ -311,7 +316,7 @@ export class P2PRoom extends EventTarget {
     if (this._state !== 'joining') return;
     if (this._isFull()) {
       try {
-        await Promise.resolve(this.signaling.leave(this.peerId));
+        await Promise.resolve(signaling.leave(this.peerId));
       } finally {
         this._joinStarted = false;
         this._joined = false;
@@ -328,16 +333,20 @@ export class P2PRoom extends EventTarget {
   async _leave() {
     this._state = 'leaving';
     this._closeAllPeers({ emitLeft: true });
+    const shouldLeave = this._joined || this._joinStarted;
     try {
-      if (this._joined || this._joinStarted) {
-        await Promise.resolve(this.signaling.leave(this.peerId));
+      if (shouldLeave) {
+        const signaling = await this._ensureSignaling();
+        await Promise.resolve(signaling.leave(this.peerId));
+      }
+    } finally {
+      if (shouldLeave) {
         this._joinStarted = false;
         this._joined = false;
       }
-    } finally {
       this._releaseOwnedLocalStream();
+      if (this._state !== 'closed') this._state = 'watching';
     }
-    if (this._state !== 'closed') this._state = 'watching';
   }
 
   async _leaveAfterJoin() {

@@ -14,7 +14,7 @@ export function RoomStatus(props: Props) {
       <Show when={props.status === 'full'}>
         <p>Room is full.</p>
       </Show>
-      <Show when={props.error}>
+      <Show when={props.error && props.status !== 'full'}>
         <p>{props.error}</p>
       </Show>
     </div>

@@ -7,8 +7,9 @@ export function createRoomInvite() {
   function readJoinParams() {
     const url = new URL(window.location.href);
     const roomId = url.searchParams.get('room');
-    if (!roomId) return null;
-    return { roomId };
+    const trimmedRoomId = roomId?.trim();
+    if (!trimmedRoomId) return null;
+    return { roomId: trimmedRoomId };
   }
 
   async function copyJoinUrl(url: string) {

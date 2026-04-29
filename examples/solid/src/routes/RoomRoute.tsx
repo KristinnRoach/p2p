@@ -33,6 +33,7 @@ export function RoomRoute() {
         status={room.status()}
         isJoining={room.isJoining()}
         isJoined={room.isJoined()}
+        isLeaving={room.isLeaving()}
         onStart={startRoom}
         onLeave={room.leave}
       />

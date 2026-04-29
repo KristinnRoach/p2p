@@ -163,6 +163,26 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('waits for factory signaling when joining before ready resolves', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const createSignaling = vi.fn(() => Promise.resolve(signaling));
+
+    const room = new P2PRoom({
+      roomId: 'room-a',
+      createSignaling,
+      peerId: 'a',
+      autoJoin: false,
+    });
+
+    await room.join();
+
+    expect(createSignaling).toHaveBeenCalledOnce();
+    expect(signaling.join).toHaveBeenCalledWith('a');
+
+    room.close();
+  });
+
   it('does not request factory media when the room is full while watching', async () => {
     const signaling = createTestRoomSignaling();
     const getLocalStream = vi.fn(() => createFakeStream());
@@ -266,6 +286,31 @@ describe('P2PRoom', () => {
 
     expect(signaling.join).toHaveBeenCalledTimes(2);
     expect(signaling.createPeerSignaling).toHaveBeenCalledTimes(2);
+
+    room.close();
+  });
+
+  it('rolls back local leave state when signaling leave rejects', async () => {
+    const session = createResolvedSession();
+    sessionMocks.startP2PSession.mockResolvedValue(session);
+    const signaling = createTestRoomSignaling();
+    const leaveError = new Error('leave failed');
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await flushAsyncWork();
+    signaling.leave.mockRejectedValueOnce(leaveError);
+
+    await expect(room.leave()).rejects.toThrow('leave failed');
+
+    expect(room._state).toBe('watching');
+    expect(room._joinStarted).toBe(false);
+    expect(room._joined).toBe(false);
+    expect(session.close).toHaveBeenCalled();
 
     room.close();
   });
