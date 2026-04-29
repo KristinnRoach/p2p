@@ -20,6 +20,24 @@ export async function joinP2PRoom(options = {}) {
   }
 }
 
+/**
+ * Watch a mesh room's presence without joining it. Call room.join() to enter
+ * presence and start connecting to peers.
+ *
+ * @param {Object} options
+ * @returns {Promise<P2PRoom>}
+ */
+export async function watchP2PRoom(options = {}) {
+  const room = new P2PRoom({ ...options, autoJoin: false });
+  try {
+    await room.ready;
+    return room;
+  } catch (error) {
+    room.close();
+    throw error;
+  }
+}
+
 export class P2PRoom extends EventTarget {
   constructor(options = {}) {
     super();
@@ -33,11 +51,14 @@ export class P2PRoom extends EventTarget {
       dataChannelLabel = 'data',
       startTimeoutMs = 8000,
       dataChannelOpenTimeoutMs = dataChannel ? 10000 : 0,
+      maxPeers = Infinity,
+      autoJoin = true,
       signal = null,
       onPeerStream = null,
       onPeerTrack = null,
       onPeerJoined = null,
       onPeerLeft = null,
+      onFull = null,
       onDataChannel = null,
       onDataChannelOpen = null,
       onDataChannelMessage = null,
@@ -45,6 +66,13 @@ export class P2PRoom extends EventTarget {
     } = options;
 
     if (!peerId) throw new Error('P2PRoom: peerId is required');
+    if (
+      typeof maxPeers !== 'number' ||
+      Number.isNaN(maxPeers) ||
+      maxPeers <= 0
+    ) {
+      throw new Error('P2PRoom: maxPeers must be a positive number');
+    }
 
     this.signaling = createRoomSignaling(signaling);
     this.peerId = peerId;
@@ -55,6 +83,8 @@ export class P2PRoom extends EventTarget {
     this.dataChannelLabel = dataChannelLabel;
     this.startTimeoutMs = startTimeoutMs;
     this.dataChannelOpenTimeoutMs = dataChannelOpenTimeoutMs;
+    this.maxPeers = maxPeers;
+    this.autoJoin = autoJoin;
     this.signal = signal;
 
     /** @type {Map<string, import('./session.js').P2PSession>} one entry per connected remote peer */
@@ -66,12 +96,18 @@ export class P2PRoom extends EventTarget {
     this._dataChannelCleanups = new Map();
     this._cleanups = [];
     this._listenerMap = new Map();
-    this._closed = false;
+    this._peerIds = [];
+    this._state = 'watching';
+    this._joinPromise = null;
+    this._leavePromise = null;
+    this._joinStarted = false;
+    this._joined = false;
 
     if (onPeerStream) this._cleanups.push(this.on('peerStream', onPeerStream));
     if (onPeerTrack) this._cleanups.push(this.on('peerTrack', onPeerTrack));
     if (onPeerJoined) this._cleanups.push(this.on('peerJoined', onPeerJoined));
     if (onPeerLeft) this._cleanups.push(this.on('peerLeft', onPeerLeft));
+    if (onFull) this._cleanups.push(this.on('full', onFull));
     if (onDataChannel) {
       this._cleanups.push(this.on('dataChannel', onDataChannel));
     }
@@ -89,26 +125,17 @@ export class P2PRoom extends EventTarget {
   }
 
   close() {
-    if (this._closed) return;
-    this._closed = true;
+    if (this._state === 'closed') return;
+    this._state = 'closed';
 
     for (const cleanup of this._cleanups.splice(0)) cleanup();
-    for (const controller of this._controllers.values()) controller.abort();
-    this._controllers.clear();
-    for (const pair of this.pairs.values()) pair.close();
-    this.pairs.clear();
-    for (const signaling of this._pairSignalings.values()) {
-      signaling.close?.();
-    }
-    this._pairSignalings.clear();
-    for (const peerId of [...this.dataChannels.keys()]) {
-      this._closeDataChannel(peerId);
-    }
-    this.remoteStreams.clear();
+    this._closeAllPeers({ emitLeft: false });
 
-    try {
-      Promise.resolve(this.signaling.leave(this.peerId)).catch(() => {});
-    } catch (_) {}
+    if (this._joinStarted || this._joined) {
+      try {
+        Promise.resolve(this.signaling.leave(this.peerId)).catch(() => {});
+      } catch (_) {}
+    }
     try {
       Promise.resolve(this.signaling.close?.()).catch(() => {});
     } catch (_) {}
@@ -134,9 +161,49 @@ export class P2PRoom extends EventTarget {
     this.removeEventListener(type, callback);
   }
 
+  join() {
+    if (this._state === 'closed') {
+      return Promise.reject(new Error('P2PRoom.join: room is closed'));
+    }
+    if (this._state === 'active') return Promise.resolve();
+    if (this._joinPromise) return this._joinPromise;
+
+    this._joinPromise = this._join();
+    this._joinPromise.then(
+      () => {
+        this._joinPromise = null;
+      },
+      () => {
+        this._joinPromise = null;
+      },
+    );
+    return this._joinPromise;
+  }
+
+  leave() {
+    if (this._state === 'closed') return Promise.resolve();
+    if (this._state === 'watching') return Promise.resolve();
+    if (this._leavePromise) return this._leavePromise;
+
+    this._leavePromise =
+      this._state === 'joining' && this._joinPromise
+        ? this._leaveAfterJoin()
+        : this._leave();
+    this._leavePromise.then(
+      () => {
+        this._leavePromise = null;
+      },
+      () => {
+        this._leavePromise = null;
+      },
+    );
+    return this._leavePromise;
+  }
+
   async _start() {
     if (this.signal?.aborted) throw createAbortError();
     const cleanup = this.signaling.onPeers((peerIds) => {
+      this._peerIds = [...peerIds];
       this._syncPeers(peerIds);
     });
     if (typeof cleanup === 'function') this._cleanups.push(cleanup);
@@ -155,21 +222,87 @@ export class P2PRoom extends EventTarget {
       });
     }
 
-    const joinPromise = Promise.resolve(this.signaling.join(this.peerId));
-    if (abortPromise) {
-      await Promise.race([joinPromise, abortPromise]);
-    } else {
-      await joinPromise;
+    if (!this.autoJoin) {
+      abortPromise?.catch(() => {});
+      return;
     }
+    const joinPromise = this.join();
+    if (abortPromise) await Promise.race([joinPromise, abortPromise]);
+    else await joinPromise;
 
-    if (this._closed || this.signal?.aborted) {
+    if (this._state === 'closed' || this.signal?.aborted) {
       throw createAbortError();
     }
   }
 
+  async _join() {
+    if (this._state === 'leaving' && this._leavePromise) {
+      await this._leavePromise;
+    }
+    if (this._state === 'closed') {
+      throw new Error('P2PRoom.join: room is closed');
+    }
+    if (this._state === 'active') return;
+    if (this._isFull()) {
+      this._emit('full', {
+        peerIds: [...this._peerIds],
+        maxPeers: this.maxPeers,
+      });
+      return;
+    }
+
+    this._state = 'joining';
+    this._joinStarted = true;
+    try {
+      await Promise.resolve(this.signaling.join(this.peerId));
+    } catch (error) {
+      this._joinStarted = false;
+      if (this._state !== 'closed') this._state = 'watching';
+      throw error;
+    }
+    this._joined = true;
+    if (this._state === 'closed' || this.signal?.aborted) {
+      throw createAbortError();
+    }
+    if (this._state !== 'joining') return;
+    if (this._isFull()) {
+      await Promise.resolve(this.signaling.leave(this.peerId));
+      this._joinStarted = false;
+      this._joined = false;
+      this._state = 'watching';
+      this._emit('full', {
+        peerIds: [...this._peerIds],
+        maxPeers: this.maxPeers,
+      });
+      return;
+    }
+    this._state = 'active';
+    this._syncPeers(this._peerIds);
+  }
+
+  async _leave() {
+    this._state = 'leaving';
+    this._closeAllPeers({ emitLeft: true });
+    if (this._joined || this._joinStarted) {
+      await Promise.resolve(this.signaling.leave(this.peerId));
+      this._joinStarted = false;
+      this._joined = false;
+    }
+    if (this._state !== 'closed') this._state = 'watching';
+  }
+
+  async _leaveAfterJoin() {
+    this._state = 'leaving';
+    await this._joinPromise.catch(() => {});
+    if (this._state !== 'closed') await this._leave();
+  }
+
   _syncPeers(peerIds) {
-    if (this._closed) return;
-    const remotePeerIds = new Set(peerIds.filter((id) => id !== this.peerId));
+    if (this._state !== 'active') return;
+    const allowedPeerIds = this._allowedPeerIds(peerIds);
+    const remotePeerIds = new Set(
+      allowedPeerIds.filter((id) => id !== this.peerId),
+    );
     for (const peerId of remotePeerIds) this._connectPeer(peerId);
     for (const peerId of this.pairs.keys()) {
       if (!remotePeerIds.has(peerId)) this._closePeer(peerId);
@@ -183,7 +316,7 @@ export class P2PRoom extends EventTarget {
     if (
       this.pairs.has(remotePeerId) ||
       this._controllers.has(remotePeerId) ||
-      this._closed
+      this._state !== 'active'
     ) {
       return;
     }
@@ -228,7 +361,7 @@ export class P2PRoom extends EventTarget {
       },
     })
       .then((pair) => {
-        if (this._closed || controller.signal.aborted) {
+        if (this._state !== 'active' || controller.signal.aborted) {
           pair.close();
           pairSignaling.close?.();
           return;
@@ -240,11 +373,22 @@ export class P2PRoom extends EventTarget {
         }
       })
       .catch((error) => {
-        if (!controller.signal.aborted && !this._closed) {
+        if (!controller.signal.aborted && this._state !== 'closed') {
           this._emit('error', { peerId: remotePeerId, error });
         }
         this._closePeer(remotePeerId, { emitLeft: false });
       });
+  }
+
+  _closeAllPeers({ emitLeft = true } = {}) {
+    const peerIds = new Set([
+      ...this.pairs.keys(),
+      ...this._controllers.keys(),
+      ...this.remoteStreams.keys(),
+      ...this.dataChannels.keys(),
+      ...this._pairSignalings.keys(),
+    ]);
+    for (const peerId of peerIds) this._closePeer(peerId, { emitLeft });
   }
 
   _closePeer(peerId, { emitLeft = true } = {}) {
@@ -277,7 +421,7 @@ export class P2PRoom extends EventTarget {
   }
 
   _bindDataChannel(peerId, channel) {
-    if (this._closed) return;
+    if (this._state !== 'active') return;
     if (this.dataChannels.get(peerId) === channel) return;
 
     this._closeDataChannel(peerId);
@@ -311,6 +455,18 @@ export class P2PRoom extends EventTarget {
 
   _emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
+  }
+
+  _isFull(peerIds = this._peerIds) {
+    if (!Number.isFinite(this.maxPeers)) return false;
+    if (peerIds.includes(this.peerId)) return false;
+    return peerIds.length >= this.maxPeers;
+  }
+
+  _allowedPeerIds(peerIds) {
+    if (!Number.isFinite(this.maxPeers)) return peerIds;
+    if (peerIds.includes(this.peerId)) return peerIds;
+    return peerIds.slice(0, Math.max(0, this.maxPeers - 1));
   }
 
   _trackListener(type, callback, handler) {

@@ -148,6 +148,11 @@ export interface PeerErrorDetail {
   error: Error;
 }
 
+export interface RoomFullDetail {
+  peerIds: string[];
+  maxPeers: number;
+}
+
 export interface RoomDataChannelDetail {
   peerId: string;
   channel: RTCDataChannel;
@@ -162,6 +167,7 @@ export interface P2PRoomEvents {
   peerLeft: PeerLeftDetail;
   peerStream: PeerStreamDetail;
   peerTrack: PeerStreamDetail;
+  full: RoomFullDetail;
   dataChannel: RoomDataChannelDetail;
   dataChannelOpen: RoomDataChannelDetail;
   dataChannelMessage: RoomDataChannelMessageDetail;
@@ -177,6 +183,7 @@ export interface P2PRoomOptions {
   dataChannel?: boolean;
   dataChannelLabel?: string;
   dataChannelOpenTimeoutMs?: number;
+  maxPeers?: number;
   rtcConfig?: RTCConfiguration;
   startTimeoutMs?: number;
   signal?: AbortSignal | null;
@@ -184,6 +191,7 @@ export interface P2PRoomOptions {
   onPeerTrack?: (detail: PeerStreamDetail, event: CustomEvent) => void;
   onPeerJoined?: (detail: { peerId: string }, event: CustomEvent) => void;
   onPeerLeft?: (detail: PeerLeftDetail, event: CustomEvent) => void;
+  onFull?: (detail: RoomFullDetail, event: CustomEvent) => void;
   onDataChannel?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
   onDataChannelOpen?: (
     detail: RoomDataChannelDetail,
@@ -218,12 +226,15 @@ export declare class P2PRoom extends EventTarget {
     callback: (detail: unknown, event: CustomEvent) => void,
   ): () => void;
   off(type: string, callback: (...args: unknown[]) => void): void;
+  join(): Promise<void>;
+  leave(): Promise<void>;
   send(peerId: string, data: unknown): void;
   broadcast(data: unknown): number;
   close(): void;
 }
 
 export function joinP2PRoom(options: P2PRoomOptions): Promise<P2PRoom>;
+export function watchP2PRoom(options: P2PRoomOptions): Promise<P2PRoom>;
 
 export function createPairSignaling(
   source: RtcSignalingSource,

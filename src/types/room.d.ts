@@ -5,6 +5,7 @@ export type {
   P2PRoomSignaling,
   P2PSession,
   PeerErrorDetail,
+  RoomFullDetail,
   PeerLeftDetail,
   PeerStreamDetail,
   RoomDataChannelDetail,
@@ -12,4 +13,4 @@ export type {
   RtcSignalingSource,
 } from './index.js';
 
-export { P2PRoom, joinP2PRoom } from './index.js';
+export { P2PRoom, joinP2PRoom, watchP2PRoom } from './index.js';
