@@ -314,6 +314,16 @@ export class P2PRoom extends EventTarget {
     }
     this._joined = true;
     if (this._state === 'closed' || this.signal?.aborted) {
+      try {
+        await Promise.resolve(signaling.leave(this.peerId));
+      } catch (_) {
+        // Best-effort cleanup; preserve the abort outcome below.
+      } finally {
+        this._joinStarted = false;
+        this._joined = false;
+        this._releaseOwnedLocalStream();
+        if (this._state !== 'closed') this._state = 'watching';
+      }
       throw createAbortError();
     }
     if (this._state !== 'joining') return;

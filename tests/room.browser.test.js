@@ -498,6 +498,30 @@ describe('P2PRoom', () => {
     await flushAsyncWork();
   });
 
+  it('rolls back room presence when the signal aborts after room join', async () => {
+    const signaling = createTestRoomSignaling();
+    const controller = new AbortController();
+    signaling.join.mockImplementation(() => {
+      controller.abort();
+    });
+    signaling.leave.mockRejectedValue(new Error('leave failed'));
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      signal: controller.signal,
+    });
+
+    await expect(room.join()).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(signaling.join).toHaveBeenCalledWith('a');
+    expect(signaling.leave).toHaveBeenCalledWith('a');
+    expect(room._joinStarted).toBe(false);
+    expect(room._joined).toBe(false);
+    expect(room._state).toBe('closed');
+
+    room.close();
+  });
+
   it('cleans up owned media when aborted after local stream resolves', async () => {
     const signaling = createTestRoomSignaling();
     const stream = createFakeStream();
