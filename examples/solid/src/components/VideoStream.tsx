@@ -23,5 +23,13 @@ export function VideoStream(props: Props) {
     });
   });
 
-  return <video ref={video} autoplay playsinline muted={props.muted} />;
+  return (
+    <video
+      class="video-stream"
+      ref={video}
+      autoplay
+      playsinline
+      muted={props.muted}
+    />
+  );
 }

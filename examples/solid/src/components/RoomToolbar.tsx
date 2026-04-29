@@ -11,7 +11,7 @@ type Props = {
 
 export function RoomToolbar(props: Props) {
   return (
-    <div>
+    <div class="toolbar">
       <button
         onClick={props.onStart}
         disabled={props.isJoining || props.isJoined || props.isLeaving}
@@ -24,7 +24,7 @@ export function RoomToolbar(props: Props) {
       >
         Leave room
       </button>
-      <span>{props.status}</span>
+      <span class="status-pill">{props.status}</span>
     </div>
   );
 }

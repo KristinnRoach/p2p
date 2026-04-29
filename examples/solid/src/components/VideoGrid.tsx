@@ -10,7 +10,7 @@ type Props = {
 
 export function VideoGrid(props: Props) {
   return (
-    <div>
+    <div class="video-grid">
       <Show when={props.localStream}>
         {(stream) => <LocalPreview stream={stream()} />}
       </Show>

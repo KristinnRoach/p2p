@@ -28,7 +28,7 @@ export function RoomRoute() {
   });
 
   return (
-    <main>
+    <main class="room">
       <RoomToolbar
         status={room.status()}
         isJoining={room.isJoining()}
