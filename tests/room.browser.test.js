@@ -176,7 +176,10 @@ describe('P2PRoom', () => {
 
     signaling.emitPeers(['a', 'b']);
 
-    await expect(room.join()).rejects.toThrow('room is full');
+    await expect(room.join()).rejects.toMatchObject({
+      name: 'RoomFullError',
+      message: 'P2PRoom.join: room is full',
+    });
 
     expect(getLocalStream).not.toHaveBeenCalled();
 
