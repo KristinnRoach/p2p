@@ -396,6 +396,39 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('still rejects with room full when cleanup leave fails during join', async () => {
+    const join = createDeferred();
+    const signaling = createTestRoomSignaling();
+    const stream = createFakeStream();
+    signaling.join.mockReturnValue(join.promise);
+    signaling.leave.mockRejectedValue(new Error('leave failed'));
+    const room = await watchP2PRoom({
+      signaling,
+      getLocalStream: () => stream,
+      peerId: 'c',
+      maxPeers: 2,
+    });
+
+    signaling.emitPeers(['a']);
+    const joinPromise = room.join();
+    signaling.emitPeers(['a', 'b']);
+    await flushAsyncWork();
+
+    join.resolve();
+
+    await expect(joinPromise).rejects.toMatchObject({
+      name: 'RoomFullError',
+      message: 'P2PRoom.join: room is full',
+    });
+    expect(signaling.leave).toHaveBeenCalledWith('c');
+    expect(stream.track.stop).toHaveBeenCalledOnce();
+    expect(room._state).toBe('watching');
+    expect(room._joinStarted).toBe(false);
+    expect(room._joined).toBe(false);
+
+    room.close();
+  });
+
   it('reports startup failures without emitting peerLeft', async () => {
     const startupError = new Error('startup failed');
     sessionMocks.startP2PSession.mockRejectedValue(startupError);
@@ -441,5 +474,27 @@ describe('P2PRoom', () => {
 
     join.resolve();
     await flushAsyncWork();
+  });
+
+  it('cleans up owned media when aborted after local stream resolves', async () => {
+    const signaling = createTestRoomSignaling();
+    const stream = createFakeStream();
+    const controller = new AbortController();
+    const room = await watchP2PRoom({
+      signaling,
+      getLocalStream: () => stream,
+      peerId: 'a',
+      signal: controller.signal,
+      onLocalStream: () => controller.abort(),
+    });
+
+    await expect(room.join()).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(stream.track.stop).toHaveBeenCalledOnce();
+    expect(room._state).toBe('closed');
+    expect(room._joinStarted).toBe(false);
+    expect(signaling.join).not.toHaveBeenCalled();
+
+    room.close();
   });
 });

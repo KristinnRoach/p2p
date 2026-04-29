@@ -294,6 +294,9 @@ export class P2PRoom extends EventTarget {
       throw error;
     }
     if (this._state === 'closed' || this.signal?.aborted) {
+      this._joinStarted = false;
+      this._releaseOwnedLocalStream();
+      if (this._state !== 'closed') this._state = 'watching';
       throw createAbortError();
     }
     let signaling;
@@ -317,6 +320,8 @@ export class P2PRoom extends EventTarget {
     if (this._isFull()) {
       try {
         await Promise.resolve(signaling.leave(this.peerId));
+      } catch (_) {
+        // Best-effort cleanup; preserve the room-full outcome below.
       } finally {
         this._joinStarted = false;
         this._joined = false;
