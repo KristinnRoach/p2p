@@ -62,6 +62,14 @@ function createResolvedSession() {
   };
 }
 
+function createFakeStream() {
+  const track = { stop: vi.fn() };
+  return {
+    getTracks: vi.fn(() => [track]),
+    track,
+  };
+}
+
 describe('P2PRoom', () => {
   beforeEach(() => {
     sessionMocks.startP2PSession.mockReset();
@@ -112,6 +120,120 @@ describe('P2PRoom', () => {
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
 
     room.close();
+  });
+
+  it('supports signaling and media factories with room-owned media cleanup', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const stream = createFakeStream();
+    const localStreams = [];
+    const createSignaling = vi.fn(() => signaling);
+    const getLocalStream = vi.fn(() => stream);
+
+    const room = await watchP2PRoom({
+      roomId: 'room-a',
+      createSignaling,
+      getLocalStream,
+      peerId: 'a',
+      onLocalStream: ({ stream }) => localStreams.push(stream),
+    });
+
+    expect(createSignaling).toHaveBeenCalledOnce();
+    expect(createSignaling).toHaveBeenCalledWith({ roomId: 'room-a' });
+    expect(getLocalStream).not.toHaveBeenCalled();
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await flushAsyncWork();
+
+    expect(getLocalStream).toHaveBeenCalledOnce();
+    expect(localStreams).toEqual([stream]);
+    expect(sessionMocks.startP2PSession).toHaveBeenCalledWith(
+      expect.objectContaining({ localStream: stream }),
+    );
+
+    await room.leave();
+
+    expect(stream.track.stop).toHaveBeenCalledOnce();
+
+    await room.join();
+
+    expect(getLocalStream).toHaveBeenCalledTimes(2);
+
+    room.close();
+  });
+
+  it('does not request factory media when the room is full while watching', async () => {
+    const signaling = createTestRoomSignaling();
+    const getLocalStream = vi.fn(() => createFakeStream());
+    const room = await watchP2PRoom({
+      roomId: 'room-a',
+      createSignaling: () => signaling,
+      getLocalStream,
+      peerId: 'c',
+      maxPeers: 2,
+    });
+
+    signaling.emitPeers(['a', 'b']);
+
+    await expect(room.join()).rejects.toThrow('room is full');
+
+    expect(getLocalStream).not.toHaveBeenCalled();
+
+    room.close();
+  });
+
+  it('stops factory-created media when room join fails', async () => {
+    const signaling = createTestRoomSignaling();
+    const stream = createFakeStream();
+    signaling.join.mockRejectedValue(new Error('join failed'));
+
+    const room = await watchP2PRoom({
+      roomId: 'room-a',
+      createSignaling: () => signaling,
+      getLocalStream: () => stream,
+      peerId: 'a',
+    });
+
+    await expect(room.join()).rejects.toThrow('join failed');
+
+    expect(stream.track.stop).toHaveBeenCalledOnce();
+
+    room.close();
+  });
+
+  it('rejects ambiguous room resource inputs', () => {
+    const signaling = createTestRoomSignaling();
+
+    expect(
+      () =>
+        new P2PRoom({
+          signaling,
+          createSignaling: () => signaling,
+          roomId: 'room-a',
+          peerId: 'a',
+        }),
+    ).toThrow('pass either signaling or createSignaling');
+
+    expect(
+      () =>
+        new P2PRoom({
+          signaling,
+          localStream: createFakeStream(),
+          getLocalStream: () => createFakeStream(),
+          peerId: 'a',
+        }),
+    ).toThrow('pass either localStream or getLocalStream');
+  });
+
+  it('requires roomId when using a signaling factory', () => {
+    expect(
+      () =>
+        new P2PRoom({
+          createSignaling: () => createTestRoomSignaling(),
+          peerId: 'a',
+        }),
+    ).toThrow('roomId is required with createSignaling');
   });
 
   it('leaves active presence without closing the room subscription', async () => {
