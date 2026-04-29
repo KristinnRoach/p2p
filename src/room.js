@@ -107,10 +107,10 @@ export class P2PRoom extends EventTarget {
     this.remoteStreams.clear();
 
     try {
-      this.signaling.leave(this.peerId);
+      Promise.resolve(this.signaling.leave(this.peerId)).catch(() => {});
     } catch (_) {}
     try {
-      this.signaling.close?.();
+      Promise.resolve(this.signaling.close?.()).catch(() => {});
     } catch (_) {}
   }
 
@@ -179,7 +179,8 @@ export class P2PRoom extends EventTarget {
       remotePeerId,
     });
     const role = this.peerId < remotePeerId ? 'initiator' : 'joiner';
-    const createSession = role === 'initiator' ? startP2PSession : joinP2PSession;
+    const createSession =
+      role === 'initiator' ? startP2PSession : joinP2PSession;
 
     this._controllers.set(remotePeerId, controller);
     this._pairSignalings.set(remotePeerId, pairSignaling);
@@ -197,7 +198,12 @@ export class P2PRoom extends EventTarget {
       signal: controller.signal,
       onRemoteStream: ({ stream, track, event }) => {
         this.remoteStreams.set(remotePeerId, stream);
-        this._emit('peerStream', { peerId: remotePeerId, stream, track, event });
+        this._emit('peerStream', {
+          peerId: remotePeerId,
+          stream,
+          track,
+          event,
+        });
       },
       onRemoteTrack: ({ stream, track, event }) => {
         this._emit('peerTrack', { peerId: remotePeerId, stream, track, event });
