@@ -16,6 +16,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
+      "@kidlib/p2p": ["../../src/types/index.d.ts"],
       "@shared/*": ["../shared/*"]
     }
   },

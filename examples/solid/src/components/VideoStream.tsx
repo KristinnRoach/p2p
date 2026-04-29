@@ -11,8 +11,6 @@ export function VideoStream(props: Props) {
 
   createEffect(() => {
     const stream = props.stream;
-    console.info(`VideoStream for ${props.label} - stream changed: ${stream}`);
-
     if (!video) return;
 
     video.srcObject = stream ?? null;
@@ -25,5 +23,13 @@ export function VideoStream(props: Props) {
     });
   });
 
-  return <video ref={video} autoplay playsinline muted={props.muted} />;
+  return (
+    <video
+      class="video-stream"
+      ref={video}
+      autoplay
+      playsinline
+      muted={props.muted}
+    />
+  );
 }

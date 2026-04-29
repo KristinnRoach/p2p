@@ -5,6 +5,7 @@ docs/WIP/
 TODO.md
 RELEASE.md
 tests/**/__screenshots__/
+test-results/
 webrtc/
 coverage/
 dist/
