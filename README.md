@@ -16,9 +16,12 @@ pnpm add @kidlib/p2p
 import { joinP2PRoom } from '@kidlib/p2p';
 
 const room = await joinP2PRoom({
-  signaling,                    // implements P2PRoomSignaling — see docs/signaling.md
   peerId: crypto.randomUUID(),
-  localStream,
+  roomId,
+  createSignaling: ({ roomId }) => createRoomSignalingForApp(roomId),
+  getLocalStream: () =>
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
+  onLocalStream: ({ stream }) => renderLocalPreview(stream),
 });
 
 room.on('peerStream', ({ peerId, stream }) => renderStream(peerId, stream));
@@ -27,6 +30,10 @@ room.on('peerLeft',   ({ peerId })         => removeStream(peerId));
 room.close();
 ```
 
+Factory-created media is owned by the room: `leave()` and `close()` stop the
+local tracks. You can still pass `signaling` and `localStream` directly when an
+app needs to own setup, preview, device switching, or teardown itself.
+
 Use `watchP2PRoom` to observe room presence before joining. This lets an app
 detect incoming calls or capacity without announcing the local peer.
 
@@ -34,9 +41,11 @@ detect incoming calls or capacity without announcing the local peer.
 import { watchP2PRoom } from '@kidlib/p2p';
 
 const room = await watchP2PRoom({
-  signaling,
+  roomId,
+  createSignaling: ({ roomId }) => createRoomSignalingForApp(roomId),
+  getLocalStream: () =>
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
   peerId: crypto.randomUUID(),
-  localStream,
   maxPeers: 2,
 });
 

@@ -148,6 +148,14 @@ export interface PeerErrorDetail {
   error: Error;
 }
 
+export interface LocalStreamDetail {
+  stream: MediaStream;
+}
+
+export interface CreateRoomSignalingOptions {
+  roomId: string;
+}
+
 export interface RoomFullDetail {
   peerIds: string[];
   maxPeers: number;
@@ -167,6 +175,7 @@ export interface P2PRoomEvents {
   peerLeft: PeerLeftDetail;
   peerStream: PeerStreamDetail;
   peerTrack: PeerStreamDetail;
+  localStream: LocalStreamDetail;
   full: RoomFullDetail;
   dataChannel: RoomDataChannelDetail;
   dataChannelOpen: RoomDataChannelDetail;
@@ -176,9 +185,14 @@ export interface P2PRoomEvents {
 }
 
 export interface P2PRoomOptions {
-  signaling: P2PRoomSignaling;
+  signaling?: P2PRoomSignaling;
+  createSignaling?: (
+    options: CreateRoomSignalingOptions,
+  ) => P2PRoomSignaling | Promise<P2PRoomSignaling>;
+  roomId?: string;
   peerId: string;
   localStream?: MediaStream | null;
+  getLocalStream?: () => MediaStream | Promise<MediaStream | null> | null;
   audioOnly?: boolean;
   dataChannel?: boolean;
   dataChannelLabel?: string;
@@ -191,6 +205,7 @@ export interface P2PRoomOptions {
   onPeerTrack?: (detail: PeerStreamDetail, event: CustomEvent) => void;
   onPeerJoined?: (detail: { peerId: string }, event: CustomEvent) => void;
   onPeerLeft?: (detail: PeerLeftDetail, event: CustomEvent) => void;
+  onLocalStream?: (detail: LocalStreamDetail, event: CustomEvent) => void;
   onFull?: (detail: RoomFullDetail, event: CustomEvent) => void;
   onDataChannel?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
   onDataChannelOpen?: (
@@ -210,6 +225,7 @@ export interface P2PRoomOptions {
 export declare class P2PRoom extends EventTarget {
   constructor(options: P2PRoomOptions);
 
+  readonly roomId: string | null;
   readonly peerId: string;
   readonly localStream: MediaStream | null;
   readonly pairs: Map<string, P2PSession>;
