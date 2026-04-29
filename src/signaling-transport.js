@@ -16,7 +16,7 @@
  */
 
 /**
- * Full signaling channel needed to bring up a data-only PeerConnection.
+ * Full 1:1 pair signaling channel needed to bring up a data-only PeerConnection.
  * Extends {@link IceTransport} with SDP offer/answer exchange.
  *
  * @typedef {Object} DataSignalingChannel

@@ -1,10 +1,10 @@
 import { For, Show, onMount } from 'solid-js';
 import { VideoStream } from './VideoStream';
-import { useP2PCall } from '../lib/useP2PCall';
-import { createRoomId, createJoinUrl, readJoinParams } from '../lib/callLink';
+import { useP2PRoom } from '../lib/useP2PRoom';
+import { createRoomId, createJoinUrl, readJoinParams } from '../lib/utils';
 
-export default function CallPage() {
-  const call = useP2PCall();
+export default function Room() {
+  const call = useP2PRoom();
 
   async function startCall() {
     const roomId = createRoomId();

@@ -114,13 +114,118 @@ export interface P2PSessionOptions {
 export function startP2PSession(options: P2PSessionOptions): Promise<P2PSession>;
 export function joinP2PSession(options: P2PSessionOptions): Promise<P2PSession>;
 
-export interface SignalingChannelWithClose extends DataSignalingChannel {
+export interface P2PRoomPeerSignalingOptions {
+  localPeerId: string;
+  remotePeerId: string;
+}
+
+export interface P2PRoomSignaling {
+  join(peerId: string): void | Promise<void>;
+  leave(peerId: string): void | Promise<void>;
+  onPeers(callback: (peerIds: string[]) => void): void | (() => void);
+  createPeerSignaling(options: P2PRoomPeerSignalingOptions): DataSignalingChannel;
+  close?(): void;
+}
+
+export interface PeerStreamDetail extends RemoteStreamDetail {
+  peerId: string;
+}
+
+export interface PeerLeftDetail {
+  peerId: string;
+  stream: MediaStream | null;
+}
+
+export interface PeerErrorDetail {
+  peerId: string;
+  error: Error;
+}
+
+export interface RoomDataChannelDetail {
+  peerId: string;
+  channel: RTCDataChannel;
+}
+
+export interface RoomDataChannelMessageDetail extends RoomDataChannelDetail {
+  data: unknown;
+}
+
+export interface P2PRoomEvents {
+  peerJoined: { peerId: string };
+  peerLeft: PeerLeftDetail;
+  peerStream: PeerStreamDetail;
+  peerTrack: PeerStreamDetail;
+  dataChannel: RoomDataChannelDetail;
+  dataChannelOpen: RoomDataChannelDetail;
+  dataChannelMessage: RoomDataChannelMessageDetail;
+  dataChannelClose: RoomDataChannelDetail;
+  error: PeerErrorDetail;
+}
+
+export interface P2PRoomOptions {
+  signaling: P2PRoomSignaling;
+  peerId: string;
+  localStream?: MediaStream | null;
+  audioOnly?: boolean;
+  dataChannel?: boolean;
+  dataChannelLabel?: string;
+  dataChannelOpenTimeoutMs?: number;
+  rtcConfig?: RTCConfiguration;
+  startTimeoutMs?: number;
+  signal?: AbortSignal | null;
+  onPeerStream?: (detail: PeerStreamDetail, event: CustomEvent) => void;
+  onPeerTrack?: (detail: PeerStreamDetail, event: CustomEvent) => void;
+  onPeerJoined?: (detail: { peerId: string }, event: CustomEvent) => void;
+  onPeerLeft?: (detail: PeerLeftDetail, event: CustomEvent) => void;
+  onDataChannel?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
+  onDataChannelOpen?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
+  onDataChannelMessage?: (
+    detail: RoomDataChannelMessageDetail,
+    event: CustomEvent,
+  ) => void;
+  onDataChannelClose?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
+}
+
+export interface P2PRoom {
+  readonly peerId: string;
+  readonly localStream: MediaStream | null;
+  readonly pairs: Map<string, P2PSession>;
+  readonly remoteStreams: Map<string, MediaStream>;
+  readonly dataChannels: Map<string, RTCDataChannel>;
+  readonly ready: Promise<void>;
+
+  on<K extends keyof P2PRoomEvents>(
+    type: K,
+    callback: (detail: P2PRoomEvents[K], event: CustomEvent) => void,
+  ): () => void;
+  on(
+    type: string,
+    callback: (detail: unknown, event: CustomEvent) => void,
+  ): () => void;
+  off(type: string, callback: (...args: unknown[]) => void): void;
+  send(peerId: string, data: unknown): void;
+  broadcast(data: unknown): number;
   close(): void;
 }
 
-export function createSignalingChannel(
+export function joinP2PRoom(options: P2PRoomOptions): Promise<P2PRoom>;
+
+export interface PairSignalingWithClose extends DataSignalingChannel {
+  close(): void;
+}
+
+export function createPairSignaling(
   source: DataSignalingChannel,
-): SignalingChannelWithClose;
+): PairSignalingWithClose;
+
+export interface RoomSignalingWithClose extends P2PRoomSignaling {
+  createPeerSignaling(options: P2PRoomPeerSignalingOptions): PairSignalingWithClose;
+  close(): void;
+}
+
+export function createRoomSignaling(
+  source: P2PRoomSignaling,
+): RoomSignalingWithClose;
 
 export interface AttachRemoteStreamOptions {
   onStream?: (detail: RemoteStreamDetail) => void;

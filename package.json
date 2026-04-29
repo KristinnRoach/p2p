@@ -12,6 +12,7 @@
     "./logger": "./src/logger.js",
     "./peer": "./src/peer.js",
     "./remote-stream": "./src/remote-stream.js",
+    "./room": "./src/room.js",
     "./rtt": "./src/rtt.js",
     "./sdp": "./src/sdp.js",
     "./session": "./src/session.js",

@@ -1,4 +1,4 @@
-export function createLoopbackSignaling() {
+export function createLoopbackPairSignaling() {
   const offers = {};
   const answers = {};
   const candidates = { host: [], guest: [] };

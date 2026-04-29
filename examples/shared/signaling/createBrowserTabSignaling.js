@@ -1,4 +1,6 @@
-import { createSignalingChannel } from '@kidlib/p2p';
+import { createPairSignaling } from '@kidlib/p2p';
+
+// TODO: Check, is outdated by createBrowserMeshRoomSignaling? If so, remove or change to PairSignaling instead of Room
 
 const prefix = 'kidlib:p2p:browser-tab-room:';
 
@@ -147,7 +149,7 @@ export function createBrowserTabSignaling({ roomId, role }) {
       ),
   };
 
-  const signaling = createSignalingChannel(source);
+  const signaling = createPairSignaling(source);
   const close = signaling.close;
 
   return {
