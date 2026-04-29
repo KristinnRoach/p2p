@@ -145,7 +145,7 @@ describe('P2PRoom', () => {
     room.close();
   });
 
-  it('emits full and skips join when maxPeers is reached', async () => {
+  it('emits full while watching and rejects join when maxPeers is reached', async () => {
     const signaling = createTestRoomSignaling();
     const full = [];
     const room = await watchP2PRoom({
@@ -156,10 +156,16 @@ describe('P2PRoom', () => {
     });
 
     signaling.emitPeers(['a', 'b']);
-    await room.join();
     await flushAsyncWork();
 
     expect(full).toEqual([{ peerIds: ['a', 'b'], maxPeers: 2 }]);
+
+    await expect(room.join()).rejects.toThrow('room is full');
+
+    expect(full).toEqual([
+      { peerIds: ['a', 'b'], maxPeers: 2 },
+      { peerIds: ['a', 'b'], maxPeers: 2 },
+    ]);
     expect(signaling.join).not.toHaveBeenCalled();
     expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
 
@@ -184,6 +190,38 @@ describe('P2PRoom', () => {
     expect(full).toHaveLength(0);
     expect(signaling.join).toHaveBeenCalledWith('a');
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
+
+    room.close();
+  });
+
+  it('leaves and rejects join when the room fills during join', async () => {
+    const join = createDeferred();
+    const signaling = createTestRoomSignaling();
+    signaling.join.mockReturnValue(join.promise);
+    const full = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'c',
+      maxPeers: 2,
+      onFull: (detail) => full.push(detail),
+    });
+
+    signaling.emitPeers(['a']);
+    const joinPromise = room.join();
+    signaling.emitPeers(['a', 'b']);
+    await flushAsyncWork();
+
+    expect(full).toEqual([{ peerIds: ['a', 'b'], maxPeers: 2 }]);
+
+    join.resolve();
+
+    await expect(joinPromise).rejects.toThrow('room is full');
+    expect(signaling.leave).toHaveBeenCalledWith('c');
+    expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
+    expect(full).toEqual([
+      { peerIds: ['a', 'b'], maxPeers: 2 },
+      { peerIds: ['a', 'b'], maxPeers: 2 },
+    ]);
 
     room.close();
   });

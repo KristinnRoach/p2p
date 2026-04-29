@@ -204,6 +204,9 @@ export class P2PRoom extends EventTarget {
     if (this.signal?.aborted) throw createAbortError();
     const cleanup = this.signaling.onPeers((peerIds) => {
       this._peerIds = [...peerIds];
+      if (this._state === 'watching' && this._isFull(peerIds)) {
+        this._emitFull(peerIds);
+      }
       this._syncPeers(peerIds);
     });
     if (typeof cleanup === 'function') this._cleanups.push(cleanup);
@@ -244,11 +247,8 @@ export class P2PRoom extends EventTarget {
     }
     if (this._state === 'active') return;
     if (this._isFull()) {
-      this._emit('full', {
-        peerIds: [...this._peerIds],
-        maxPeers: this.maxPeers,
-      });
-      return;
+      this._emitFull();
+      throw createRoomFullError();
     }
 
     this._state = 'joining';
@@ -270,11 +270,8 @@ export class P2PRoom extends EventTarget {
       this._joinStarted = false;
       this._joined = false;
       this._state = 'watching';
-      this._emit('full', {
-        peerIds: [...this._peerIds],
-        maxPeers: this.maxPeers,
-      });
-      return;
+      this._emitFull();
+      throw createRoomFullError();
     }
     this._state = 'active';
     this._syncPeers(this._peerIds);
@@ -457,6 +454,13 @@ export class P2PRoom extends EventTarget {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
 
+  _emitFull(peerIds = this._peerIds) {
+    this._emit('full', {
+      peerIds: [...peerIds],
+      maxPeers: this.maxPeers,
+    });
+  }
+
   _isFull(peerIds = this._peerIds) {
     if (!Number.isFinite(this.maxPeers)) return false;
     if (peerIds.includes(this.peerId)) return false;
@@ -487,6 +491,10 @@ export class P2PRoom extends EventTarget {
       this._listenerMap.get(type)?.delete(callback);
     }
   }
+}
+
+function createRoomFullError() {
+  return new Error('P2PRoom.join: room is full');
 }
 
 function createAbortError() {
