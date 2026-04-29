@@ -448,7 +448,11 @@ export class P2PRoom extends EventTarget {
     if (!this._signalingPromise) {
       this._signalingPromise = Promise.resolve()
         .then(() => this._createSignaling({ roomId: this.roomId }))
-        .then((signaling) => createRoomSignaling(signaling));
+        .then((signaling) => createRoomSignaling(signaling))
+        .catch((error) => {
+          this._signalingPromise = null;
+          throw error;
+        });
     }
 
     const signaling = await this._signalingPromise;

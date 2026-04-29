@@ -183,6 +183,28 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('retries factory signaling after a failed lazy join', async () => {
+    const signaling = createTestRoomSignaling();
+    const createSignaling = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('signaling failed'))
+      .mockResolvedValueOnce(signaling);
+    const room = new P2PRoom({
+      roomId: 'room-a',
+      createSignaling,
+      peerId: 'a',
+      autoJoin: false,
+    });
+
+    await expect(room.ready).rejects.toThrow('signaling failed');
+    await room.join();
+
+    expect(createSignaling).toHaveBeenCalledTimes(2);
+    expect(signaling.join).toHaveBeenCalledWith('a');
+
+    room.close();
+  });
+
   it('does not request factory media when the room is full while watching', async () => {
     const signaling = createTestRoomSignaling();
     const getLocalStream = vi.fn(() => createFakeStream());
