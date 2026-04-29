@@ -186,12 +186,15 @@ export interface P2PRoomEvents {
 
 export interface P2PRoomOptions {
   signaling?: P2PRoomSignaling;
+  /** Lazy room signaling factory. Requires roomId and runs before the room subscribes to peers. */
   createSignaling?: (
     options: CreateRoomSignalingOptions,
   ) => P2PRoomSignaling | Promise<P2PRoomSignaling>;
   roomId?: string;
   peerId: string;
+  /** Caller-owned stream. The room uses it but does not stop its tracks. */
   localStream?: MediaStream | null;
+  /** Room-owned stream factory. Tracks are stopped by leave(), close(), and failed joins. */
   getLocalStream?: () => MediaStream | Promise<MediaStream | null> | null;
   audioOnly?: boolean;
   dataChannel?: boolean;
@@ -249,7 +252,9 @@ export declare class P2PRoom extends EventTarget {
   close(): void;
 }
 
+/** Create and immediately join a mesh room. */
 export function joinP2PRoom(options: P2PRoomOptions): Promise<P2PRoom>;
+/** Subscribe to room presence without joining; call room.join() later to enter. */
 export function watchP2PRoom(options: P2PRoomOptions): Promise<P2PRoom>;
 
 export function createPairSignaling(
