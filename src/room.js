@@ -228,11 +228,11 @@ export class P2PRoom extends EventTarget {
         if (!controller.signal.aborted && !this._closed) {
           this._emit('error', { peerId: remotePeerId, error });
         }
-        this._closePeer(remotePeerId);
+        this._closePeer(remotePeerId, { emitLeft: false });
       });
   }
 
-  _closePeer(peerId) {
+  _closePeer(peerId, { emitLeft = true } = {}) {
     this._controllers.get(peerId)?.abort();
     this._controllers.delete(peerId);
     this.pairs.get(peerId)?.close();
@@ -242,7 +242,7 @@ export class P2PRoom extends EventTarget {
     this._closeDataChannel(peerId);
     const stream = this.remoteStreams.get(peerId) ?? null;
     this.remoteStreams.delete(peerId);
-    this._emit('peerLeft', { peerId, stream });
+    if (emitLeft) this._emit('peerLeft', { peerId, stream });
   }
 
   send(peerId, data) {
