@@ -1,4 +1,4 @@
-import CallPage from './components/CallPage';
+import Room from './components/Room';
 
 export default function App() {
   return (
@@ -14,7 +14,7 @@ export default function App() {
         to be on the same browser for it to work.
       </p>
       <hr />
-      <CallPage />
+      <Room />
     </div>
   );
 }

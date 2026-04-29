@@ -12,11 +12,11 @@
     "./logger": "./src/logger.js",
     "./peer": "./src/peer.js",
     "./remote-stream": "./src/remote-stream.js",
+    "./room": "./src/room.js",
     "./rtt": "./src/rtt.js",
     "./sdp": "./src/sdp.js",
     "./session": "./src/session.js",
-    "./signaling-channel": "./src/signaling-channel.js",
-    "./signaling-transport": "./src/signaling-transport.js",
+    "./signaling": "./src/signaling.js",
     "./tracks": "./src/tracks.js"
   },
   "files": [
@@ -34,6 +34,7 @@
   "scripts": {
     "dev:react": "pnpm --dir examples/react dev",
     "dev:solid": "pnpm --dir examples/solid dev",
+    "kill": "pkill -f vite",
     "test": "vitest run",
     "test:watch": "vitest",
     "changeset": "EDITOR='code --wait' changeset",

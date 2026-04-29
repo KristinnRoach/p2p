@@ -16,9 +16,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@shared/*": ["../../shared/*"]
+      "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["src", "../../shared"],
+  "include": ["src", "../shared"],
   "references": []
 }

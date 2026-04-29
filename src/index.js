@@ -5,17 +5,20 @@
 //
 // Design notes:
 // - No I/O. No Firebase or network deps. Consumers inject signaling via
-//   the IceTransport / DataSignalingChannel contracts (see
-//   signaling-transport.js).
+//   the IceTransport / RtcSignalingSource contracts (see signaling.js).
 // - Only high-level entry points are exposed here. Internals (sdp/ice/
 //   tracks/rtt/config helpers) remain importable from their own modules
 //   for in-lib tests and future evolution.
 // - Logging defaults to no-op; wire via setLogger() if desired.
 
 export { setLogger } from './logger.js';
-export { createSignalingChannel } from './signaling-channel.js';
+export {
+  createPairSignaling,
+  createRoomSignaling,
+} from './signaling.js';
 export { attachRemoteStream } from './remote-stream.js';
 export { startP2PSession, joinP2PSession } from './session.js';
+export { P2PRoom, joinP2PRoom } from './room.js';
 
 export {
   createDataChannel,

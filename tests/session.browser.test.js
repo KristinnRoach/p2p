@@ -4,7 +4,7 @@ import { startP2PSession, joinP2PSession } from '../src/session.js';
 import {
   clearBrowserTabSignalingRoom,
   createBrowserTabSignaling,
-} from '../examples/shared/createBrowserTabSignaling.js';
+} from '../examples/shared/index.js';
 
 const loopbackRtcConfig = { iceServers: [] };
 const itNeedsDataChannelLoopback = server.browser === 'firefox' ? it.skip : it;

@@ -7,7 +7,7 @@
 import { server } from 'vitest/browser';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Peer, PEER_STATES } from '../src/peer.js';
-import { createLoopbackSignaling as createSharedLoopbackSignaling } from '../examples/shared/createLoopbackSignaling.js';
+import { createLoopbackSignaling as createSharedLoopbackSignaling } from '../examples/shared/index.js';
 
 const loopbackRtcConfig = { iceServers: [] };
 // Firefox headless in Playwright applies stricter local WebRTC restrictions for

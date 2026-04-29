@@ -2,7 +2,8 @@ import { Peer, PEER_STATES } from './peer.js';
 import { attachRemoteStream } from './remote-stream.js';
 
 /**
- * Start a new initiator-side P2P session.
+ * Open a 1:1 WebRTC connection as the initiator (sends the offer).
+ * For group calls with multiple peers use {@link joinP2PRoom} instead.
  *
  * @param {Object} options
  * @returns {Promise<P2PSession>}
@@ -12,7 +13,8 @@ export function startP2PSession(options = {}) {
 }
 
 /**
- * Join an existing P2P session.
+ * Open a 1:1 WebRTC connection as the joiner (answers the offer).
+ * For group calls with multiple peers use {@link joinP2PRoom} instead.
  *
  * @param {Object} options
  * @returns {Promise<P2PSession>}

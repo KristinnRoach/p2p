@@ -4,8 +4,8 @@
 // tracks primitives with a single cohesive lifecycle and an EventTarget-
 // based event surface.
 //
-// Signaling-agnostic: callers inject a SignalingChannel implementation
-// (see signaling-transport.js). Works for both initiator and joiner roles
+// Signaling-agnostic: callers inject an RtcSignalingSource implementation
+// (see signaling.js). Works for both initiator and joiner roles
 // and optionally carries a data channel alongside media tracks.
 
 import { rtcConfig as defaultRtcConfig } from './config.js';
@@ -14,7 +14,7 @@ import { setupIceCandidates, drainIceCandidateQueue } from './ice.js';
 import { addLocalTracks } from './tracks.js';
 import { log } from './logger.js';
 
-/** @typedef {import('./signaling-transport.js').DataSignalingChannel} SignalingChannel */
+/** @typedef {import('./signaling.js').RtcSignalingSource} RtcSignalingSource */
 
 const PEER_STATES = Object.freeze({
   IDLE: 'idle',
@@ -45,7 +45,7 @@ export class Peer extends EventTarget {
   /**
    * @param {Object} options
    * @param {'initiator'|'joiner'} options.role
-   * @param {SignalingChannel} options.signaling
+   * @param {RtcSignalingSource} options.signaling
    * @param {MediaStream}  [options.localStream]
    * @param {boolean}      [options.audioOnly=false]
    * @param {boolean}      [options.dataChannel=false]
