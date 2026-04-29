@@ -199,7 +199,9 @@ export interface P2PRoomOptions {
   ) => void;
 }
 
-export interface P2PRoom {
+export declare class P2PRoom extends EventTarget {
+  constructor(options: P2PRoomOptions);
+
   readonly peerId: string;
   readonly localStream: MediaStream | null;
   readonly pairs: Map<string, P2PSession>;

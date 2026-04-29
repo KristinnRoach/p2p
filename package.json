@@ -3,21 +3,73 @@
   "version": "0.1.4",
   "description": "Signaling-agnostic WebRTC peer and data-channel helpers.",
   "type": "module",
-  "types": "./src/index.d.ts",
+  "types": "./src/types/index.d.ts",
   "exports": {
-    ".": "./src/index.js",
-    "./config": "./src/config.js",
-    "./data-channel": "./src/data-channel.js",
-    "./ice": "./src/ice.js",
-    "./logger": "./src/logger.js",
-    "./peer": "./src/peer.js",
-    "./remote-stream": "./src/remote-stream.js",
-    "./room": "./src/room.js",
-    "./rtt": "./src/rtt.js",
-    "./sdp": "./src/sdp.js",
-    "./session": "./src/session.js",
-    "./signaling": "./src/signaling.js",
-    "./tracks": "./src/tracks.js"
+    ".": {
+      "types": "./src/types/index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    },
+    "./config": {
+      "types": "./src/types/config.d.ts",
+      "import": "./src/config.js",
+      "default": "./src/config.js"
+    },
+    "./data-channel": {
+      "types": "./src/types/data-channel.d.ts",
+      "import": "./src/data-channel.js",
+      "default": "./src/data-channel.js"
+    },
+    "./ice": {
+      "types": "./src/types/ice.d.ts",
+      "import": "./src/ice.js",
+      "default": "./src/ice.js"
+    },
+    "./logger": {
+      "types": "./src/types/logger.d.ts",
+      "import": "./src/logger.js",
+      "default": "./src/logger.js"
+    },
+    "./peer": {
+      "types": "./src/types/peer.d.ts",
+      "import": "./src/peer.js",
+      "default": "./src/peer.js"
+    },
+    "./remote-stream": {
+      "types": "./src/types/remote-stream.d.ts",
+      "import": "./src/remote-stream.js",
+      "default": "./src/remote-stream.js"
+    },
+    "./room": {
+      "types": "./src/types/room.d.ts",
+      "import": "./src/room.js",
+      "default": "./src/room.js"
+    },
+    "./rtt": {
+      "types": "./src/types/rtt.d.ts",
+      "import": "./src/rtt.js",
+      "default": "./src/rtt.js"
+    },
+    "./sdp": {
+      "types": "./src/types/sdp.d.ts",
+      "import": "./src/sdp.js",
+      "default": "./src/sdp.js"
+    },
+    "./session": {
+      "types": "./src/types/session.d.ts",
+      "import": "./src/session.js",
+      "default": "./src/session.js"
+    },
+    "./signaling": {
+      "types": "./src/types/signaling.d.ts",
+      "import": "./src/signaling.js",
+      "default": "./src/signaling.js"
+    },
+    "./tracks": {
+      "types": "./src/types/tracks.d.ts",
+      "import": "./src/tracks.js",
+      "default": "./src/tracks.js"
+    }
   },
   "files": [
     "src"
