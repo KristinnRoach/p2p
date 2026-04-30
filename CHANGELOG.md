@@ -1,5 +1,13 @@
 # @kidlib/p2p
 
+## 0.1.6
+
+### Patch Changes
+
+- ce4ad51: Refine the P2PRoom member API with membership/state accessors, member-scoped
+  callbacks, typed room-full/local-stream errors, presence heartbeats/pagehide
+  cleanup, and refreshed room docs/examples.
+
 ## 0.1.5
 
 ### Patch Changes
