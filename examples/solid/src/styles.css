@@ -93,7 +93,7 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, var(--tile-min-width)), 1fr)
+    minmax(min(var(--tile-min-width, 100%)), 1fr)
   );
   gap: var(--gap);
 }

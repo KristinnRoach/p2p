@@ -7,9 +7,9 @@ type Props = {
   peerCount: number;
 };
 
-export function RoomStatus(props: Props) {
+export default function RoomStatus(props: Props) {
   return (
-    <div class="room-status">
+    <div class='room-status'>
       <p>Remote peers: {props.peerCount}</p>
       <Show when={props.status === 'full'}>
         <p>Room is full.</p>

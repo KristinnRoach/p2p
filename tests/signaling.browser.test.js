@@ -207,6 +207,17 @@ describe('createRoomSignaling', () => {
     expect(source.leave).toHaveBeenCalledWith('peer-a');
   });
 
+  it('forwards optional refreshPresence to the wrapped room source', async () => {
+    const source = createRoomSource({
+      refreshPresence: vi.fn(),
+    });
+    const signaling = createRoomSignaling(source);
+
+    await signaling.refreshPresence('peer-a');
+
+    expect(source.refreshPresence).toHaveBeenCalledWith('peer-a');
+  });
+
   it('normalizes onPeers unsubscribe behavior and stops callbacks after close', () => {
     let peersCallback;
     const unsubscribe = vi.fn();

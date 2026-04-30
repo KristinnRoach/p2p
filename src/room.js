@@ -1,6 +1,8 @@
 import { startP2PSession, joinP2PSession } from './session.js';
 import { createRoomSignaling } from './signaling.js';
 
+const PRESENCE_HEARTBEAT_MS = 5000;
+
 /**
  * Join a mesh room for N-way group calls. Each remote peer gets its own
  * underlying 1:1 {@link P2PSession} managed automatically. For simple 1:1
@@ -124,6 +126,8 @@ export class P2PRoom extends EventTarget {
     this._leavePromise = null;
     this._joinStarted = false;
     this._joined = false;
+    this._presenceHeartbeatTimer = null;
+    this._pagehideCleanup = null;
 
     if (onPeerStream) this._cleanups.push(this.on('peerStream', onPeerStream));
     if (onPeerTrack) this._cleanups.push(this.on('peerTrack', onPeerTrack));
@@ -153,6 +157,8 @@ export class P2PRoom extends EventTarget {
     if (this._state === 'closed') return;
     this._state = 'closed';
 
+    this._stopPresenceHeartbeat();
+    this._unbindPagehideLeave();
     for (const cleanup of this._cleanups.splice(0)) cleanup();
     this._closeAllPeers({ emitLeft: false });
 
@@ -342,6 +348,8 @@ export class P2PRoom extends EventTarget {
       throw createRoomFullError();
     }
     this._state = 'active';
+    this._startPresenceHeartbeat(signaling);
+    this._bindPagehideLeave(signaling);
     this._syncPeers(this._peerIds);
   }
 
@@ -359,9 +367,55 @@ export class P2PRoom extends EventTarget {
         this._joinStarted = false;
         this._joined = false;
       }
+      this._stopPresenceHeartbeat();
+      this._unbindPagehideLeave();
       this._releaseOwnedLocalStream();
       if (this._state !== 'closed') this._state = 'watching';
     }
+  }
+
+  _startPresenceHeartbeat(signaling) {
+    this._stopPresenceHeartbeat();
+    if (typeof signaling.refreshPresence !== 'function') return;
+
+    this._presenceHeartbeatTimer = setInterval(() => {
+      if (this._state !== 'active' || !this._joined) return;
+      Promise.resolve()
+        .then(() => signaling.refreshPresence(this.peerId))
+        .catch((error) => {
+          if (this._state !== 'closed') {
+            this._emit('error', { peerId: this.peerId, error });
+          }
+        });
+    }, PRESENCE_HEARTBEAT_MS);
+  }
+
+  _stopPresenceHeartbeat() {
+    if (this._presenceHeartbeatTimer == null) return;
+    clearInterval(this._presenceHeartbeatTimer);
+    this._presenceHeartbeatTimer = null;
+  }
+
+  _bindPagehideLeave(signaling) {
+    this._unbindPagehideLeave();
+    if (typeof globalThis.addEventListener !== 'function') return;
+
+    const onPagehide = (event) => {
+      if (event?.persisted || !this._joined) return;
+      try {
+        Promise.resolve(signaling.leave(this.peerId)).catch(() => {});
+      } catch (_) {}
+    };
+
+    globalThis.addEventListener('pagehide', onPagehide);
+    this._pagehideCleanup = () => {
+      globalThis.removeEventListener?.('pagehide', onPagehide);
+    };
+  }
+
+  _unbindPagehideLeave() {
+    this._pagehideCleanup?.();
+    this._pagehideCleanup = null;
   }
 
   async _leaveAfterJoin() {

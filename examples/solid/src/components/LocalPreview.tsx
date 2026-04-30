@@ -1,12 +1,12 @@
-import { VideoStream } from './VideoStream';
+import VideoStream from './VideoStream';
 
 type Props = {
   stream?: MediaStream;
 };
 
-export function LocalPreview(props: Props) {
+export default function LocalPreview(props: Props) {
   return (
-    <section class="peer-tile">
+    <section class='peer-tile'>
       <h2>Local</h2>
       <VideoStream stream={props.stream} muted />
     </section>

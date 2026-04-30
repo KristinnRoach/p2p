@@ -129,6 +129,7 @@ export interface P2PRoomPeerSignalingOptions {
 export interface P2PRoomSignaling {
   join(peerId: string): void | Promise<void>;
   leave(peerId: string): void | Promise<void>;
+  refreshPresence?(peerId: string): void | Promise<void>;
   onPeers(callback: (peerIds: string[]) => void): void | (() => void);
   createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcSignalingSource;
   close?(): void;

@@ -3,7 +3,7 @@ import { joinP2PSession, startP2PSession } from '@kidlib/p2p';
 import {
   clearBrowserTabSignalingRoom,
   createBrowserTabSignaling,
-} from '../../shared/createBrowserTabSignaling.js';
+} from '../../shared/signaling/createBrowserTabSignaling.js';
 
 const rtcConfig = { iceServers: [] };
 const mediaConstraints = { video: true, audio: false };

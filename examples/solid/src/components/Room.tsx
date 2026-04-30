@@ -1,7 +1,7 @@
 import { onMount } from 'solid-js';
-import { RoomStatus } from '../components/RoomStatus';
-import { RoomToolbar } from '../components/RoomToolbar';
-import { VideoGrid } from '../components/VideoGrid';
+import RoomStatus from '../components/RoomStatus';
+import RoomToolbar from '../components/RoomToolbar';
+import VideoGrid from '../components/VideoGrid';
 import { createMeshRoom } from '../mesh-room/createMeshRoom';
 import { createRoomInvite } from '../mesh-room/createRoomInvite';
 import {
@@ -9,9 +9,9 @@ import {
   clearBrowserMeshRoom,
 } from '@shared/index';
 
-export function RoomRoute() {
+export default function Room() {
   const room = createMeshRoom({
-    createSignaling: ({ roomId }) => createBrowserMeshRoomSignaling(roomId),
+    createSignaling: createBrowserMeshRoomSignaling,
     resetRoom: clearBrowserMeshRoom,
   });
   const invite = createRoomInvite();
@@ -28,7 +28,7 @@ export function RoomRoute() {
   });
 
   return (
-    <main class="room">
+    <main class='room'>
       <RoomToolbar
         status={room.status()}
         isJoining={room.isJoining()}
