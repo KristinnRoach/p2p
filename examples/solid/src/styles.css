@@ -155,7 +155,7 @@ input {
     grid-template-columns: 1fr;
   }
 
-  .lobby button {
+  .lobby-form button {
     flex: 1 1 140px;
   }
 

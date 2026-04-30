@@ -57,7 +57,7 @@ export default function LobbyForm(props: Props) {
       class='lobby-form'
       onSubmit={(e) => {
         e.preventDefault();
-        enterRoomAndUpdateURL();
+        void enterRoomAndUpdateURL();
       }}
     >
       <input
@@ -68,12 +68,7 @@ export default function LobbyForm(props: Props) {
         aria-label='Room ID'
         disabled={isLoading()}
       />
-      <button
-        type='submit'
-        class='primary-button'
-        onClick={enterRoomAndUpdateURL}
-        disabled={!canUseRoom()}
-      >
+      <button type='submit' class='primary-button' disabled={!canUseRoom()}>
         {isJoining() ? 'Entering...' : 'Enter room'}
       </button>
       <button type='button' onClick={copyLink} disabled={!canCopyLink()}>
