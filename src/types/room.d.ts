@@ -11,6 +11,7 @@ export type {
   LocalStreamDetail,
   MemberErrorDetail,
   MemberLeftDetail,
+  RemoteMemberStream,
   MemberStreamDetail,
   PeerErrorDetail,
   RoomFullDetail,
@@ -22,8 +23,10 @@ export type {
 } from './index.js';
 
 export {
+  LocalStreamError,
   P2PRoom,
   RoomFullError,
+  isLocalStreamError,
   isRoomFullError,
   joinP2PRoom,
   watchP2PRoom,

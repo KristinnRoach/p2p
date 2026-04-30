@@ -1,15 +1,17 @@
 import { createSignal, onCleanup, onMount } from 'solid-js';
-import { watchP2PRoom } from '@kidlib/p2p';
+import {
+  isLocalStreamError,
+  isRoomFullError,
+  watchP2PRoom,
+} from '@kidlib/p2p';
 import type { P2PRoom } from '@kidlib/p2p';
 import type { RoomStatusType } from './RoomStatus';
 import RoomStatus from './RoomStatus';
 import LobbyForm from './LobbyForm';
 import VideoGrid from './VideoGrid';
-import { isMediaError } from '../errors';
 import { createBrowserMeshRoomSignaling } from '@shared/index';
 
 export default function Room() {
-  const peerId = crypto.randomUUID();
   const MAX_MEMBERS = 6;
   const [room, setRoom] = createSignal<P2PRoom>();
   const [status, setStatus] = createSignal<RoomStatusType>('idle');
@@ -27,17 +29,14 @@ export default function Room() {
     try {
       p2pRoom = await watchP2PRoom({
         roomId,
-        peerId,
+        peerId: crypto.randomUUID(),
         createSignaling: createBrowserMeshRoomSignaling,
         getLocalStream: () =>
           navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
         memberCapacity: MAX_MEMBERS,
         onStateChange: ({ state }) => setStatus(state),
-      });
-
-      p2pRoom.on('error', () => setError('A peer connection failed.'));
-      p2pRoom.on('full', () => {
-        setStatus('full');
+        onError: () => setError('A peer connection failed.'),
+        onFull: () => setStatus('full'),
       });
 
       setRoom(p2pRoom);
@@ -45,9 +44,9 @@ export default function Room() {
       await p2pRoom.join();
     } catch (err) {
       closeRoom();
-      if (p2pRoom?.isFull || status() === 'full') {
+      if (isRoomFullError(err)) {
         setStatus('full');
-      } else if (isMediaError(err)) {
+      } else if (isLocalStreamError(err)) {
         setStatus('error');
         setError('Could not access camera or microphone.');
       } else {
@@ -57,24 +56,9 @@ export default function Room() {
     }
   }
 
-  async function leaveRoom() {
-    const currentRoom = room();
-    if (!currentRoom) {
-      closeRoom();
-      setStatus('idle');
-      return;
-    }
-
-    try {
-      await currentRoom.leave();
-      closeRoom();
-      setStatus('idle');
-    } catch (err) {
-      console.error(err);
-      closeRoom();
-      setStatus('error');
-      setError('Could not leave room.');
-    }
+  function leaveRoom() {
+    closeRoom();
+    setStatus('idle');
   }
 
   function closeRoom() {
@@ -94,7 +78,9 @@ export default function Room() {
   return (
     <main class='room'>
       <LobbyForm
-        status={status()}
+        isEntering={status() === 'joining'}
+        isInRoom={status() === 'joined'}
+        isLeaving={status() === 'leaving'}
         onEnterRoom={enterRoom}
         onLeaveRoom={leaveRoom}
       />

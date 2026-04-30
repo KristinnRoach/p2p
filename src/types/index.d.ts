@@ -155,6 +155,11 @@ export interface MemberStreamDetail extends RemoteStreamDetail {
   memberId: string;
 }
 
+export interface RemoteMemberStream {
+  memberId: string;
+  stream: MediaStream;
+}
+
 export interface PeerLeftDetail {
   peerId: string;
   memberId?: string;
@@ -295,6 +300,7 @@ export interface P2PRoomOptions {
     detail: RoomDataChannelDetail,
     event: CustomEvent,
   ) => void;
+  onError?: (detail: PeerErrorDetail, event: CustomEvent) => void;
 }
 
 export declare class P2PRoom extends EventTarget {
@@ -312,6 +318,7 @@ export declare class P2PRoom extends EventTarget {
   readonly localStream: MediaStream | null;
   readonly pairs: Map<string, P2PSession>;
   readonly remoteStreams: Map<string, MediaStream>;
+  readonly remoteMemberStreams: RemoteMemberStream[];
   readonly dataChannels: Map<string, RTCDataChannel>;
   readonly ready: Promise<void>;
 
@@ -340,7 +347,13 @@ export declare class RoomFullError extends Error {
   constructor(message?: string);
 }
 
+export declare class LocalStreamError extends Error {
+  readonly cause?: unknown;
+  constructor(message?: string, options?: { cause?: unknown });
+}
+
 export function isRoomFullError(error: unknown): error is RoomFullError;
+export function isLocalStreamError(error: unknown): error is LocalStreamError;
 
 export function createPairSignaling(
   source: RtcSignalingSource,
