@@ -1,13 +1,13 @@
 import { createSignal } from 'solid-js';
-import type { RoomStatus } from '../types';
+import type { RoomStatusType } from './RoomStatus';
 
 type Props = {
-  status: RoomStatus;
+  status: RoomStatusType;
   onEnterRoom: (roomId: string) => void | Promise<void>;
   onLeaveRoom: () => void | Promise<void>;
 };
 
-export default function Lobby(props: Props) {
+export default function LobbyForm(props: Props) {
   const initialRoomId =
     new URL(window.location.href).searchParams.get('room')?.trim() ?? '';
   const [roomId, setRoomId] = createSignal(initialRoomId);
@@ -19,7 +19,7 @@ export default function Lobby(props: Props) {
   const canUseRoom = () => enteredRoomId().length > 0 && !isLoading();
   const canCopyLink = () => enteredRoomId().length > 0;
 
-  async function enterRoom() {
+  async function enterRoomAndUpdateURL() {
     const id = enteredRoomId();
     if (!id) return;
 
@@ -28,6 +28,14 @@ export default function Lobby(props: Props) {
     window.history.replaceState(null, '', url);
 
     await props.onEnterRoom(id);
+  }
+
+  async function leaveRoomAndUpdateURL() {
+    await props.onLeaveRoom();
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('room');
+    window.history.replaceState(null, '', url);
   }
 
   async function copyLink() {
@@ -45,31 +53,39 @@ export default function Lobby(props: Props) {
   }
 
   return (
-    <div class='toolbar'>
+    <form
+      class='lobby-form'
+      onSubmit={(e) => {
+        e.preventDefault();
+        enterRoomAndUpdateURL();
+      }}
+    >
       <input
         class='room-id-input'
         value={roomId()}
         onInput={(event) => setRoomId(event.currentTarget.value)}
         placeholder='Room ID'
+        aria-label='Room ID'
         disabled={isLoading()}
       />
       <button
+        type='submit'
         class='primary-button'
-        onClick={enterRoom}
+        onClick={enterRoomAndUpdateURL}
         disabled={!canUseRoom()}
       >
         {isJoining() ? 'Entering...' : 'Enter room'}
       </button>
-      <button onClick={copyLink} disabled={!canCopyLink()}>
+      <button type='button' onClick={copyLink} disabled={!canCopyLink()}>
         Copy link
       </button>
       <button
-        onClick={props.onLeaveRoom}
+        type='button'
+        onClick={leaveRoomAndUpdateURL}
         disabled={!isJoined() || isLeaving()}
       >
         Leave room
       </button>
-      <span class='status-pill'>{props.status}</span>
-    </div>
+    </form>
   );
 }

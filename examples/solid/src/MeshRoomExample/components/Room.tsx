@@ -1,10 +1,10 @@
 import { createSignal, onCleanup, onMount } from 'solid-js';
 import { watchP2PRoom } from '@kidlib/p2p';
 import type { P2PRoom } from '@kidlib/p2p';
+import type { RoomStatusType } from './RoomStatus';
 import RoomStatus from './RoomStatus';
-import Lobby from './Lobby';
+import LobbyForm from './LobbyForm';
 import VideoGrid from './VideoGrid';
-import type { RoomStatus as RoomStatusValue } from '../types';
 import { isMediaError } from '../errors';
 import { createBrowserMeshRoomSignaling } from '@shared/index';
 
@@ -12,7 +12,7 @@ export default function Room() {
   const peerId = crypto.randomUUID();
   const MAX_MEMBERS = 6;
   const [room, setRoom] = createSignal<P2PRoom>();
-  const [status, setStatus] = createSignal<RoomStatusValue>('idle');
+  const [status, setStatus] = createSignal<RoomStatusType>('idle');
   const [error, setError] = createSignal<string>();
 
   async function enterRoom(roomId: string) {
@@ -22,8 +22,10 @@ export default function Room() {
     setStatus('joining');
     setError(undefined);
 
+    let p2pRoom: P2PRoom | undefined = undefined;
+
     try {
-      const p2pRoom = await watchP2PRoom({
+      p2pRoom = await watchP2PRoom({
         roomId,
         peerId,
         createSignaling: createBrowserMeshRoomSignaling,
@@ -36,7 +38,6 @@ export default function Room() {
       p2pRoom.on('error', () => setError('A peer connection failed.'));
       p2pRoom.on('full', () => {
         setStatus('full');
-        setError('Room is full.');
       });
 
       setRoom(p2pRoom);
@@ -46,7 +47,6 @@ export default function Room() {
       closeRoom();
       if (p2pRoom?.isFull || status() === 'full') {
         setStatus('full');
-        setError('Room is full.');
       } else if (isMediaError(err)) {
         setStatus('error');
         setError('Could not access camera or microphone.');
@@ -86,14 +86,14 @@ export default function Room() {
     const roomId = new URL(window.location.href).searchParams
       .get('room')
       ?.trim();
-    if (roomId) await enterRoom(roomId);
+    if (roomId) await enterRoom(roomId).catch(console.error);
   });
 
   onCleanup(closeRoom);
 
   return (
     <main class='room'>
-      <Lobby
+      <LobbyForm
         status={status()}
         onEnterRoom={enterRoom}
         onLeaveRoom={leaveRoom}

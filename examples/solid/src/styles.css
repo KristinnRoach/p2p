@@ -80,7 +80,7 @@ button:disabled {
   margin: 0;
 }
 
-.toolbar,
+.lobby-form,
 .room-status {
   display: flex;
   align-items: center;
@@ -155,7 +155,7 @@ input {
     grid-template-columns: 1fr;
   }
 
-  .toolbar button {
+  .lobby button {
     flex: 1 1 140px;
   }
 

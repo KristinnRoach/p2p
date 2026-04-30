@@ -1,12 +1,13 @@
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
-import type { P2PRoom } from '@kidlib/p2p';
-import type { RoomStatus as RoomStatusValue } from '../types';
+import type { P2PRoom, P2PRoomState } from '@kidlib/p2p';
 
 type Props = {
   room?: P2PRoom;
-  status: RoomStatusValue;
+  status: RoomStatusType;
   error?: string;
 };
+
+export type RoomStatusType = P2PRoomState | 'idle' | 'full' | 'error';
 
 export default function RoomStatus(props: Props) {
   const [memberCount, setMemberCount] = createSignal(0);
@@ -38,16 +39,16 @@ export default function RoomStatus(props: Props) {
 
   return (
     <div class='room-status'>
-      <p>
-        Members: {memberCount()} / {memberCapacity()}
-      </p>
+      <Show when={memberCount()}>
+        <p>
+          Members: {memberCount()} / {memberCapacity()}
+        </p>
+      </Show>
       <Show when={roomId()}>
         <p>Room ID: {roomId()}</p>
+        <p>Room status: {props.status} </p>
       </Show>
-      <Show when={props.status === 'full'}>
-        <p>Room is full.</p>
-      </Show>
-      <Show when={props.error && props.status !== 'full'}>
+      <Show when={props.error}>
         <p>{props.error}</p>
       </Show>
     </div>
