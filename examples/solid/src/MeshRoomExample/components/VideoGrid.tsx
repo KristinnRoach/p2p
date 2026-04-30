@@ -31,6 +31,7 @@ export default function VideoGrid(props: Props) {
       room.on('localStream', ({ stream }) => setLocalStream(stream)),
       room.on('memberStream', updateRemoteStreams),
       room.on('memberLeft', updateRemoteStreams),
+      room.on('membersChanged', updateRemoteStreams),
     ];
 
     onCleanup(() => cleanups.forEach((cleanup) => cleanup()));
