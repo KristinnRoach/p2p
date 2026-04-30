@@ -18,7 +18,13 @@ export {
 } from './signaling.js';
 export { attachRemoteStream } from './remote-stream.js';
 export { startP2PSession, joinP2PSession } from './session.js';
-export { P2PRoom, joinP2PRoom, watchP2PRoom } from './room.js';
+export {
+  P2PRoom,
+  RoomFullError,
+  isRoomFullError,
+  joinP2PRoom,
+  watchP2PRoom,
+} from './room.js';
 
 export {
   createDataChannel,

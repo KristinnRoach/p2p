@@ -56,9 +56,15 @@ export class P2PRoom extends EventTarget {
       dataChannelLabel = 'data',
       startTimeoutMs = 8000,
       dataChannelOpenTimeoutMs = dataChannel ? 10000 : 0,
-      maxPeers = Infinity,
+      memberCapacity = options.maxPeers ?? Infinity,
       autoJoin = true,
       signal = null,
+      onMemberStream = null,
+      onMemberTrack = null,
+      onMemberJoined = null,
+      onMemberLeft = null,
+      onMembersChanged = null,
+      onStateChange = null,
       onPeerStream = null,
       onPeerTrack = null,
       onPeerJoined = null,
@@ -85,11 +91,11 @@ export class P2PRoom extends EventTarget {
       throw new Error('P2PRoom: roomId is required with createSignaling');
     }
     if (
-      typeof maxPeers !== 'number' ||
-      Number.isNaN(maxPeers) ||
-      maxPeers <= 0
+      typeof memberCapacity !== 'number' ||
+      Number.isNaN(memberCapacity) ||
+      memberCapacity <= 0
     ) {
-      throw new Error('P2PRoom: maxPeers must be a positive number');
+      throw new Error('P2PRoom: memberCapacity must be a positive number');
     }
 
     this.signaling = signaling ? createRoomSignaling(signaling) : null;
@@ -107,7 +113,8 @@ export class P2PRoom extends EventTarget {
     this.dataChannelLabel = dataChannelLabel;
     this.startTimeoutMs = startTimeoutMs;
     this.dataChannelOpenTimeoutMs = dataChannelOpenTimeoutMs;
-    this.maxPeers = maxPeers;
+    this.memberCapacity = memberCapacity;
+    this.maxPeers = memberCapacity;
     this.autoJoin = autoJoin;
     this.signal = signal;
 
@@ -120,7 +127,7 @@ export class P2PRoom extends EventTarget {
     this._dataChannelCleanups = new Map();
     this._cleanups = [];
     this._listenerMap = new Map();
-    this._peerIds = [];
+    this._memberIds = [];
     this._state = 'watching';
     this._joinPromise = null;
     this._leavePromise = null;
@@ -129,6 +136,20 @@ export class P2PRoom extends EventTarget {
     this._presenceHeartbeatTimer = null;
     this._pagehideCleanup = null;
 
+    if (onMemberStream) {
+      this._cleanups.push(this.on('memberStream', onMemberStream));
+    }
+    if (onMemberTrack) {
+      this._cleanups.push(this.on('memberTrack', onMemberTrack));
+    }
+    if (onMemberJoined) {
+      this._cleanups.push(this.on('memberJoined', onMemberJoined));
+    }
+    if (onMemberLeft) this._cleanups.push(this.on('memberLeft', onMemberLeft));
+    if (onMembersChanged) {
+      this._cleanups.push(this.on('membersChanged', onMembersChanged));
+    }
+    if (onStateChange) this._cleanups.push(this.on('statechange', onStateChange));
     if (onPeerStream) this._cleanups.push(this.on('peerStream', onPeerStream));
     if (onPeerTrack) this._cleanups.push(this.on('peerTrack', onPeerTrack));
     if (onPeerJoined) this._cleanups.push(this.on('peerJoined', onPeerJoined));
@@ -153,9 +174,25 @@ export class P2PRoom extends EventTarget {
     this.ready = this._start();
   }
 
+  get members() {
+    return [...this._memberIds];
+  }
+
+  get memberCount() {
+    return this._memberIds.length;
+  }
+
+  get isFull() {
+    return this._isFull();
+  }
+
+  get state() {
+    return toPublicState(this._state);
+  }
+
   close() {
     if (this._state === 'closed') return;
-    this._state = 'closed';
+    this._setState('closed');
 
     this._stopPresenceHeartbeat();
     this._unbindPagehideLeave();
@@ -238,15 +275,15 @@ export class P2PRoom extends EventTarget {
     if (this._state === 'closed' || this.signal?.aborted) {
       throw createAbortError();
     }
-    const cleanup = this.signaling.onPeers((peerIds) => {
-      this._peerIds = [...peerIds];
+    const cleanup = this.signaling.onPeers((memberIds) => {
+      this._setMembers(memberIds);
       if (
         (this._state === 'watching' || this._state === 'joining') &&
-        this._isFull(peerIds)
+        this._isFull(memberIds)
       ) {
-        this._emitFull(peerIds);
+        this._emitFull(memberIds);
       }
-      this._syncPeers(peerIds);
+      this._syncMembers(memberIds);
     });
     if (typeof cleanup === 'function') this._cleanups.push(cleanup);
 
@@ -290,19 +327,19 @@ export class P2PRoom extends EventTarget {
       throw createRoomFullError();
     }
 
-    this._state = 'joining';
+    this._setState('joining');
     this._joinStarted = true;
     try {
       await this._ensureLocalStream();
     } catch (error) {
       this._joinStarted = false;
-      if (this._state !== 'closed') this._state = 'watching';
+      if (this._state !== 'closed') this._setState('watching');
       throw error;
     }
     if (this._state === 'closed' || this.signal?.aborted) {
       this._joinStarted = false;
       this._releaseOwnedLocalStream();
-      if (this._state !== 'closed') this._state = 'watching';
+      if (this._state !== 'closed') this._setState('watching');
       throw createAbortError();
     }
     let signaling;
@@ -315,7 +352,7 @@ export class P2PRoom extends EventTarget {
     } catch (error) {
       this._joinStarted = false;
       this._releaseOwnedLocalStream();
-      if (this._state !== 'closed') this._state = 'watching';
+      if (this._state !== 'closed') this._setState('watching');
       throw error;
     }
     this._joined = true;
@@ -328,7 +365,7 @@ export class P2PRoom extends EventTarget {
         this._joinStarted = false;
         this._joined = false;
         this._releaseOwnedLocalStream();
-        if (this._state !== 'closed') this._state = 'watching';
+        if (this._state !== 'closed') this._setState('watching');
       }
       throw createAbortError();
     }
@@ -341,20 +378,20 @@ export class P2PRoom extends EventTarget {
       } finally {
         this._joinStarted = false;
         this._joined = false;
-        this._state = 'watching';
+        this._setState('watching');
         this._releaseOwnedLocalStream();
       }
       this._emitFull();
       throw createRoomFullError();
     }
-    this._state = 'active';
+    this._setState('active');
     this._startPresenceHeartbeat(signaling);
     this._bindPagehideLeave(signaling);
-    this._syncPeers(this._peerIds);
+    this._syncMembers(this._memberIds);
   }
 
   async _leave() {
-    this._state = 'leaving';
+    this._setState('leaving');
     this._closeAllPeers({ emitLeft: true });
     const shouldLeave = this._joined || this._joinStarted;
     try {
@@ -370,7 +407,7 @@ export class P2PRoom extends EventTarget {
       this._stopPresenceHeartbeat();
       this._unbindPagehideLeave();
       this._releaseOwnedLocalStream();
-      if (this._state !== 'closed') this._state = 'watching';
+      if (this._state !== 'closed') this._setState('watching');
     }
   }
 
@@ -419,30 +456,30 @@ export class P2PRoom extends EventTarget {
   }
 
   async _leaveAfterJoin() {
-    this._state = 'leaving';
+    this._setState('leaving');
     await this._joinPromise.catch(() => {});
     if (this._state !== 'closed') await this._leave();
   }
 
-  _syncPeers(peerIds) {
+  _syncMembers(memberIds) {
     if (this._state !== 'active') return;
-    const allowedPeerIds = this._allowedPeerIds(peerIds);
-    const remotePeerIds = new Set(
-      allowedPeerIds.filter((id) => id !== this.peerId),
+    const allowedMemberIds = this._allowedMemberIds(memberIds);
+    const remoteMemberIds = new Set(
+      allowedMemberIds.filter((id) => id !== this.peerId),
     );
-    for (const peerId of remotePeerIds) this._connectPeer(peerId);
-    for (const peerId of this.pairs.keys()) {
-      if (!remotePeerIds.has(peerId)) this._closePeer(peerId);
+    for (const memberId of remoteMemberIds) this._connectMember(memberId);
+    for (const memberId of this.pairs.keys()) {
+      if (!remoteMemberIds.has(memberId)) this._closeMember(memberId);
     }
-    for (const peerId of this._controllers.keys()) {
-      if (!remotePeerIds.has(peerId)) this._closePeer(peerId);
+    for (const memberId of this._controllers.keys()) {
+      if (!remoteMemberIds.has(memberId)) this._closeMember(memberId);
     }
   }
 
-  _connectPeer(remotePeerId) {
+  _connectMember(remoteMemberId) {
     if (
-      this.pairs.has(remotePeerId) ||
-      this._controllers.has(remotePeerId) ||
+      this.pairs.has(remoteMemberId) ||
+      this._controllers.has(remoteMemberId) ||
       this._state !== 'active'
     ) {
       return;
@@ -451,15 +488,15 @@ export class P2PRoom extends EventTarget {
     const controller = new AbortController();
     const pairSignaling = this.signaling.createPeerSignaling({
       localPeerId: this.peerId,
-      remotePeerId,
+      remotePeerId: remoteMemberId,
     });
-    const role = this.peerId < remotePeerId ? 'initiator' : 'joiner';
+    const role = this.peerId < remoteMemberId ? 'initiator' : 'joiner';
     const createSession =
       role === 'initiator' ? startP2PSession : joinP2PSession;
 
-    this._controllers.set(remotePeerId, controller);
-    this._pairSignalings.set(remotePeerId, pairSignaling);
-    this._emit('peerJoined', { peerId: remotePeerId });
+    this._controllers.set(remoteMemberId, controller);
+    this._pairSignalings.set(remoteMemberId, pairSignaling);
+    this._emitMemberJoined(remoteMemberId);
 
     createSession({
       signaling: pairSignaling,
@@ -472,19 +509,24 @@ export class P2PRoom extends EventTarget {
       dataChannelOpenTimeoutMs: this.dataChannelOpenTimeoutMs,
       signal: controller.signal,
       onRemoteStream: ({ stream, track, event }) => {
-        this.remoteStreams.set(remotePeerId, stream);
-        this._emit('peerStream', {
-          peerId: remotePeerId,
+        this.remoteStreams.set(remoteMemberId, stream);
+        this._emitMemberStream({
+          memberId: remoteMemberId,
           stream,
           track,
           event,
         });
       },
       onRemoteTrack: ({ stream, track, event }) => {
-        this._emit('peerTrack', { peerId: remotePeerId, stream, track, event });
+        this._emitMemberTrack({
+          memberId: remoteMemberId,
+          stream,
+          track,
+          event,
+        });
       },
       onDataChannel: ({ channel }) => {
-        this._bindDataChannel(remotePeerId, channel);
+        this._bindDataChannel(remoteMemberId, channel);
       },
     })
       .then((pair) => {
@@ -493,17 +535,21 @@ export class P2PRoom extends EventTarget {
           pairSignaling.close?.();
           return;
         }
-        this.pairs.set(remotePeerId, pair);
-        this._controllers.delete(remotePeerId);
+        this.pairs.set(remoteMemberId, pair);
+        this._controllers.delete(remoteMemberId);
         if (pair.dataChannel) {
-          this._bindDataChannel(remotePeerId, pair.dataChannel);
+          this._bindDataChannel(remoteMemberId, pair.dataChannel);
         }
       })
       .catch((error) => {
         if (!controller.signal.aborted && this._state !== 'closed') {
-          this._emit('error', { peerId: remotePeerId, error });
+          this._emit('error', {
+            peerId: remoteMemberId,
+            memberId: remoteMemberId,
+            error,
+          });
         }
-        this._closePeer(remotePeerId, { emitLeft: false });
+        this._closeMember(remoteMemberId, { emitLeft: false });
       });
   }
 
@@ -561,32 +607,32 @@ export class P2PRoom extends EventTarget {
   }
 
   _closeAllPeers({ emitLeft = true } = {}) {
-    const peerIds = new Set([
+    const memberIds = new Set([
       ...this.pairs.keys(),
       ...this._controllers.keys(),
       ...this.remoteStreams.keys(),
       ...this.dataChannels.keys(),
       ...this._pairSignalings.keys(),
     ]);
-    for (const peerId of peerIds) this._closePeer(peerId, { emitLeft });
+    for (const memberId of memberIds) this._closeMember(memberId, { emitLeft });
   }
 
-  _closePeer(peerId, { emitLeft = true } = {}) {
-    this._controllers.get(peerId)?.abort();
-    this._controllers.delete(peerId);
-    this.pairs.get(peerId)?.close();
-    this.pairs.delete(peerId);
-    this._pairSignalings.get(peerId)?.close?.();
-    this._pairSignalings.delete(peerId);
-    this._closeDataChannel(peerId);
-    const stream = this.remoteStreams.get(peerId) ?? null;
-    this.remoteStreams.delete(peerId);
-    if (emitLeft) this._emit('peerLeft', { peerId, stream });
+  _closeMember(memberId, { emitLeft = true } = {}) {
+    this._controllers.get(memberId)?.abort();
+    this._controllers.delete(memberId);
+    this.pairs.get(memberId)?.close();
+    this.pairs.delete(memberId);
+    this._pairSignalings.get(memberId)?.close?.();
+    this._pairSignalings.delete(memberId);
+    this._closeDataChannel(memberId);
+    const stream = this.remoteStreams.get(memberId) ?? null;
+    this.remoteStreams.delete(memberId);
+    if (emitLeft) this._emitMemberLeft(memberId, stream);
   }
 
-  send(peerId, data) {
-    const pair = this.pairs.get(peerId);
-    if (!pair) throw new Error(`P2PRoom.send: unknown peer "${peerId}"`);
+  send(memberId, data) {
+    const pair = this.pairs.get(memberId);
+    if (!pair) throw new Error(`P2PRoom.send: unknown member "${memberId}"`);
     pair.send(data);
   }
 
@@ -600,25 +646,32 @@ export class P2PRoom extends EventTarget {
     return sent;
   }
 
-  _bindDataChannel(peerId, channel) {
+  _bindDataChannel(memberId, channel) {
     if (this._state !== 'active') return;
-    if (this.dataChannels.get(peerId) === channel) return;
+    if (this.dataChannels.get(memberId) === channel) return;
 
-    this._closeDataChannel(peerId);
-    this.dataChannels.set(peerId, channel);
-    this._emit('dataChannel', { peerId, channel });
+    this._closeDataChannel(memberId);
+    this.dataChannels.set(memberId, channel);
+    this._emit('dataChannel', { peerId: memberId, memberId, channel });
 
-    const onOpen = () => this._emit('dataChannelOpen', { peerId, channel });
+    const onOpen = () =>
+      this._emit('dataChannelOpen', { peerId: memberId, memberId, channel });
     const onMessage = (event) => {
-      this._emit('dataChannelMessage', { peerId, channel, data: event.data });
+      this._emit('dataChannelMessage', {
+        peerId: memberId,
+        memberId,
+        channel,
+        data: event.data,
+      });
     };
-    const onClose = () => this._emit('dataChannelClose', { peerId, channel });
+    const onClose = () =>
+      this._emit('dataChannelClose', { peerId: memberId, memberId, channel });
 
     channel.addEventListener('open', onOpen);
     channel.addEventListener('message', onMessage);
     channel.addEventListener('close', onClose);
 
-    this._dataChannelCleanups.set(peerId, () => {
+    this._dataChannelCleanups.set(memberId, () => {
       channel.removeEventListener('open', onOpen);
       channel.removeEventListener('message', onMessage);
       channel.removeEventListener('close', onClose);
@@ -627,33 +680,79 @@ export class P2PRoom extends EventTarget {
     if (channel.readyState === 'open') onOpen();
   }
 
-  _closeDataChannel(peerId) {
-    this._dataChannelCleanups.get(peerId)?.();
-    this._dataChannelCleanups.delete(peerId);
-    this.dataChannels.delete(peerId);
+  _closeDataChannel(memberId) {
+    this._dataChannelCleanups.get(memberId)?.();
+    this._dataChannelCleanups.delete(memberId);
+    this.dataChannels.delete(memberId);
   }
 
   _emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
 
-  _emitFull(peerIds = this._peerIds) {
-    this._emit('full', {
-      peerIds: [...peerIds],
-      maxPeers: this.maxPeers,
+  _setState(nextState) {
+    const previous = this.state;
+    this._state = nextState;
+    const state = this.state;
+    if (state === previous) return;
+    this._emit('statechange', { state, previous });
+  }
+
+  _setMembers(memberIds) {
+    const nextMembers = [...memberIds];
+    if (areSameMembers(this._memberIds, nextMembers)) return;
+    this._memberIds = nextMembers;
+    this._emitMembersChanged();
+  }
+
+  _emitMembersChanged() {
+    this._emit('membersChanged', {
+      members: this.members,
+      memberCount: this.memberCount,
+      memberCapacity: this.memberCapacity,
     });
   }
 
-  _isFull(peerIds = this._peerIds) {
-    if (!Number.isFinite(this.maxPeers)) return false;
-    if (peerIds.includes(this.peerId)) return false;
-    return peerIds.length >= this.maxPeers;
+  _emitMemberJoined(memberId) {
+    this._emit('memberJoined', { memberId });
+    this._emit('peerJoined', { peerId: memberId, memberId });
   }
 
-  _allowedPeerIds(peerIds) {
-    if (!Number.isFinite(this.maxPeers)) return peerIds;
-    if (peerIds.includes(this.peerId)) return peerIds;
-    return peerIds.slice(0, Math.max(0, this.maxPeers - 1));
+  _emitMemberLeft(memberId, stream) {
+    this._emit('memberLeft', { memberId, stream });
+    this._emit('peerLeft', { peerId: memberId, memberId, stream });
+  }
+
+  _emitMemberStream(detail) {
+    this._emit('memberStream', detail);
+    this._emit('peerStream', { ...detail, peerId: detail.memberId });
+  }
+
+  _emitMemberTrack(detail) {
+    this._emit('memberTrack', detail);
+    this._emit('peerTrack', { ...detail, peerId: detail.memberId });
+  }
+
+  _emitFull(memberIds = this._memberIds) {
+    this._emit('full', {
+      members: [...memberIds],
+      memberCount: memberIds.length,
+      memberCapacity: this.memberCapacity,
+      peerIds: [...memberIds],
+      maxPeers: this.memberCapacity,
+    });
+  }
+
+  _isFull(memberIds = this._memberIds) {
+    if (!Number.isFinite(this.memberCapacity)) return false;
+    if (memberIds.includes(this.peerId)) return false;
+    return memberIds.length >= this.memberCapacity;
+  }
+
+  _allowedMemberIds(memberIds) {
+    if (!Number.isFinite(this.memberCapacity)) return memberIds;
+    if (memberIds.includes(this.peerId)) return memberIds;
+    return memberIds.slice(0, Math.max(0, this.memberCapacity - 1));
   }
 
   _trackListener(type, callback, handler) {
@@ -676,10 +775,19 @@ export class P2PRoom extends EventTarget {
   }
 }
 
+export class RoomFullError extends Error {
+  constructor(message = 'P2PRoom.join: room is full') {
+    super(message);
+    this.name = 'RoomFullError';
+  }
+}
+
+export function isRoomFullError(error) {
+  return error instanceof RoomFullError;
+}
+
 function createRoomFullError() {
-  const error = new Error('P2PRoom.join: room is full');
-  error.name = 'RoomFullError';
-  return error;
+  return new RoomFullError();
 }
 
 function createAbortError() {
@@ -694,4 +802,13 @@ function createAbortError() {
 
 function stopStream(stream) {
   stream?.getTracks?.().forEach((track) => track.stop());
+}
+
+function areSameMembers(a, b) {
+  if (a.length !== b.length) return false;
+  return a.every((memberId, index) => memberId === b[index]);
+}
+
+function toPublicState(state) {
+  return state === 'active' ? 'joined' : state;
 }

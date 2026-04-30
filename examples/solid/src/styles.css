@@ -32,16 +32,20 @@ body {
   margin: 0;
 }
 
-button {
+button,
+input {
   min-height: 40px;
   padding: 0 var(--gap);
   color: inherit;
   font: inherit;
+}
+
+button {
   font-weight: 600;
   cursor: pointer;
 }
 
-button:first-child {
+.primary-button {
   border-color: var(--color-brand);
   color: var(--color-surface);
   background: var(--color-brand);
@@ -100,10 +104,16 @@ button:disabled {
 
 .status-pill,
 .peer-tile,
-button {
+button,
+input {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface);
+}
+
+.room-id-input {
+  width: min(280px, 100%);
+  min-width: 180px;
 }
 
 .status-pill {

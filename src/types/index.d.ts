@@ -135,17 +135,45 @@ export interface P2PRoomSignaling {
   close?(): void;
 }
 
+export type P2PRoomState =
+  | 'watching'
+  | 'joining'
+  | 'joined'
+  | 'leaving'
+  | 'closed';
+
+export interface P2PRoomStateChangeDetail {
+  state: P2PRoomState;
+  previous: P2PRoomState;
+}
+
 export interface PeerStreamDetail extends RemoteStreamDetail {
   peerId: string;
 }
 
+export interface MemberStreamDetail extends RemoteStreamDetail {
+  memberId: string;
+}
+
 export interface PeerLeftDetail {
   peerId: string;
+  memberId?: string;
+  stream: MediaStream | null;
+}
+
+export interface MemberLeftDetail {
+  memberId: string;
   stream: MediaStream | null;
 }
 
 export interface PeerErrorDetail {
   peerId: string;
+  memberId?: string;
+  error: Error;
+}
+
+export interface MemberErrorDetail {
+  memberId: string;
   error: Error;
 }
 
@@ -158,12 +186,24 @@ export interface CreateRoomSignalingOptions {
 }
 
 export interface RoomFullDetail {
+  members: string[];
+  memberCount: number;
+  memberCapacity: number;
+  /** @deprecated Use members. */
   peerIds: string[];
+  /** @deprecated Use memberCapacity. */
   maxPeers: number;
+}
+
+export interface MembersChangedDetail {
+  members: string[];
+  memberCount: number;
+  memberCapacity: number;
 }
 
 export interface RoomDataChannelDetail {
   peerId: string;
+  memberId?: string;
   channel: RTCDataChannel;
 }
 
@@ -172,9 +212,19 @@ export interface RoomDataChannelMessageDetail extends RoomDataChannelDetail {
 }
 
 export interface P2PRoomEvents {
-  peerJoined: { peerId: string };
+  memberJoined: { memberId: string };
+  memberLeft: MemberLeftDetail;
+  memberStream: MemberStreamDetail;
+  memberTrack: MemberStreamDetail;
+  membersChanged: MembersChangedDetail;
+  statechange: P2PRoomStateChangeDetail;
+  /** @deprecated Use memberJoined. */
+  peerJoined: { peerId: string; memberId?: string };
+  /** @deprecated Use memberLeft. */
   peerLeft: PeerLeftDetail;
+  /** @deprecated Use memberStream. */
   peerStream: PeerStreamDetail;
+  /** @deprecated Use memberTrack. */
   peerTrack: PeerStreamDetail;
   localStream: LocalStreamDetail;
   full: RoomFullDetail;
@@ -201,13 +251,34 @@ export interface P2PRoomOptions {
   dataChannel?: boolean;
   dataChannelLabel?: string;
   dataChannelOpenTimeoutMs?: number;
+  memberCapacity?: number;
+  /** @deprecated Use memberCapacity. */
   maxPeers?: number;
   rtcConfig?: RTCConfiguration;
   startTimeoutMs?: number;
   signal?: AbortSignal | null;
+  onMemberStream?: (detail: MemberStreamDetail, event: CustomEvent) => void;
+  onMemberTrack?: (detail: MemberStreamDetail, event: CustomEvent) => void;
+  onMemberJoined?: (
+    detail: { memberId: string },
+    event: CustomEvent,
+  ) => void;
+  onMemberLeft?: (detail: MemberLeftDetail, event: CustomEvent) => void;
+  onMembersChanged?: (
+    detail: MembersChangedDetail,
+    event: CustomEvent,
+  ) => void;
+  onStateChange?: (
+    detail: P2PRoomStateChangeDetail,
+    event: CustomEvent,
+  ) => void;
+  /** @deprecated Use onMemberStream. */
   onPeerStream?: (detail: PeerStreamDetail, event: CustomEvent) => void;
+  /** @deprecated Use onMemberTrack. */
   onPeerTrack?: (detail: PeerStreamDetail, event: CustomEvent) => void;
+  /** @deprecated Use onMemberJoined. */
   onPeerJoined?: (detail: { peerId: string }, event: CustomEvent) => void;
+  /** @deprecated Use onMemberLeft. */
   onPeerLeft?: (detail: PeerLeftDetail, event: CustomEvent) => void;
   onLocalStream?: (detail: LocalStreamDetail, event: CustomEvent) => void;
   onFull?: (detail: RoomFullDetail, event: CustomEvent) => void;
@@ -231,6 +302,13 @@ export declare class P2PRoom extends EventTarget {
 
   readonly roomId: string | null;
   readonly peerId: string;
+  readonly members: string[];
+  readonly memberCount: number;
+  readonly memberCapacity: number;
+  /** @deprecated Use memberCapacity. */
+  readonly maxPeers: number;
+  readonly isFull: boolean;
+  readonly state: P2PRoomState;
   readonly localStream: MediaStream | null;
   readonly pairs: Map<string, P2PSession>;
   readonly remoteStreams: Map<string, MediaStream>;
@@ -248,7 +326,7 @@ export declare class P2PRoom extends EventTarget {
   off(type: string, callback: (...args: unknown[]) => void): void;
   join(): Promise<void>;
   leave(): Promise<void>;
-  send(peerId: string, data: unknown): void;
+  send(memberId: string, data: unknown): void;
   broadcast(data: unknown): number;
   close(): void;
 }
@@ -257,6 +335,12 @@ export declare class P2PRoom extends EventTarget {
 export function joinP2PRoom(options: P2PRoomOptions): Promise<P2PRoom>;
 /** Subscribe to room presence without joining; call room.join() later to enter. */
 export function watchP2PRoom(options: P2PRoomOptions): Promise<P2PRoom>;
+
+export declare class RoomFullError extends Error {
+  constructor(message?: string);
+}
+
+export function isRoomFullError(error: unknown): error is RoomFullError;
 
 export function createPairSignaling(
   source: RtcSignalingSource,
