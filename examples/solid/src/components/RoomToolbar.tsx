@@ -9,9 +9,9 @@ type Props = {
   onLeave: () => void | Promise<void>;
 };
 
-export function RoomToolbar(props: Props) {
+export default function RoomToolbar(props: Props) {
   return (
-    <div class="toolbar">
+    <div class='toolbar'>
       <button
         onClick={props.onStart}
         disabled={props.isJoining || props.isJoined || props.isLeaving}
@@ -24,7 +24,7 @@ export function RoomToolbar(props: Props) {
       >
         Leave room
       </button>
-      <span class="status-pill">{props.status}</span>
+      <span class='status-pill'>{props.status}</span>
     </div>
   );
 }

@@ -150,6 +150,30 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('emits synchronous presence refresh failures through the room error event', async () => {
+    vi.useFakeTimers();
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const refreshError = new Error('refresh failed');
+    const signaling = createTestRoomSignaling({
+      refreshPresence: vi.fn(() => {
+        throw refreshError;
+      }),
+    });
+    const errors = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+    room.on('error', (detail) => errors.push(detail));
+
+    await room.join();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(errors).toEqual([{ peerId: 'a', error: refreshError }]);
+
+    room.close();
+  });
+
   it('best-effort leaves active presence on pagehide', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();

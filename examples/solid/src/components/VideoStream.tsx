@@ -6,7 +6,7 @@ type Props = {
   label?: string;
 };
 
-export function VideoStream(props: Props) {
+export default function VideoStream(props: Props) {
   let video!: HTMLVideoElement;
 
   createEffect(() => {
@@ -18,18 +18,15 @@ export function VideoStream(props: Props) {
       video.play().catch(() => {});
     }
 
+    // set programmatically for Firefox compatibility
+    video.setAttribute('playsinline', 'true');
+
     onCleanup(() => {
       video.srcObject = null;
     });
   });
 
   return (
-    <video
-      class="video-stream"
-      ref={video}
-      autoplay
-      playsinline
-      muted={props.muted}
-    />
+    <video class='video-stream' ref={video} autoplay muted={props.muted} />
   );
 }

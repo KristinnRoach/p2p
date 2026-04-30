@@ -380,11 +380,13 @@ export class P2PRoom extends EventTarget {
 
     this._presenceHeartbeatTimer = setInterval(() => {
       if (this._state !== 'active' || !this._joined) return;
-      Promise.resolve(signaling.refreshPresence(this.peerId)).catch((error) => {
-        if (this._state !== 'closed') {
-          this._emit('error', { peerId: this.peerId, error });
-        }
-      });
+      Promise.resolve()
+        .then(() => signaling.refreshPresence(this.peerId))
+        .catch((error) => {
+          if (this._state !== 'closed') {
+            this._emit('error', { peerId: this.peerId, error });
+          }
+        });
     }, PRESENCE_HEARTBEAT_MS);
   }
 
