@@ -10,7 +10,7 @@ pnpm add @kidlib/p2p
 
 ## Group calls — P2PRoom
 
-`joinP2PRoom` connects a local peer into a mesh room. Each remote peer gets its own 1:1 connection managed automatically.
+`joinP2PRoom` connects a local member into a mesh room. Each remote member gets its own 1:1 connection managed automatically.
 
 ```js
 import { joinP2PRoom } from '@kidlib/p2p';
@@ -24,8 +24,11 @@ const room = await joinP2PRoom({
   onLocalStream: ({ stream }) => renderLocalPreview(stream),
 });
 
-room.on('peerStream', ({ peerId, stream }) => renderStream(peerId, stream));
-room.on('peerLeft',   ({ peerId })         => removeStream(peerId));
+room.on('memberStream', ({ memberId, stream }) => renderStream(memberId, stream));
+room.on('memberLeft',   ({ memberId })         => removeStream(memberId));
+room.on('membersChanged', ({ memberCount, memberCapacity }) => {
+  renderCapacity(memberCount, memberCapacity);
+});
 
 room.close();
 ```
@@ -46,10 +49,12 @@ const room = await watchP2PRoom({
   getLocalStream: () =>
     navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
   peerId: crypto.randomUUID(),
-  maxPeers: 2,
+  memberCapacity: 2,
 });
 
-room.on('full', ({ peerIds, maxPeers }) => showRoomFull(peerIds, maxPeers));
+room.on('full', ({ members, memberCapacity }) => {
+  showRoomFull(members, memberCapacity);
+});
 
 await room.join();  // enter presence and connect
 await room.leave(); // leave presence, close sessions, keep watching

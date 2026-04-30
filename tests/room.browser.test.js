@@ -7,7 +7,13 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock('../src/session.js', () => sessionMocks);
 
-import { P2PRoom, joinP2PRoom, watchP2PRoom } from '../src/room.js';
+import {
+  P2PRoom,
+  RoomFullError,
+  isRoomFullError,
+  joinP2PRoom,
+  watchP2PRoom,
+} from '../src/room.js';
 
 function createPairSignaling() {
   return {
@@ -108,21 +114,82 @@ describe('P2PRoom', () => {
   it('joins from watch mode and connects to existing peers', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();
+    const stateChanges = [];
     const room = await watchP2PRoom({
       signaling,
       peerId: 'a',
+      onStateChange: (detail) => stateChanges.push(detail),
     });
 
+    expect(room.state).toBe('watching');
     signaling.emitPeers(['b']);
     await room.join();
     await flushAsyncWork();
 
+    expect(room.state).toBe('joined');
+    expect(stateChanges).toEqual([
+      { previous: 'watching', state: 'joining' },
+      { previous: 'joining', state: 'joined' },
+    ]);
     expect(signaling.join).toHaveBeenCalledWith('a');
     expect(signaling.createPeerSignaling).toHaveBeenCalledWith({
       localPeerId: 'a',
       remotePeerId: 'b',
     });
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
+
+    await room.leave();
+
+    expect(room.state).toBe('watching');
+    expect(stateChanges).toEqual([
+      { previous: 'watching', state: 'joining' },
+      { previous: 'joining', state: 'joined' },
+      { previous: 'joined', state: 'leaving' },
+      { previous: 'leaving', state: 'watching' },
+    ]);
+
+    room.close();
+
+    expect(room.state).toBe('closed');
+    expect(stateChanges).toEqual([
+      { previous: 'watching', state: 'joining' },
+      { previous: 'joining', state: 'joined' },
+      { previous: 'joined', state: 'leaving' },
+      { previous: 'leaving', state: 'watching' },
+      { previous: 'watching', state: 'closed' },
+    ]);
+  });
+
+  it('exposes room members and emits membersChanged', async () => {
+    const signaling = createTestRoomSignaling();
+    const membersChanged = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      memberCapacity: 3,
+      onMembersChanged: (detail) => membersChanged.push(detail),
+    });
+
+    signaling.emitPeers(['a', 'b']);
+    await flushAsyncWork();
+
+    expect(room.members).toEqual(['a', 'b']);
+    expect(room.memberCount).toBe(2);
+    expect(room.memberCapacity).toBe(3);
+    expect(room.isFull).toBe(false);
+    expect(membersChanged).toEqual([
+      { members: ['a', 'b'], memberCount: 2, memberCapacity: 3 },
+    ]);
+
+    signaling.emitPeers(['a', 'b', 'c']);
+    await flushAsyncWork();
+
+    expect(room.members).toEqual(['a', 'b', 'c']);
+    expect(room.memberCount).toBe(3);
+    expect(membersChanged).toEqual([
+      { members: ['a', 'b'], memberCount: 2, memberCapacity: 3 },
+      { members: ['a', 'b', 'c'], memberCount: 3, memberCapacity: 3 },
+    ]);
 
     room.close();
   });
@@ -301,15 +368,17 @@ describe('P2PRoom', () => {
       createSignaling: () => signaling,
       getLocalStream,
       peerId: 'c',
-      maxPeers: 2,
+      memberCapacity: 2,
     });
 
     signaling.emitPeers(['a', 'b']);
 
-    await expect(room.join()).rejects.toMatchObject({
-      name: 'RoomFullError',
-      message: 'P2PRoom.join: room is full',
-    });
+    await expect(room.join()).rejects.toBeInstanceOf(RoomFullError);
+    try {
+      await room.join();
+    } catch (error) {
+      expect(isRoomFullError(error)).toBe(true);
+    }
 
     expect(getLocalStream).not.toHaveBeenCalled();
 
@@ -425,26 +494,46 @@ describe('P2PRoom', () => {
     room.close();
   });
 
-  it('emits full while watching and rejects join when maxPeers is reached', async () => {
+  it('emits full while watching and rejects join when memberCapacity is reached', async () => {
     const signaling = createTestRoomSignaling();
     const full = [];
     const room = await watchP2PRoom({
       signaling,
       peerId: 'c',
-      maxPeers: 2,
+      memberCapacity: 2,
       onFull: (detail) => full.push(detail),
     });
 
     signaling.emitPeers(['a', 'b']);
     await flushAsyncWork();
 
-    expect(full).toEqual([{ peerIds: ['a', 'b'], maxPeers: 2 }]);
+    expect(full).toEqual([
+      {
+        members: ['a', 'b'],
+        memberCount: 2,
+        memberCapacity: 2,
+        peerIds: ['a', 'b'],
+        maxPeers: 2,
+      },
+    ]);
 
-    await expect(room.join()).rejects.toThrow('room is full');
+    await expect(room.join()).rejects.toBeInstanceOf(RoomFullError);
 
     expect(full).toEqual([
-      { peerIds: ['a', 'b'], maxPeers: 2 },
-      { peerIds: ['a', 'b'], maxPeers: 2 },
+      {
+        members: ['a', 'b'],
+        memberCount: 2,
+        memberCapacity: 2,
+        peerIds: ['a', 'b'],
+        maxPeers: 2,
+      },
+      {
+        members: ['a', 'b'],
+        memberCount: 2,
+        memberCapacity: 2,
+        peerIds: ['a', 'b'],
+        maxPeers: 2,
+      },
     ]);
     expect(signaling.join).not.toHaveBeenCalled();
     expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
@@ -452,14 +541,14 @@ describe('P2PRoom', () => {
     room.close();
   });
 
-  it('allows joining when maxPeers is reached but local peer is present', async () => {
+  it('allows joining when memberCapacity is reached but local member is present', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();
     const full = [];
     const room = await watchP2PRoom({
       signaling,
       peerId: 'a',
-      maxPeers: 2,
+      memberCapacity: 2,
       onFull: (detail) => full.push(detail),
     });
 
@@ -482,7 +571,7 @@ describe('P2PRoom', () => {
     const room = await watchP2PRoom({
       signaling,
       peerId: 'c',
-      maxPeers: 2,
+      memberCapacity: 2,
       onFull: (detail) => full.push(detail),
     });
 
@@ -491,16 +580,36 @@ describe('P2PRoom', () => {
     signaling.emitPeers(['a', 'b']);
     await flushAsyncWork();
 
-    expect(full).toEqual([{ peerIds: ['a', 'b'], maxPeers: 2 }]);
+    expect(full).toEqual([
+      {
+        members: ['a', 'b'],
+        memberCount: 2,
+        memberCapacity: 2,
+        peerIds: ['a', 'b'],
+        maxPeers: 2,
+      },
+    ]);
 
     join.resolve();
 
-    await expect(joinPromise).rejects.toThrow('room is full');
+    await expect(joinPromise).rejects.toBeInstanceOf(RoomFullError);
     expect(signaling.leave).toHaveBeenCalledWith('c');
     expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
     expect(full).toEqual([
-      { peerIds: ['a', 'b'], maxPeers: 2 },
-      { peerIds: ['a', 'b'], maxPeers: 2 },
+      {
+        members: ['a', 'b'],
+        memberCount: 2,
+        memberCapacity: 2,
+        peerIds: ['a', 'b'],
+        maxPeers: 2,
+      },
+      {
+        members: ['a', 'b'],
+        memberCount: 2,
+        memberCapacity: 2,
+        peerIds: ['a', 'b'],
+        maxPeers: 2,
+      },
     ]);
 
     room.close();
@@ -516,7 +625,7 @@ describe('P2PRoom', () => {
       signaling,
       getLocalStream: () => stream,
       peerId: 'c',
-      maxPeers: 2,
+      memberCapacity: 2,
     });
 
     signaling.emitPeers(['a']);
@@ -526,10 +635,7 @@ describe('P2PRoom', () => {
 
     join.resolve();
 
-    await expect(joinPromise).rejects.toMatchObject({
-      name: 'RoomFullError',
-      message: 'P2PRoom.join: room is full',
-    });
+    await expect(joinPromise).rejects.toBeInstanceOf(RoomFullError);
     expect(signaling.leave).toHaveBeenCalledWith('c');
     expect(stream.track.stop).toHaveBeenCalledOnce();
     expect(room._state).toBe('watching');
@@ -558,7 +664,9 @@ describe('P2PRoom', () => {
     await flushAsyncWork();
 
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
-    expect(errors).toEqual([{ peerId: 'b', error: startupError }]);
+    expect(errors).toEqual([
+      { peerId: 'b', memberId: 'b', error: startupError },
+    ]);
     expect(peerLeft).toHaveLength(0);
 
     room.close();

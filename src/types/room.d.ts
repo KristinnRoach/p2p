@@ -3,9 +3,15 @@ export type {
   P2PRoomOptions,
   P2PRoomPeerSignalingOptions,
   P2PRoomSignaling,
+  P2PRoomState,
+  P2PRoomStateChangeDetail,
   CreateRoomSignalingOptions,
   P2PSession,
+  MembersChangedDetail,
   LocalStreamDetail,
+  MemberErrorDetail,
+  MemberLeftDetail,
+  MemberStreamDetail,
   PeerErrorDetail,
   RoomFullDetail,
   PeerLeftDetail,
@@ -15,4 +21,10 @@ export type {
   RtcSignalingSource,
 } from './index.js';
 
-export { P2PRoom, joinP2PRoom, watchP2PRoom } from './index.js';
+export {
+  P2PRoom,
+  RoomFullError,
+  isRoomFullError,
+  joinP2PRoom,
+  watchP2PRoom,
+} from './index.js';
