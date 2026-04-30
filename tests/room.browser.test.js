@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 const sessionMocks = vi.hoisted(() => ({
   startP2PSession: vi.fn(),
@@ -20,7 +20,7 @@ function createPairSignaling() {
   };
 }
 
-function createTestRoomSignaling() {
+function createTestRoomSignaling(overrides = {}) {
   let onPeers = null;
 
   return {
@@ -37,6 +37,7 @@ function createTestRoomSignaling() {
     emitPeers(peerIds) {
       onPeers?.(peerIds);
     },
+    ...overrides,
   };
 }
 
@@ -74,6 +75,10 @@ describe('P2PRoom', () => {
   beforeEach(() => {
     sessionMocks.startP2PSession.mockReset();
     sessionMocks.joinP2PSession.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('watches peers without joining presence or connecting to peers', async () => {
@@ -118,6 +123,65 @@ describe('P2PRoom', () => {
       remotePeerId: 'b',
     });
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
+
+    room.close();
+  });
+
+  it('refreshes provider-owned presence while joined', async () => {
+    vi.useFakeTimers();
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const refreshPresence = vi.fn();
+    const signaling = createTestRoomSignaling({ refreshPresence });
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    await room.join();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(refreshPresence).toHaveBeenCalledWith('a');
+
+    await room.leave();
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(refreshPresence).toHaveBeenCalledTimes(1);
+
+    room.close();
+  });
+
+  it('best-effort leaves active presence on pagehide', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    await room.join();
+    window.dispatchEvent(new Event('pagehide'));
+    await flushAsyncWork();
+
+    expect(signaling.leave).toHaveBeenCalledWith('a');
+
+    room.close();
+  });
+
+  it('does not leave presence when pagehide stores the page in bfcache', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+    const event = new Event('pagehide');
+    Object.defineProperty(event, 'persisted', { value: true });
+
+    await room.join();
+    window.dispatchEvent(event);
+    await flushAsyncWork();
+
+    expect(signaling.leave).not.toHaveBeenCalled();
 
     room.close();
   });

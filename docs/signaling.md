@@ -27,6 +27,7 @@ The room-level contract required by `joinP2PRoom`. Manages presence and creates 
 interface P2PRoomSignaling {
   join(peerId: string): void | Promise<void>;
   leave(peerId: string): void | Promise<void>;
+  refreshPresence?(peerId: string): void | Promise<void>;
   onPeers(callback: (peerIds: string[]) => void): void | (() => void);
   createPeerSignaling(options: {
     localPeerId: string;
@@ -37,8 +38,10 @@ interface P2PRoomSignaling {
 ```
 
 Presence cleanup is provider-owned. `leave(peerId)` is the explicit cleanup
-path; adapters can also use `close()`, heartbeat/TTL, server presence, or a
-combination to remove peers that disappear without calling `leave()`.
+path. If an adapter implements `refreshPresence(peerId)`, `P2PRoom` calls it
+periodically after joining so the adapter can expire peers that disappear
+without calling `leave()`. Adapters can also use `close()`, server presence, or
+a combination of these mechanisms.
 
 ## Normalizing a signaling source
 
@@ -66,7 +69,9 @@ const roomSignaling = createRoomSignaling({
 `watchP2PRoom` subscribes to `onPeers()` without calling `join()`, then
 `room.join()` enters presence and starts pair connections. `room.leave()` calls
 `leave()` and closes active pair connections while keeping the peer-list
-subscription alive. `room.close()` is the permanent teardown path.
+subscription alive. `room.close()` is the permanent teardown path. In browser
+environments, active rooms also make a best-effort `leave()` call on
+`pagehide`, skipping back/forward cache restores.
 
 For `startP2PSession`, `joinP2PSession`, `Peer`, and data-only helpers, pass a raw
 `RtcSignalingSource` or wrap it with `createPairSignaling` yourself when you

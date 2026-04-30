@@ -1,4 +1,6 @@
 const prefix = 'kidlib:p2p:mesh-room:';
+const presenceTtlMs = 12000;
+const presenceSweepMs = 3000;
 
 export function createBrowserMeshRoomSignaling(roomId) {
   const channel =
@@ -9,30 +11,33 @@ export function createBrowserMeshRoomSignaling(roomId) {
 
   return {
     join: async (peerId) => {
-      const peers = readJson(key, []);
-      writeJson(roomId, key, [...new Set([...peers, peerId])]);
+      refreshPresence(roomId, key, peerId);
     },
     leave: async (peerId) => {
-      const peers = readJson(key, []);
       writeJson(
         roomId,
         key,
-        peers.filter((id) => id !== peerId),
+        readPresence(key).filter((entry) => entry.peerId !== peerId),
       );
     },
+    refreshPresence: async (peerId) => {
+      refreshPresence(roomId, key, peerId);
+    },
     onPeers: (callback) => {
-      const emit = () => callback(readJson(key, []));
+      const emit = () => callback(readActivePeerIds(roomId, key));
       const onStorage = (event) => {
         if (event.key === key) emit();
       };
 
       window.addEventListener('storage', onStorage);
       channel?.addEventListener('message', emit);
+      const sweep = setInterval(emit, presenceSweepMs);
       queueMicrotask(emit);
 
       return () => {
         window.removeEventListener('storage', onStorage);
         channel?.removeEventListener('message', emit);
+        clearInterval(sweep);
       };
     },
     createPeerSignaling: ({ localPeerId, remotePeerId }) =>
@@ -135,6 +140,42 @@ function readJson(key, fallback) {
     localStorage.removeItem(key);
     return fallback;
   }
+}
+
+function readPresence(key) {
+  const rawPeers = readJson(key, []);
+  if (!Array.isArray(rawPeers)) return [];
+  return rawPeers
+    .map((entry) => {
+      if (typeof entry === 'string') return { peerId: entry, lastSeen: 0 };
+      if (entry && typeof entry.peerId === 'string') {
+        return {
+          peerId: entry.peerId,
+          lastSeen: Number(entry.lastSeen) || 0,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function readActivePeerIds(roomId, key) {
+  const now = Date.now();
+  const peers = readPresence(key);
+  const active = peers.filter((entry) => now - entry.lastSeen < presenceTtlMs);
+  const activePeerIds = active.map((entry) => entry.peerId);
+  if (active.length !== peers.length) {
+    writeJson(roomId, key, active);
+  }
+  return activePeerIds;
+}
+
+function refreshPresence(roomId, key, peerId) {
+  const now = Date.now();
+  const peers = readPresence(key).filter(
+    (entry) => entry.peerId !== peerId && now - entry.lastSeen < presenceTtlMs,
+  );
+  writeJson(roomId, key, [...peers, { peerId, lastSeen: now }]);
 }
 
 function writeJson(roomId, key, value) {

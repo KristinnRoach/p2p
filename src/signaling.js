@@ -138,6 +138,7 @@ export function createPairSignaling(source) {
  * @returns {{
  *   join: (peerId: string) => void|Promise<void>,
  *   leave: (peerId: string) => void|Promise<void>,
+ *   refreshPresence?: (peerId: string) => void|Promise<void>,
  *   onPeers: (callback: (peerIds: string[]) => void) => (() => void),
  *   createPeerSignaling: (options: {
  *     localPeerId: string,
@@ -226,6 +227,12 @@ export function createRoomSignaling(source) {
       assertOpen('leave');
       return source.leave(peerId);
     },
+    refreshPresence: source.refreshPresence
+      ? (peerId) => {
+          assertOpen('refreshPresence');
+          return source.refreshPresence(peerId);
+        }
+      : undefined,
     onPeers: subscribe,
     createPeerSignaling: (options) => {
       assertOpen('createPeerSignaling');
@@ -274,6 +281,14 @@ function assertRoomSignalingSource(source) {
         `createRoomSignaling: source missing method "${methodName}"`,
       );
     }
+  }
+  if (
+    source.refreshPresence != null &&
+    typeof source.refreshPresence !== 'function'
+  ) {
+    throw new Error(
+      'createRoomSignaling: source refreshPresence must be a function',
+    );
   }
 }
 
