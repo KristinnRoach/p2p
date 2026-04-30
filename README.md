@@ -24,8 +24,10 @@ const room = await joinP2PRoom({
   onLocalStream: ({ stream }) => renderLocalPreview(stream),
 });
 
-room.on('memberStream', ({ memberId, stream }) => renderStream(memberId, stream));
-room.on('memberLeft',   ({ memberId })         => removeStream(memberId));
+const renderRemoteStreams = () => renderRemoteTiles(room.remoteMemberStreams);
+
+room.on('memberStream', renderRemoteStreams);
+room.on('memberLeft', renderRemoteStreams);
 room.on('membersChanged', ({ memberCount, memberCapacity }) => {
   renderCapacity(memberCount, memberCapacity);
 });
@@ -60,6 +62,10 @@ await room.join();  // enter presence and connect
 await room.leave(); // leave presence, close sessions, keep watching
 room.close();       // permanent teardown
 ```
+
+Use `leave()` when the app wants to keep observing the same room after the
+local member exits. Use `close()` when the user is done with the room; it tears
+down subscriptions, peer connections, owned media, and signaling.
 
 ## 1:1 calls — P2PSession
 

@@ -1,8 +1,9 @@
 import { createSignal } from 'solid-js';
-import type { RoomStatusType } from './RoomStatus';
 
 type Props = {
-  status: RoomStatusType;
+  isEntering: boolean;
+  isInRoom: boolean;
+  isLeaving: boolean;
   onEnterRoom: (roomId: string) => void | Promise<void>;
   onLeaveRoom: () => void | Promise<void>;
 };
@@ -11,10 +12,7 @@ export default function LobbyForm(props: Props) {
   const initialRoomId =
     new URL(window.location.href).searchParams.get('room')?.trim() ?? '';
   const [roomId, setRoomId] = createSignal(initialRoomId);
-  const isJoining = () => props.status === 'joining';
-  const isJoined = () => props.status === 'joined';
-  const isLeaving = () => props.status === 'leaving';
-  const isLoading = () => isJoining() || isJoined() || isLeaving();
+  const isLoading = () => props.isEntering || props.isInRoom || props.isLeaving;
   const enteredRoomId = () => roomId().trim();
   const canUseRoom = () => enteredRoomId().length > 0 && !isLoading();
   const canCopyLink = () => enteredRoomId().length > 0;
@@ -69,7 +67,7 @@ export default function LobbyForm(props: Props) {
         disabled={isLoading()}
       />
       <button type='submit' class='primary-button' disabled={!canUseRoom()}>
-        {isJoining() ? 'Entering...' : 'Enter room'}
+        {props.isEntering ? 'Entering...' : 'Enter room'}
       </button>
       <button type='button' onClick={copyLink} disabled={!canCopyLink()}>
         Copy link
@@ -77,7 +75,7 @@ export default function LobbyForm(props: Props) {
       <button
         type='button'
         onClick={leaveRoomAndUpdateURL}
-        disabled={!isJoined() || isLeaving()}
+        disabled={!props.isInRoom || props.isLeaving}
       >
         Leave room
       </button>

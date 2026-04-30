@@ -69,9 +69,12 @@ const roomSignaling = createRoomSignaling({
 `watchP2PRoom` subscribes to `onPeers()` without calling `join()`, then
 `room.join()` enters presence and starts pair connections. `room.leave()` calls
 `leave()` and closes active pair connections while keeping the peer-list
-subscription alive. `room.close()` is the permanent teardown path. In browser
-environments, active rooms also make a best-effort `leave()` call on
-`pagehide`, skipping back/forward cache restores.
+subscription alive so the app can rejoin the same room later. `room.close()` is
+the permanent teardown path: it closes peer connections, unsubscribes from room
+presence, closes signaling, releases room-owned media, and makes a best-effort
+`leave()` call if the room had joined presence. In browser environments, active
+rooms also make a best-effort `leave()` call on `pagehide`, skipping
+back/forward cache restores.
 
 For `startP2PSession`, `joinP2PSession`, `Peer`, and data-only helpers, pass a raw
 `RtcSignalingSource` or wrap it with `createPairSignaling` yourself when you

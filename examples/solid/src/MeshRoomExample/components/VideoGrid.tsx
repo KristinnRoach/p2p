@@ -1,20 +1,17 @@
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import LocalPreview from './LocalPreview';
 import MemberTile from './MemberTile';
-import type { P2PRoom } from '@kidlib/p2p';
+import type { P2PRoom, RemoteMemberStream } from '@kidlib/p2p';
 
 type Props = {
   room?: P2PRoom;
 };
 
-export type RemoteStream = {
-  memberId: string;
-  stream: MediaStream;
-};
-
 export default function VideoGrid(props: Props) {
   const [localStream, setLocalStream] = createSignal<MediaStream>();
-  const [remoteStreams, setRemoteStreams] = createSignal<RemoteStream[]>([]);
+  const [remoteStreams, setRemoteStreams] = createSignal<RemoteMemberStream[]>(
+    [],
+  );
 
   createEffect(() => {
     const room = props.room;
@@ -25,27 +22,16 @@ export default function VideoGrid(props: Props) {
     }
 
     setLocalStream(room.localStream ?? undefined);
-    setRemoteStreams(
-      [...room.remoteStreams.entries()]
-        .map(([memberId, stream]) => ({ memberId, stream }))
-        .sort(compareMember),
-    );
+    setRemoteStreams(room.remoteMemberStreams);
+
+    const updateRemoteStreams = () =>
+      setRemoteStreams(room.remoteMemberStreams);
 
     const cleanups = [
       room.on('localStream', ({ stream }) => setLocalStream(stream)),
-      room.on('memberStream', ({ memberId, stream }) => {
-        setRemoteStreams((items) =>
-          [
-            ...items.filter((item) => item.memberId !== memberId),
-            { memberId, stream },
-          ].sort(compareMember),
-        );
-      }),
-      room.on('memberLeft', ({ memberId }) => {
-        setRemoteStreams((items) =>
-          items.filter((item) => item.memberId !== memberId),
-        );
-      }),
+      room.on('memberStream', updateRemoteStreams),
+      room.on('memberLeft', updateRemoteStreams),
+      room.on('membersChanged', updateRemoteStreams),
     ];
 
     onCleanup(() => cleanups.forEach((cleanup) => cleanup()));
@@ -63,8 +49,4 @@ export default function VideoGrid(props: Props) {
       </For>
     </div>
   );
-}
-
-function compareMember(a: { memberId: string }, b: { memberId: string }) {
-  return a.memberId.localeCompare(b.memberId);
 }

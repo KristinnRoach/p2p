@@ -8,8 +8,10 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock('../src/session.js', () => sessionMocks);
 
 import {
+  LocalStreamError,
   P2PRoom,
   RoomFullError,
+  isLocalStreamError,
   isRoomFullError,
   joinP2PRoom,
   watchP2PRoom,
@@ -160,6 +162,32 @@ describe('P2PRoom', () => {
     ]);
   });
 
+  it('wraps getLocalStream failures with LocalStreamError', async () => {
+    const signaling = createTestRoomSignaling();
+    const cause = new DOMException('Permission denied', 'NotAllowedError');
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      getLocalStream: () => {
+        throw cause;
+      },
+    });
+
+    try {
+      await room.join();
+      throw new Error('Expected join to reject');
+    } catch (error) {
+      expect(error).toBeInstanceOf(LocalStreamError);
+      expect(isLocalStreamError(error)).toBe(true);
+      expect(error.cause).toBe(cause);
+    }
+
+    expect(signaling.join).not.toHaveBeenCalled();
+    expect(room.state).toBe('watching');
+
+    room.close();
+  });
+
   it('exposes room members and emits membersChanged', async () => {
     const signaling = createTestRoomSignaling();
     const membersChanged = [];
@@ -189,6 +217,32 @@ describe('P2PRoom', () => {
     expect(membersChanged).toEqual([
       { members: ['a', 'b'], memberCount: 2, memberCapacity: 3 },
       { members: ['a', 'b', 'c'], memberCount: 3, memberCapacity: 3 },
+    ]);
+
+    room.close();
+  });
+
+  it('exposes remote member streams in room member order', async () => {
+    const firstStream = createFakeStream();
+    const secondStream = createFakeStream();
+    const streams = [firstStream, secondStream];
+    sessionMocks.startP2PSession.mockImplementation(({ onRemoteStream }) => {
+      onRemoteStream({ stream: streams.shift() });
+      return Promise.resolve(createResolvedSession());
+    });
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    signaling.emitPeers(['c', 'b']);
+    await room.join();
+    await flushAsyncWork();
+
+    expect(room.remoteMemberStreams).toEqual([
+      { memberId: 'c', stream: firstStream },
+      { memberId: 'b', stream: secondStream },
     ]);
 
     room.close();
@@ -230,8 +284,8 @@ describe('P2PRoom', () => {
     const room = await watchP2PRoom({
       signaling,
       peerId: 'a',
+      onError: (detail) => errors.push(detail),
     });
-    room.on('error', (detail) => errors.push(detail));
 
     await room.join();
     await vi.advanceTimersByTimeAsync(5000);

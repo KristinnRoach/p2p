@@ -19,8 +19,10 @@ export {
 export { attachRemoteStream } from './remote-stream.js';
 export { startP2PSession, joinP2PSession } from './session.js';
 export {
+  LocalStreamError,
   P2PRoom,
   RoomFullError,
+  isLocalStreamError,
   isRoomFullError,
   joinP2PRoom,
   watchP2PRoom,

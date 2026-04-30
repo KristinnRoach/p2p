@@ -75,6 +75,7 @@ export class P2PRoom extends EventTarget {
       onDataChannelOpen = null,
       onDataChannelMessage = null,
       onDataChannelClose = null,
+      onError = null,
     } = options;
 
     if (!peerId) throw new Error('P2PRoom: peerId is required');
@@ -170,6 +171,7 @@ export class P2PRoom extends EventTarget {
     if (onDataChannelClose) {
       this._cleanups.push(this.on('dataChannelClose', onDataChannelClose));
     }
+    if (onError) this._cleanups.push(this.on('error', onError));
 
     this.ready = this._start();
   }
@@ -180,6 +182,24 @@ export class P2PRoom extends EventTarget {
 
   get memberCount() {
     return this._memberIds.length;
+  }
+
+  get remoteMemberStreams() {
+    const streams = [];
+    const seen = new Set();
+
+    for (const memberId of this._memberIds) {
+      const stream = this.remoteStreams.get(memberId);
+      if (!stream) continue;
+      streams.push({ memberId, stream });
+      seen.add(memberId);
+    }
+
+    for (const [memberId, stream] of this.remoteStreams) {
+      if (!seen.has(memberId)) streams.push({ memberId, stream });
+    }
+
+    return streams;
   }
 
   get isFull() {
@@ -581,6 +601,9 @@ export class P2PRoom extends EventTarget {
     if (!this._localStreamPromise) {
       this._localStreamPromise = Promise.resolve()
         .then(() => this._getLocalStream())
+        .catch((error) => {
+          throw createLocalStreamError(error);
+        })
         .then((stream) => {
           if (!stream) return null;
           if (this._state === 'closed' || this.signal?.aborted) {
@@ -782,12 +805,30 @@ export class RoomFullError extends Error {
   }
 }
 
+export class LocalStreamError extends Error {
+  constructor(message = 'P2PRoom.join: local stream failed', options = {}) {
+    super(message, { cause: options.cause });
+    this.name = 'LocalStreamError';
+    if (options.cause !== undefined && this.cause === undefined) {
+      this.cause = options.cause;
+    }
+  }
+}
+
 export function isRoomFullError(error) {
   return error instanceof RoomFullError;
 }
 
+export function isLocalStreamError(error) {
+  return error instanceof LocalStreamError;
+}
+
 function createRoomFullError() {
   return new RoomFullError();
+}
+
+function createLocalStreamError(cause) {
+  return new LocalStreamError(undefined, { cause });
 }
 
 function createAbortError() {
