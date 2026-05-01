@@ -1,5 +1,6 @@
 import { startP2PSession, joinP2PSession } from './session.js';
 import { createRoomSignaling } from './signaling.js';
+import { log } from './logger.js';
 
 const PRESENCE_HEARTBEAT_MS = 5000;
 
@@ -150,7 +151,8 @@ export class P2PRoom extends EventTarget {
     if (onMembersChanged) {
       this._cleanups.push(this.on('membersChanged', onMembersChanged));
     }
-    if (onStateChange) this._cleanups.push(this.on('statechange', onStateChange));
+    if (onStateChange)
+      this._cleanups.push(this.on('statechange', onStateChange));
     if (onPeerStream) this._cleanups.push(this.on('peerStream', onPeerStream));
     if (onPeerTrack) this._cleanups.push(this.on('peerTrack', onPeerTrack));
     if (onPeerJoined) this._cleanups.push(this.on('peerJoined', onPeerJoined));
@@ -577,7 +579,10 @@ export class P2PRoom extends EventTarget {
     if (this.signaling) return this.signaling;
     if (!this._signalingPromise) {
       this._signalingPromise = Promise.resolve()
-        .then(() => this._createSignaling({ roomId: this.roomId }))
+        .then(() => {
+          log(`[Room] createSignaling({ roomId: ${this.roomId})`);
+          return this._createSignaling({ roomId: this.roomId });
+        })
         .then((signaling) => createRoomSignaling(signaling))
         .catch((error) => {
           this._signalingPromise = null;
