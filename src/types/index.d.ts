@@ -131,6 +131,7 @@ export interface P2PRoomSignaling {
   leave(peerId: string): void | Promise<void>;
   refreshPresence?(peerId: string): void | Promise<void>;
   onPeers(callback: (peerIds: string[]) => void): void | (() => void);
+  /** Must return synchronously — the room calls this inline during peer connection setup. */
   createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcSignalingSource;
   close?(): void;
 }
@@ -358,6 +359,12 @@ export function isLocalStreamError(error: unknown): error is LocalStreamError;
 export function createPairSignaling(
   source: RtcSignalingSource,
 ): RtcPairSignaling;
+
+/**
+ * Validate a room signaling source at dev time. Throws with a clear message
+ * if any required method is missing or has the wrong type.
+ */
+export function validateRoomSignaling(source: unknown): void;
 
 export function createRoomSignaling(
   source: P2PRoomSignaling,

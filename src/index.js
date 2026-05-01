@@ -15,6 +15,7 @@ export { setLogger } from './logger.js';
 export {
   createPairSignaling,
   createRoomSignaling,
+  validateRoomSignaling,
 } from './signaling.js';
 export { attachRemoteStream } from './remote-stream.js';
 export { startP2PSession, joinP2PSession } from './session.js';

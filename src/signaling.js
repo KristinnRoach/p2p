@@ -270,6 +270,17 @@ function assertSignalingSource(source) {
   }
 }
 
+/**
+ * Validate a room signaling source at dev time. Throws with a clear message
+ * if any required method is missing or has the wrong type.
+ *
+ * @param {unknown} source
+ * @returns {void}
+ */
+export function validateRoomSignaling(source) {
+  assertRoomSignalingSource(source);
+}
+
 function assertRoomSignalingSource(source) {
   if (!source) {
     throw new Error('createRoomSignaling: source is required');
