@@ -67,6 +67,9 @@ Use `leave()` when the app wants to keep observing the same room after the
 local member exits. Use `close()` when the user is done with the room; it tears
 down subscriptions, peer connections, owned media, and signaling.
 
+Solid apps can use the `@kidlib/p2p/solid` adapter. See
+[docs/solidjs.md](docs/solidjs.md).
+
 ## 1:1 calls — P2PSession
 
 For direct connections between exactly two peers.

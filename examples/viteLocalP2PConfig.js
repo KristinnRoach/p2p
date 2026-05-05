@@ -3,10 +3,22 @@ import { fileURLToPath, URL } from 'node:url';
 export function localP2PConfig(configUrl) {
   return {
     resolve: {
-      alias: {
-        '@kidlib/p2p': fileURLToPath(new URL('../../src/index.js', configUrl)),
-        '@shared': fileURLToPath(new URL('./shared', import.meta.url)),
-      },
+      alias: [
+        {
+          find: '@kidlib/p2p/solid',
+          replacement: fileURLToPath(
+            new URL('../../src/adapters/solid.js', configUrl),
+          ),
+        },
+        {
+          find: '@kidlib/p2p',
+          replacement: fileURLToPath(new URL('../../src/index.js', configUrl)),
+        },
+        {
+          find: '@shared',
+          replacement: fileURLToPath(new URL('./shared', import.meta.url)),
+        },
+      ],
     },
     optimizeDeps: {
       exclude: ['@kidlib/p2p'],
