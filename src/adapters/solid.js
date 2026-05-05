@@ -6,29 +6,16 @@ function noopBroadcast() {
 }
 
 function reconcileRemoteMemberStreams(previous, next) {
-  const nextByMemberId = new Map(
-    next.map((remoteStream) => [remoteStream.memberId, remoteStream]),
+  const previousByMemberId = new Map(
+    previous.map((remoteStream) => [remoteStream.memberId, remoteStream]),
   );
-  const previousMemberIds = new Set();
-  const reconciled = [];
 
-  for (const previousStream of previous) {
-    const nextStream = nextByMemberId.get(previousStream.memberId);
-    if (!nextStream) continue;
-
-    previousMemberIds.add(previousStream.memberId);
-    reconciled.push(
-      previousStream.stream === nextStream.stream ? previousStream : nextStream,
-    );
-  }
-
-  for (const nextStream of next) {
-    if (!previousMemberIds.has(nextStream.memberId)) {
-      reconciled.push(nextStream);
-    }
-  }
-
-  return reconciled;
+  return next.map((nextStream) => {
+    const previousStream = previousByMemberId.get(nextStream.memberId);
+    return previousStream?.stream === nextStream.stream
+      ? previousStream
+      : nextStream;
+  });
 }
 
 export function useP2PRoom() {
@@ -49,15 +36,17 @@ export function useP2PRoom() {
   let currentRunId = 0;
 
   function setRoomError(cause) {
+    const roomFull = isRoomFullError(cause);
     setError(cause);
     setErrorKind(
-      isRoomFullError(cause)
+      roomFull
         ? 'room-full'
         : isLocalStreamError(cause)
           ? 'local-stream'
           : 'room',
     );
-    if (isRoomFullError(cause)) {
+    setIsFull(roomFull);
+    if (roomFull) {
       setState('full');
     } else {
       setState('error');
@@ -127,6 +116,7 @@ export function useP2PRoom() {
       nextRoom.on('membersChanged', updateMembership.bind(null, nextRoom)),
       nextRoom.on('full', () => {
         updateMembership(nextRoom);
+        setError(undefined);
         setErrorKind('room-full');
         setState('full');
       }),

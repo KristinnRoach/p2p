@@ -3,16 +3,16 @@ import { createSignal } from 'solid-js';
 type Props = {
   isEntering: boolean;
   isInRoom: boolean;
-  isLeaving: boolean;
+  isExiting: boolean;
   onEnterRoom: (roomId: string) => void | Promise<void>;
-  onLeaveRoom: () => void | Promise<void>;
+  onExitRoom: () => void | Promise<void>;
 };
 
 export default function LobbyForm(props: Props) {
   const initialRoomId =
     new URL(window.location.href).searchParams.get('room')?.trim() ?? '';
   const [roomId, setRoomId] = createSignal(initialRoomId);
-  const isLoading = () => props.isEntering || props.isInRoom || props.isLeaving;
+  const isLoading = () => props.isEntering || props.isInRoom || props.isExiting;
   const enteredRoomId = () => roomId().trim();
   const canUseRoom = () => enteredRoomId().length > 0 && !isLoading();
   const canCopyLink = () => enteredRoomId().length > 0;
@@ -28,8 +28,8 @@ export default function LobbyForm(props: Props) {
     await props.onEnterRoom(id);
   }
 
-  async function leaveRoomAndUpdateURL() {
-    await props.onLeaveRoom();
+  async function exitRoomAndUpdateURL() {
+    await props.onExitRoom();
 
     const url = new URL(window.location.href);
     url.searchParams.delete('room');
@@ -74,10 +74,10 @@ export default function LobbyForm(props: Props) {
       </button>
       <button
         type='button'
-        onClick={leaveRoomAndUpdateURL}
-        disabled={!props.isInRoom || props.isLeaving}
+        onClick={exitRoomAndUpdateURL}
+        disabled={!props.isInRoom || props.isExiting}
       >
-        Leave room
+        Exit room
       </button>
     </form>
   );

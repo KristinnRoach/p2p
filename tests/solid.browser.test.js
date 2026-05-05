@@ -44,11 +44,6 @@ function createFakeRoom(overrides = {}) {
   return room;
 }
 
-async function flushAsyncWork() {
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
 describe('useP2PRoom', () => {
   beforeEach(() => {
     roomMocks.watchP2PRoom.mockReset();
@@ -109,6 +104,38 @@ describe('useP2PRoom', () => {
     dispose();
   });
 
+  it('stores local stream errors and closes the room', async () => {
+    const error = new Error('local stream failed');
+    error.name = 'LocalStreamError';
+    const fakeRoom = createFakeRoom({
+      join: vi.fn(async () => {
+        throw error;
+      }),
+    });
+    roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
+
+    let solidRoom;
+    const dispose = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await expect(
+      solidRoom.join({
+        signaling: {},
+        peerId: 'peer-a',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(fakeRoom.close).toHaveBeenCalledOnce();
+    expect(solidRoom.room()).toBeUndefined();
+    expect(solidRoom.state()).toBe('error');
+    expect(solidRoom.error()).toBe(error);
+    expect(solidRoom.errorKind()).toBe('local-stream');
+
+    dispose();
+  });
+
   it('updates Solid accessors from room events', async () => {
     const stream = new MediaStream();
     const fakeRoom = createFakeRoom();
@@ -147,7 +174,46 @@ describe('useP2PRoom', () => {
     dispose();
   });
 
-  it('keeps remote stream entries stable by member id', async () => {
+  it('clears stale errors when the room becomes full', async () => {
+    const stream = new MediaStream();
+    const error = new Error('peer failed');
+    const fakeRoom = createFakeRoom();
+    roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
+
+    let solidRoom;
+    const dispose = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.join({
+      signaling: {},
+      peerId: 'peer-a',
+    });
+
+    fakeRoom.emit('error', { error });
+    expect(solidRoom.error()).toBe(error);
+    expect(solidRoom.errorKind()).toBe('peer');
+
+    fakeRoom.remoteMemberStreams = [{ memberId: 'peer-b', stream }];
+    fakeRoom.members = ['peer-b'];
+    fakeRoom.memberCount = 1;
+    fakeRoom.isFull = true;
+    fakeRoom.emit('full', {
+      members: ['peer-b'],
+      memberCount: 1,
+      memberCapacity: 1,
+    });
+
+    expect(solidRoom.error()).toBeUndefined();
+    expect(solidRoom.errorKind()).toBe('room-full');
+    expect(solidRoom.state()).toBe('full');
+    expect(solidRoom.isFull()).toBe(true);
+
+    dispose();
+  });
+
+  it('keeps remote stream entries stable by member id in room order', async () => {
     const firstStream = new MediaStream();
     const secondStream = new MediaStream();
     const fakeRoom = createFakeRoom();
@@ -185,9 +251,12 @@ describe('useP2PRoom', () => {
       memberCapacity: 4,
     });
 
-    expect(solidRoom.remoteMemberStreams()).toEqual(previousStreams);
-    expect(solidRoom.remoteMemberStreams()[0]).toBe(previousStreams[0]);
-    expect(solidRoom.remoteMemberStreams()[1]).toBe(previousStreams[1]);
+    expect(solidRoom.remoteMemberStreams()).toEqual([
+      previousStreams[1],
+      previousStreams[0],
+    ]);
+    expect(solidRoom.remoteMemberStreams()[0]).toBe(previousStreams[1]);
+    expect(solidRoom.remoteMemberStreams()[1]).toBe(previousStreams[0]);
 
     dispose();
   });

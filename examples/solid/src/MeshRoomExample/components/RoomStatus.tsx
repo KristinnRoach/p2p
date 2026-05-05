@@ -14,14 +14,15 @@ export type RoomStatusType = SolidP2PRoomState;
 export default function RoomStatus(props: Props) {
   return (
     <div class='room-status'>
-      <Show when={props.memberCount}>
-        <p>
-          Members: {props.memberCount} / {props.memberCapacity}
-        </p>
-      </Show>
+      <p>
+        Members: {props.memberCount}
+        <Show when={props.memberCapacity != null}>
+          {(capacity) => <> / {capacity()}</>}
+        </Show>
+      </p>
+      <p>Room status: {props.status}</p>
       <Show when={props.roomId}>
         <p>Room ID: {props.roomId}</p>
-        <p>Room status: {props.status} </p>
       </Show>
       <Show when={props.error}>
         <p>{props.error}</p>

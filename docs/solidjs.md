@@ -21,11 +21,11 @@ export function Room({ createSignaling }) {
     });
   }
 
-  function leave() {
+  function exit() {
     room.close();
   }
 
-  onCleanup(leave);
+  onCleanup(exit);
 
   return (
     <main>
@@ -35,8 +35,8 @@ export function Room({ createSignaling }) {
       >
         Join
       </button>
-      <button onClick={leave} disabled={room.state() !== 'joined'}>
-        Leave
+      <button onClick={exit} disabled={room.state() !== 'joined'}>
+        Exit
       </button>
 
       <p>

@@ -7,15 +7,17 @@ import { createBrowserMeshRoomSignaling } from '@shared/index';
 
 export default function Room() {
   const MAX_MEMBERS = 6;
-  const p2pRoom = useP2PRoom();
+  const p2p = useP2PRoom();
 
   async function enterRoom(roomId: string) {
-    const status = p2pRoom.state();
-    if (status === 'joining' || status === 'joined') return;
+    const status = p2p.state();
+    if (status === 'creating' || status === 'joining' || status === 'joined') {
+      return;
+    }
 
-    closeRoom();
+    p2p.close();
 
-    await p2pRoom.join({
+    await p2p.join({
       roomId,
       peerId: crypto.randomUUID(),
       createSignaling: createBrowserMeshRoomSignaling,
@@ -25,16 +27,14 @@ export default function Room() {
     });
   }
 
-  function leaveRoom() {
-    closeRoom();
-  }
-
   function closeRoom() {
-    p2pRoom.close();
+    p2p.close();
   }
 
   function errorMessage() {
-    switch (p2pRoom.errorKind()) {
+    switch (p2p.errorKind()) {
+      case 'room-full':
+        return 'The room is full.';
       case 'local-stream':
         return 'Could not access camera or microphone.';
       case 'peer':
@@ -58,22 +58,22 @@ export default function Room() {
   return (
     <main class='room'>
       <LobbyForm
-        isEntering={p2pRoom.state() === 'joining'}
-        isInRoom={p2pRoom.state() === 'joined'}
-        isLeaving={p2pRoom.state() === 'leaving'}
+        isEntering={p2p.state() === 'creating' || p2p.state() === 'joining'}
+        isInRoom={p2p.state() === 'joined'}
+        isExiting={p2p.state() === 'leaving'}
         onEnterRoom={enterRoom}
-        onLeaveRoom={leaveRoom}
+        onExitRoom={closeRoom}
       />
       <RoomStatus
-        roomId={p2pRoom.room()?.roomId}
-        memberCount={p2pRoom.memberCount()}
-        memberCapacity={p2pRoom.memberCapacity()}
-        status={p2pRoom.state()}
+        roomId={p2p.room()?.roomId}
+        memberCount={p2p.memberCount()}
+        memberCapacity={p2p.memberCapacity()}
+        status={p2p.state()}
         error={errorMessage()}
       />
       <VideoGrid
-        localStream={p2pRoom.localStream()}
-        remoteStreams={p2pRoom.remoteMemberStreams()}
+        localStream={p2p.localStream()}
+        remoteStreams={p2p.remoteMemberStreams()}
       />
     </main>
   );
