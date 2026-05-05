@@ -45,6 +45,11 @@
       "import": "./src/room.js",
       "default": "./src/room.js"
     },
+    "./solid": {
+      "types": "./src/types/solid.d.ts",
+      "import": "./src/adapters/solid.js",
+      "default": "./src/adapters/solid.js"
+    },
     "./rtt": {
       "types": "./src/types/rtt.d.ts",
       "import": "./src/rtt.js",
@@ -83,6 +88,14 @@
     "peer-to-peer",
     "datachannel"
   ],
+  "peerDependencies": {
+    "solid-js": ">=1.8.0"
+  },
+  "peerDependenciesMeta": {
+    "solid-js": {
+      "optional": true
+    }
+  },
   "scripts": {
     "dev:react": "pnpm --dir examples/react dev",
     "dev:solid": "pnpm --dir examples/solid dev",
@@ -103,6 +116,7 @@
     "@changesets/cli": "^2.29.7",
     "@vitest/browser-playwright": "^4.1.0",
     "playwright": "^1.57.0",
+    "solid-js": "^1.9.12",
     "vitest": "^4.1.0"
   }
 }

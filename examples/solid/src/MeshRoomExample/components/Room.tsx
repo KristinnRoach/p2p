@@ -1,11 +1,5 @@
-import { createSignal, onCleanup, onMount } from 'solid-js';
-import {
-  isLocalStreamError,
-  isRoomFullError,
-  watchP2PRoom,
-} from '@kidlib/p2p';
-import type { P2PRoom } from '@kidlib/p2p';
-import type { RoomStatusType } from './RoomStatus';
+import { onCleanup, onMount } from 'solid-js';
+import { useP2PRoom } from '@kidlib/p2p/solid';
 import RoomStatus from './RoomStatus';
 import LobbyForm from './LobbyForm';
 import VideoGrid from './VideoGrid';
@@ -13,57 +7,41 @@ import { createBrowserMeshRoomSignaling } from '@shared/index';
 
 export default function Room() {
   const MAX_MEMBERS = 6;
-  const [room, setRoom] = createSignal<P2PRoom>();
-  const [status, setStatus] = createSignal<RoomStatusType>('idle');
-  const [error, setError] = createSignal<string>();
+  const p2p = useP2PRoom();
 
   async function enterRoom(roomId: string) {
-    if (status() === 'joining' || status() === 'joined') return;
-
-    closeRoom();
-    setStatus('joining');
-    setError(undefined);
-
-    let p2pRoom: P2PRoom | undefined = undefined;
-
-    try {
-      p2pRoom = await watchP2PRoom({
-        roomId,
-        peerId: crypto.randomUUID(),
-        createSignaling: createBrowserMeshRoomSignaling,
-        getLocalStream: () =>
-          navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
-        memberCapacity: MAX_MEMBERS,
-        onStateChange: ({ state }) => setStatus(state),
-        onError: () => setError('A peer connection failed.'),
-        onFull: () => setStatus('full'),
-      });
-
-      setRoom(p2pRoom);
-
-      await p2pRoom.join();
-    } catch (err) {
-      closeRoom();
-      if (isRoomFullError(err)) {
-        setStatus('full');
-      } else if (isLocalStreamError(err)) {
-        setStatus('error');
-        setError('Could not access camera or microphone.');
-      } else {
-        setStatus('error');
-        setError('Could not join room.');
-      }
+    const status = p2p.state();
+    if (status === 'creating' || status === 'joining' || status === 'joined') {
+      return;
     }
-  }
 
-  function leaveRoom() {
-    closeRoom();
-    setStatus('idle');
+    await p2p.join({
+      roomId,
+      peerId: crypto.randomUUID(),
+      createSignaling: createBrowserMeshRoomSignaling,
+      getLocalStream: () =>
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
+      memberCapacity: MAX_MEMBERS,
+    });
   }
 
   function closeRoom() {
-    room()?.close();
-    setRoom(undefined);
+    p2p.close();
+  }
+
+  function errorMessage() {
+    switch (p2p.errorKind()) {
+      case 'room-full':
+        return 'The room is full.';
+      case 'local-stream':
+        return 'Could not access camera or microphone.';
+      case 'peer':
+        return 'A peer connection failed.';
+      case 'room':
+        return 'Could not join room.';
+      default:
+        return undefined;
+    }
   }
 
   onMount(async () => {
@@ -78,14 +56,23 @@ export default function Room() {
   return (
     <main class='room'>
       <LobbyForm
-        isEntering={status() === 'joining'}
-        isInRoom={status() === 'joined'}
-        isLeaving={status() === 'leaving'}
+        isEntering={p2p.state() === 'creating' || p2p.state() === 'joining'}
+        isInRoom={p2p.state() === 'joined'}
+        isExiting={p2p.state() === 'leaving'}
         onEnterRoom={enterRoom}
-        onLeaveRoom={leaveRoom}
+        onExitRoom={closeRoom}
       />
-      <RoomStatus room={room()} status={status()} error={error()} />
-      <VideoGrid room={room()} />
+      <RoomStatus
+        roomId={p2p.room()?.roomId}
+        memberCount={p2p.memberCount()}
+        memberCapacity={p2p.memberCapacity()}
+        status={p2p.state()}
+        error={errorMessage()}
+      />
+      <VideoGrid
+        localStream={p2p.localStream()}
+        remoteStreams={p2p.remoteMemberStreams()}
+      />
     </main>
   );
 }

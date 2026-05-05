@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@kidlib/p2p':
         specifier: file:../..
-        version: file:../..
+        version: file:../..(solid-js@1.9.12)
       solid-js:
         specifier: ^1.9.12
         version: 1.9.12
@@ -281,6 +281,11 @@ packages:
 
   '@kidlib/p2p@file:../..':
     resolution: {directory: ../.., type: directory}
+    peerDependencies:
+      solid-js: '>=1.8.0'
+    peerDependenciesMeta:
+      solid-js:
+        optional: true
 
   '@rollup/rollup-android-arm-eabi@4.60.2':
     resolution: {integrity: sha512-dnlp69efPPg6Uaw2dVqzWRfAWRnYVb1XJ8CyyhIbZeaq4CA5/mLeZ1IEt9QqQxmbdvagjLIm2ZL8BxXv5lH4Yw==}
@@ -880,7 +885,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@kidlib/p2p@file:../..': {}
+  '@kidlib/p2p@file:../..(solid-js@1.9.12)':
+    optionalDependencies:
+      solid-js: 1.9.12
 
   '@rollup/rollup-android-arm-eabi@4.60.2':
     optional: true
