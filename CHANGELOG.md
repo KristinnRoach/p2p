@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.1.7
+
+### Patch Changes
+
+- 616c5d4: Add SolidJS adapter and expose validateRoomSignaling().
+
 ## 0.1.6
 
 ### Patch Changes
