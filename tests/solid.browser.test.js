@@ -260,4 +260,42 @@ describe('useP2PRoom', () => {
 
     dispose();
   });
+
+  it('ignores stale join completions after the room is closed', async () => {
+    let resolveJoin;
+    const fakeRoom = createFakeRoom({
+      join: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveJoin = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
+
+    let solidRoom;
+    const dispose = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    const joinPromise = solidRoom.join({
+      signaling: {},
+      peerId: 'peer-a',
+    });
+
+    await vi.waitFor(() => expect(fakeRoom.join).toHaveBeenCalledOnce());
+
+    solidRoom.close();
+
+    fakeRoom.state = 'joined';
+    fakeRoom.memberCount = 1;
+    resolveJoin();
+
+    await expect(joinPromise).resolves.toBeUndefined();
+    expect(solidRoom.state()).toBe('idle');
+    expect(solidRoom.memberCount()).toBe(0);
+
+    dispose();
+  });
 });

@@ -168,14 +168,17 @@ export function useP2PRoom() {
   async function join(options) {
     const currentRoom = await watchRoom(options);
     if (!currentRoom) return undefined;
+    const runId = currentRunId;
 
     try {
       setError(undefined);
       setErrorKind(undefined);
       await currentRoom.join();
+      if (runId !== currentRunId || room() !== currentRoom) return undefined;
       syncRoomSignals(currentRoom);
       return currentRoom;
     } catch (cause) {
+      if (runId !== currentRunId || room() !== currentRoom) return undefined;
       setRoomError(cause);
       if (isLocalStreamError(cause)) closeCurrentRoom('error');
       return undefined;

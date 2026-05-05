@@ -63,7 +63,7 @@ export default function Room() {
           Members: {p2p.memberCount()} / {p2p.memberCapacity() ?? MAX_MEMBERS}
         </p>
         <Show when={p2p.errorKind()}>
-          {(kind) => <p>Could not join room: {kind()}</p>}
+          {(kind) => <p>Room error: {kind()}</p>}
         </Show>
       </div>
 
