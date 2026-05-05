@@ -15,8 +15,6 @@ export default function Room() {
       return;
     }
 
-    p2p.close();
-
     await p2p.join({
       roomId,
       peerId: crypto.randomUUID(),
