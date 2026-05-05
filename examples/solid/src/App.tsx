@@ -1,4 +1,4 @@
-import Room from './MeshRoomExample/components/Room';
+import Room from './SimpleRoomExample/Room';
 
 export default function App() {
   return (
