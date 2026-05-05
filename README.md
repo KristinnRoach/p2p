@@ -95,6 +95,7 @@ session.close();
 |--------|-------------|------|
 | `createPairSignaling` | Normalize a 1:1 signaling source | [docs/signaling.md](docs/signaling.md) |
 | `createRoomSignaling` | Normalize a room signaling source | [docs/signaling.md](docs/signaling.md) |
+| `validateRoomSignaling` | Validate a room signaling source | [docs/signaling.md](docs/signaling.md) |
 | `Peer` | Direct `RTCPeerConnection` control | [docs/peer.md](docs/peer.md) |
 | `createDataChannel` / `joinDataChannel` | Data-only peer connection | [docs/peer.md](docs/peer.md) |
 | `attachRemoteStream` | Assemble remote tracks into a `MediaStream` | [docs/peer.md](docs/peer.md) |

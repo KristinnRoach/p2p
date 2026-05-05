@@ -6,4 +6,8 @@ export type {
   RtcSignalingSource,
 } from './index.js';
 
-export { createPairSignaling, createRoomSignaling } from './index.js';
+export {
+  createPairSignaling,
+  createRoomSignaling,
+  validateRoomSignaling,
+} from './index.js';
