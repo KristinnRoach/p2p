@@ -692,8 +692,10 @@ export class P2PRoom extends EventTarget {
         data: event.data,
       });
     };
-    const onClose = () =>
+    const onClose = () => {
+      this._closeDataChannel(memberId);
       this._emit('dataChannelClose', { peerId: memberId, memberId, channel });
+    };
 
     channel.addEventListener('open', onOpen);
     channel.addEventListener('message', onMessage);
