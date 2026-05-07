@@ -133,8 +133,12 @@ export function useP2PRoom() {
       nextRoom.on('dataChannel', () =>
         setDataChannels(new Map(nextRoom.dataChannels)),
       ),
-      nextRoom.on('dataChannelClose', () =>
-        setDataChannels(new Map(nextRoom.dataChannels)),
+      nextRoom.on('dataChannelClose', ({ memberId }) =>
+        setDataChannels((prev) => {
+          const next = new Map(prev);
+          next.delete(memberId);
+          return next;
+        }),
       ),
       nextRoom.on('memberLeft', () =>
         setDataChannels(new Map(nextRoom.dataChannels)),

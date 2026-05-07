@@ -15,11 +15,6 @@
       "import": "./src/config.js",
       "default": "./src/config.js"
     },
-    "./data-channel": {
-      "types": "./src/types/data-channel.d.ts",
-      "import": "./src/data-channel.js",
-      "default": "./src/data-channel.js"
-    },
     "./ice": {
       "types": "./src/types/ice.d.ts",
       "import": "./src/ice.js",
