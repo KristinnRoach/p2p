@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.1.8
+
+### Patch Changes
+
+- 79ae894: Remove data-channel module and expand Solid adapter.
+
 ## 0.1.7
 
 ### Patch Changes
