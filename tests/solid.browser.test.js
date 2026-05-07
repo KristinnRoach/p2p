@@ -23,6 +23,7 @@ function createFakeRoom(overrides = {}) {
     memberCount: 0,
     memberCapacity: 4,
     isFull: false,
+    dataChannels: new Map(),
     join: vi.fn(async () => {
       room.state = 'joined';
       room.emit('statechange', { previous: 'watching', state: 'joined' });
@@ -259,6 +260,85 @@ describe('useP2PRoom', () => {
     expect(solidRoom.remoteMemberStreams()[1]).toBe(previousStreams[0]);
 
     dispose();
+  });
+
+  describe('dataChannels signal', () => {
+    it('adds a channel when dataChannel event fires', async () => {
+      const fakeRoom = createFakeRoom();
+      roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
+
+      let solidRoom;
+      const dispose = createRoot((dispose) => {
+        solidRoom = useP2PRoom();
+        return dispose;
+      });
+
+      await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+
+      const channel = {};
+      fakeRoom.dataChannels.set('peer-b', channel);
+      fakeRoom.emit('dataChannel', { memberId: 'peer-b', channel });
+
+      expect(solidRoom.dataChannels().get('peer-b')).toBe(channel);
+      expect(solidRoom.dataChannels().size).toBe(1);
+
+      dispose();
+    });
+
+    it('removes a channel on dataChannelClose even when already absent from the room Map', async () => {
+      const fakeRoom = createFakeRoom();
+      roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
+
+      let solidRoom;
+      const dispose = createRoot((dispose) => {
+        solidRoom = useP2PRoom();
+        return dispose;
+      });
+
+      await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+
+      const channel = {};
+      fakeRoom.dataChannels.set('peer-b', channel);
+      fakeRoom.emit('dataChannel', { memberId: 'peer-b', channel });
+      expect(solidRoom.dataChannels().size).toBe(1);
+
+      // P2PRoom removes the channel from its Map before emitting dataChannelClose;
+      // the signal must still update correctly from its own previous state.
+      fakeRoom.dataChannels.delete('peer-b');
+      fakeRoom.emit('dataChannelClose', { memberId: 'peer-b', channel });
+
+      expect(solidRoom.dataChannels().has('peer-b')).toBe(false);
+
+      dispose();
+    });
+
+    it('removes a channel when the member leaves', async () => {
+      const fakeRoom = createFakeRoom();
+      roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
+
+      let solidRoom;
+      const dispose = createRoot((dispose) => {
+        solidRoom = useP2PRoom();
+        return dispose;
+      });
+
+      await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+
+      const channel = {};
+      fakeRoom.dataChannels.set('peer-b', channel);
+      fakeRoom.emit('dataChannel', { memberId: 'peer-b', channel });
+      expect(solidRoom.dataChannels().size).toBe(1);
+
+      fakeRoom.dataChannels.delete('peer-b');
+      fakeRoom.members = [];
+      fakeRoom.memberCount = 0;
+      fakeRoom.remoteMemberStreams = [];
+      fakeRoom.emit('memberLeft', { memberId: 'peer-b', stream: null });
+
+      expect(solidRoom.dataChannels().has('peer-b')).toBe(false);
+
+      dispose();
+    });
   });
 
   it('ignores stale join completions after the room is closed', async () => {

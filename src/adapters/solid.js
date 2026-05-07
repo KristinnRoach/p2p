@@ -1,5 +1,8 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { isLocalStreamError, isRoomFullError, watchP2PRoom } from '../room.js';
+import { setLogger } from '../logger.js';
+
+export { setLogger };
 
 function noopBroadcast() {
   return 0;
@@ -32,6 +35,7 @@ export function useP2PRoom() {
   const [memberCount, setMemberCount] = createSignal(0);
   const [memberCapacity, setMemberCapacity] = createSignal();
   const [isFull, setIsFull] = createSignal(false);
+  const [dataChannels, setDataChannels] = createSignal(new Map());
   let listenerCleanup = null;
   let currentRunId = 0;
 
@@ -71,6 +75,7 @@ export function useP2PRoom() {
     setMemberCount(0);
     setMemberCapacity(undefined);
     setIsFull(false);
+    setDataChannels(new Map());
   }
 
   function closeCurrentRoom(nextState = 'idle') {
@@ -90,6 +95,7 @@ export function useP2PRoom() {
     setMemberCount(nextRoom.memberCount);
     setMemberCapacity(nextRoom.memberCapacity);
     setIsFull(nextRoom.isFull);
+    setDataChannels(new Map(nextRoom.dataChannels));
   }
 
   function updateMembership(nextRoom) {
@@ -124,6 +130,19 @@ export function useP2PRoom() {
         setError(error);
         setErrorKind('peer');
       }),
+      nextRoom.on('dataChannel', () =>
+        setDataChannels(new Map(nextRoom.dataChannels)),
+      ),
+      nextRoom.on('dataChannelClose', ({ memberId }) =>
+        setDataChannels((prev) => {
+          const next = new Map(prev);
+          next.delete(memberId);
+          return next;
+        }),
+      ),
+      nextRoom.on('memberLeft', () =>
+        setDataChannels(new Map(nextRoom.dataChannels)),
+      ),
     ];
 
     return () => cleanups.forEach((cleanup) => cleanup());
@@ -211,6 +230,8 @@ export function useP2PRoom() {
     join,
     leave,
     close,
+    dataChannels,
+    watch: (options) => watchRoom(options),
     send: (memberId, data) => room()?.send(memberId, data),
     broadcast: (data) => room()?.broadcast(data) ?? noopBroadcast(),
   };

@@ -2,9 +2,9 @@
 
 /**
  * Default RTCConfiguration with Google's public STUN server.
- * Consumers can override per call by passing their own rtcConfig into
- * createDataChannel / joinDataChannel, or by constructing RTCPeerConnection
- * directly.
+ * Consumers can override per session by passing rtcConfig into
+ * startP2PSession / joinP2PSession / P2PRoom, or by constructing
+ * RTCPeerConnection directly.
  */
 export const rtcConfig = {
   iceServers: [
