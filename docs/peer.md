@@ -26,22 +26,6 @@ await peer.start({
 peer.close();
 ```
 
-## Data-only connections
-
-For data channels without media streams:
-
-```js
-import { createDataChannel, joinDataChannel, closeDataConnection } from '@kidlib/p2p';
-
-// Initiator
-const { pc, dataChannel } = await createDataChannel(signaling);
-
-// Joiner
-const { pc, dataChannel } = await joinDataChannel(signaling);
-
-closeDataConnection(pc);
-```
-
 ## attachRemoteStream
 
 Assembles incoming tracks into a `MediaStream` without touching the DOM:

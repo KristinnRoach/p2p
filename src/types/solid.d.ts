@@ -6,6 +6,8 @@ import type {
   RemoteMemberStream,
 } from './index.js';
 
+export { setLogger } from './index.js';
+
 export type SolidP2PRoomState =
   | P2PRoomState
   | 'idle'
@@ -31,6 +33,8 @@ export interface SolidP2PRoom {
   readonly memberCount: Accessor<number>;
   readonly memberCapacity: Accessor<number | undefined>;
   readonly isFull: Accessor<boolean>;
+  readonly dataChannels: Accessor<Map<string, RTCDataChannel>>;
+  watch(options: P2PRoomOptions): Promise<P2PRoom | undefined>;
   join(options: P2PRoomOptions): Promise<P2PRoom | undefined>;
   leave(): Promise<void>;
   close(): void;

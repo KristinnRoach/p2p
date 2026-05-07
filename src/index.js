@@ -29,10 +29,4 @@ export {
   watchP2PRoom,
 } from './room.js';
 
-export {
-  createDataChannel,
-  joinDataChannel,
-  closeDataConnection,
-} from './data-channel.js';
-
 export { Peer, PEER_STATES } from './peer.js';

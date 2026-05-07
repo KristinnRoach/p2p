@@ -385,31 +385,6 @@ export function attachRemoteStream(
   options?: AttachRemoteStreamOptions,
 ): () => void;
 
-export interface DataChannelOptions {
-  label?: string;
-  rtcConfig?: RTCConfiguration;
-  monitorRtt?: boolean;
-  rttLabel?: string;
-  dataChannelTimeoutMs?: number;
-}
-
-export interface DataChannelResult {
-  pc: RTCPeerConnection;
-  dataChannel: RTCDataChannel;
-}
-
-export function createDataChannel(
-  signaling: RtcSignalingSource,
-  options?: DataChannelOptions,
-): Promise<DataChannelResult>;
-
-export function joinDataChannel(
-  signaling: RtcSignalingSource,
-  options?: DataChannelOptions,
-): Promise<DataChannelResult>;
-
-export function closeDataConnection(pc: RTCPeerConnection | null): void;
-
 export declare const PEER_STATES: Readonly<{
   IDLE: 'idle';
   CONNECTING: 'connecting';
