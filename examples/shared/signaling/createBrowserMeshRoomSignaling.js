@@ -11,17 +11,17 @@ export function createBrowserMeshRoomSignaling(roomId) {
 
   return {
     join: async (peerId) => {
-      refreshPresence(roomId, key, peerId);
+      await refreshPresence(roomId, key, peerId);
     },
     leave: async (peerId) => {
-      writeJson(
+      await updatePresence(
         roomId,
         key,
-        readPresence(key).filter((entry) => entry.peerId !== peerId),
+        (peers) => peers.filter((entry) => entry.peerId !== peerId),
       );
     },
     refreshPresence: async (peerId) => {
-      refreshPresence(roomId, key, peerId);
+      await refreshPresence(roomId, key, peerId);
     },
     onPeers: (callback) => {
       const emit = () => callback(readActivePeerIds(roomId, key));
@@ -67,16 +67,18 @@ function createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }) {
     localCandidates: `${prefix}${roomId}:pair:${pair}:candidates:${localPeerId}`,
     remoteCandidates: `${prefix}${roomId}:pair:${pair}:candidates:${remotePeerId}`,
   };
-  let remoteCandidateIndex = 0;
-
   const subscribe = (key, callback) => {
     let latestJson = JSON.stringify(readJson(key, undefined));
+    let hasEmitted = false;
     const emitIfChanged = () => {
       const value = readJson(key, undefined);
       const nextJson = JSON.stringify(value);
       if (nextJson === latestJson) return;
       latestJson = nextJson;
-      if (value != null) callback(value);
+      if (value != null) {
+        hasEmitted = true;
+        callback(value);
+      }
     };
     const onStorage = (event) => {
       if (event.key === key) emitIfChanged();
@@ -87,7 +89,11 @@ function createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }) {
     channel?.addEventListener('message', onBroadcast);
     queueMicrotask(() => {
       const value = readJson(key, undefined);
-      if (value != null) callback(value);
+      latestJson = JSON.stringify(value);
+      if (value != null && !hasEmitted) {
+        hasEmitted = true;
+        callback(value);
+      }
     });
 
     return () => {
@@ -106,13 +112,15 @@ function createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }) {
       candidates.push(candidate);
       writeJson(roomId, keys.localCandidates, candidates);
     },
-    onRemoteCandidate: (callback) =>
-      subscribe(keys.remoteCandidates, (candidates) => {
+    onRemoteCandidate: (callback) => {
+      let remoteCandidateIndex = 0;
+      return subscribe(keys.remoteCandidates, (candidates) => {
         for (const candidate of candidates.slice(remoteCandidateIndex)) {
           callback(candidate);
         }
         remoteCandidateIndex = candidates.length;
-      }),
+      });
+    },
     close() {
       channel?.close();
     },
@@ -165,17 +173,38 @@ function readActivePeerIds(roomId, key) {
   const active = peers.filter((entry) => now - entry.lastSeen < presenceTtlMs);
   const activePeerIds = active.map((entry) => entry.peerId);
   if (active.length !== peers.length) {
-    writeJson(roomId, key, active);
+    void updatePresence(roomId, key, (latestPeers) =>
+      latestPeers.filter((entry) => now - entry.lastSeen < presenceTtlMs),
+    );
   }
   return activePeerIds;
 }
 
 function refreshPresence(roomId, key, peerId) {
   const now = Date.now();
-  const peers = readPresence(key).filter(
-    (entry) => entry.peerId !== peerId && now - entry.lastSeen < presenceTtlMs,
+  return updatePresence(roomId, key, (peers) =>
+    [
+      ...peers.filter(
+        (entry) =>
+          entry.peerId !== peerId && now - entry.lastSeen < presenceTtlMs,
+      ),
+      { peerId, lastSeen: now },
+    ],
   );
-  writeJson(roomId, key, [...peers, { peerId, lastSeen: now }]);
+}
+
+async function updatePresence(roomId, key, updater) {
+  return withPresenceLock(roomId, () => {
+    writeJson(roomId, key, updater(readPresence(key)));
+  });
+}
+
+function withPresenceLock(roomId, callback) {
+  const locks = globalThis.navigator?.locks;
+  if (typeof locks?.request === 'function') {
+    return locks.request(`${prefix}${roomId}:presence`, callback);
+  }
+  return callback();
 }
 
 function writeJson(roomId, key, value) {
