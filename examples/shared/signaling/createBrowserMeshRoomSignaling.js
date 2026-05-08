@@ -209,7 +209,9 @@ function withPresenceLock(roomId, callback) {
 
 function writeJson(roomId, key, value) {
   localStorage.setItem(key, JSON.stringify(value));
-  const channel = new BroadcastChannel(roomChannelName(roomId));
-  channel.postMessage({ type: 'meshChanged' });
-  channel.close();
+  if ('BroadcastChannel' in globalThis) {
+    const channel = new BroadcastChannel(roomChannelName(roomId));
+    channel.postMessage({ type: 'meshChanged' });
+    channel.close();
+  }
 }

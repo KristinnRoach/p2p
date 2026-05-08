@@ -26,7 +26,6 @@ export function createBrowserTabSignaling({ roomId, role }) {
     role === 'host' ? 'hostCandidates' : 'guestCandidates';
   const remoteCandidates =
     role === 'host' ? 'guestCandidates' : 'hostCandidates';
-  let remoteCandidateIndex = 0;
 
   const readJson = (storageKey, fallback) => {
     const raw = localStorage.getItem(storageKey);
@@ -137,8 +136,9 @@ export function createBrowserTabSignaling({ roomId, role }) {
     sendCandidate: async (candidate) => {
       appendCandidate(keys[localCandidates], candidate);
     },
-    onRemoteCandidate: (callback) =>
-      subscribe(
+    onRemoteCandidate: (callback) => {
+      let remoteCandidateIndex = 0;
+      return subscribe(
         (room) => room[remoteCandidates],
         (candidates) => {
           for (const candidate of candidates.slice(remoteCandidateIndex)) {
@@ -146,7 +146,8 @@ export function createBrowserTabSignaling({ roomId, role }) {
           }
           remoteCandidateIndex = candidates.length;
         },
-      ),
+      );
+    },
   };
 
   const signaling = createPairSignaling(source);
