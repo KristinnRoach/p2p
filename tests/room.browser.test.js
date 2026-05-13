@@ -34,7 +34,7 @@ function createTestRoomSignaling(overrides = {}) {
   return {
     join: vi.fn(),
     leave: vi.fn(),
-    close: vi.fn(),
+    cleanupSignaling: vi.fn(),
     onPeers: vi.fn((callback) => {
       onPeers = callback;
       return () => {
@@ -110,7 +110,7 @@ describe('P2PRoom', () => {
     room.close();
 
     expect(signaling.leave).not.toHaveBeenCalled();
-    expect(signaling.close).toHaveBeenCalledOnce();
+    expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
   });
 
   it('joins from watch mode and connects to existing peers', async () => {
@@ -392,6 +392,27 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('suppresses async signaling cleanup failures when closed during factory setup', async () => {
+    const signaling = createTestRoomSignaling({
+      cleanupSignaling: vi.fn(() => Promise.reject(new Error('cleanup failed'))),
+    });
+    const deferred = createDeferred();
+    const room = new P2PRoom({
+      roomId: 'room-a',
+      createSignaling: () => deferred.promise,
+      peerId: 'a',
+      autoJoin: false,
+    });
+
+    room.close();
+    deferred.resolve(signaling);
+
+    await expect(room.ready).rejects.toMatchObject({ name: 'AbortError' });
+    await flushAsyncWork();
+
+    expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
+  });
+
   it('retries factory signaling after a failed lazy join', async () => {
     const signaling = createTestRoomSignaling();
     const createSignaling = vi
@@ -511,7 +532,7 @@ describe('P2PRoom', () => {
 
     expect(signaling.leave).toHaveBeenCalledWith('a');
     expect(session.close).toHaveBeenCalled();
-    expect(signaling.close).not.toHaveBeenCalled();
+    expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
 
     await room.join();

@@ -286,4 +286,16 @@ describe('createRoomSignaling', () => {
       remotePeerId: 'peer-c',
     })).toThrow(/after close/);
   });
+
+  it('calls optional room source cleanupSignaling and returns async cleanup failures', async () => {
+    const error = new Error('room close failed');
+    const source = createRoomSource({
+      cleanupSignaling: vi.fn(() => Promise.reject(error)),
+    });
+    const signaling = createRoomSignaling(source);
+
+    await expect(signaling.close()).rejects.toThrow(error);
+    expect(source.cleanupSignaling).toHaveBeenCalledTimes(1);
+    expect(signaling.close()).toBeUndefined();
+  });
 });

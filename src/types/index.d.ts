@@ -128,12 +128,18 @@ export interface P2PRoomPeerSignalingOptions {
 
 export interface P2PRoomSignaling {
   join(peerId: string): void | Promise<void>;
+  /** Explicitly remove this peer from presence. Backend record semantics are adapter-owned. */
   leave(peerId: string): void | Promise<void>;
   refreshPresence?(peerId: string): void | Promise<void>;
   onPeers(callback: (peerIds: string[]) => void): void | (() => void);
   /** Must return synchronously — the room calls this inline during peer connection setup. */
   createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcSignalingSource;
-  close?(): void;
+  /**
+   * Optional permanent adapter teardown. Release provider-owned listeners,
+   * sockets, timers, or scoped backend records; do not assume whole-room
+   * backend data can always be deleted.
+   */
+  cleanupSignaling?(): void | Promise<void>;
 }
 
 export type P2PRoomState =
@@ -370,7 +376,7 @@ export function createRoomSignaling(
   source: P2PRoomSignaling,
 ): P2PRoomSignaling & {
   createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcPairSignaling;
-  close(): void;
+  close(): void | Promise<void>;
 };
 
 export interface AttachRemoteStreamOptions {

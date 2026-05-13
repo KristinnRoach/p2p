@@ -33,15 +33,23 @@ interface P2PRoomSignaling {
     localPeerId: string;
     remotePeerId: string;
   }): RtcSignalingSource;
-  close?(): void;
+  cleanupSignaling?(): void | Promise<void>;
 }
 ```
 
 Presence cleanup is provider-owned. `leave(peerId)` is the explicit cleanup
 path. If an adapter implements `refreshPresence(peerId)`, `P2PRoom` calls it
 periodically after joining so the adapter can expire peers that disappear
-without calling `leave()`. Adapters can also use `close()`, server presence, or
-a combination of these mechanisms.
+without calling `leave()`. Adapters can also use `cleanupSignaling()`, server
+presence, or a combination of these mechanisms.
+
+`cleanupSignaling()` is an optional permanent teardown hook for adapter-owned
+resources. Use it to release provider listeners, sockets, timers, pending
+disconnect hooks, or signaling records that are safe for that adapter to own. Do
+not assume a room adapter can delete arbitrary backend room state: WebSocket,
+Firestore, RTDB, Redis, in-memory, and server-owned signaling backends often
+have different retention and authorization rules. Whole-room cleanup should stay
+in the adapter or application layer that understands those rules.
 
 ## Normalizing a signaling source
 
@@ -50,6 +58,9 @@ a combination of these mechanisms.
 - Throws immediately if required methods are missing
 - Callbacks stop firing after `close()`
 - `close()` calls all active unsubscribe functions
+- For room signaling, `close()` also calls an optional provider
+  `cleanupSignaling()` hook and may return a promise when provider cleanup is
+  async
 
 ```js
 import { createPairSignaling, createRoomSignaling } from '@kidlib/p2p';
@@ -57,12 +68,12 @@ import { createPairSignaling, createRoomSignaling } from '@kidlib/p2p';
 const pairSignaling = createPairSignaling({
   sendOffer, sendAnswer, onOffer, onAnswer, sendCandidate, onRemoteCandidate,
 });
-// pairSignaling.close() unsubscribes all active listeners
+// pairSignaling.close() unsubscribes active listeners
 
 const roomSignaling = createRoomSignaling({
-  join, leave, onPeers, createPeerSignaling,
+  join, leave, onPeers, createPeerSignaling, cleanupSignaling,
 });
-// roomSignaling.close() closes all pair signalings and the room subscription
+// roomSignaling.close() closes pair signalings, the room subscription, and cleanupSignaling()
 ```
 
 `joinP2PRoom` and `watchP2PRoom` normalize room signaling internally.

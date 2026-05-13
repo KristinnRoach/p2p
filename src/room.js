@@ -593,7 +593,7 @@ export class P2PRoom extends EventTarget {
     const signaling = await this._signalingPromise;
     if (this._state === 'closed') {
       try {
-        signaling.close?.();
+        Promise.resolve(signaling.close?.()).catch(() => {});
       } catch (_) {}
       throw createAbortError();
     }

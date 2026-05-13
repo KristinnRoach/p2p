@@ -132,7 +132,10 @@ export function createPairSignaling(source) {
  *
  * Cleanup policy is intentionally provider-owned: implementations decide
  * whether live peer lists are maintained through explicit leave(), heartbeat,
- * server presence, or another mechanism.
+ * server presence, or another mechanism. If supplied, `cleanupSignaling()` is
+ * called on permanent teardown and may release provider-owned listeners,
+ * sockets, timers, or backend records. It is not required to delete whole room
+ * state.
  *
  * @param {Object} source
  * @returns {{
@@ -144,7 +147,7 @@ export function createPairSignaling(source) {
  *     localPeerId: string,
  *     remotePeerId: string,
  *   }) => RtcSignalingSource & { close: () => void },
- *   close: () => void,
+ *   close: () => void|Promise<void>,
  * }}
  */
 export function createRoomSignaling(source) {
@@ -191,19 +194,7 @@ export function createRoomSignaling(source) {
   };
 
   const closeAll = () => {
-    let firstError;
-    let hasError = false;
-
-    const capture = (fn) => {
-      try {
-        fn();
-      } catch (error) {
-        if (!hasError) {
-          firstError = error;
-          hasError = true;
-        }
-      }
-    };
+    const { capture, finish } = createCleanupCollector();
 
     for (const unsubscribe of [...subscriptions]) capture(unsubscribe);
     subscriptions.clear();
@@ -213,9 +204,11 @@ export function createRoomSignaling(source) {
     }
     pairSignalings.clear();
 
-    if (typeof source.close === 'function') capture(() => source.close());
+    if (typeof source.cleanupSignaling === 'function') {
+      capture(() => source.cleanupSignaling());
+    }
 
-    if (hasError) throw firstError;
+    return finish();
   };
 
   return {
@@ -244,14 +237,48 @@ export function createRoomSignaling(source) {
         ...pairSignaling,
         close() {
           pairSignalings.delete(pairSignaling);
-          close();
+          return close();
         },
       };
     },
     close() {
       if (closed) return;
       closed = true;
-      closeAll();
+      return closeAll();
+    },
+  };
+}
+
+function createCleanupCollector() {
+  let firstError;
+  let hasError = false;
+  const asyncCleanups = [];
+
+  const rememberError = (error) => {
+    if (!hasError) {
+      firstError = error;
+      hasError = true;
+    }
+  };
+
+  return {
+    capture(fn) {
+      try {
+        const result = fn();
+        if (result && typeof result.then === 'function') {
+          asyncCleanups.push(Promise.resolve(result).catch(rememberError));
+        }
+      } catch (error) {
+        rememberError(error);
+      }
+    },
+    finish() {
+      if (asyncCleanups.length > 0) {
+        return Promise.all(asyncCleanups).then(() => {
+          if (hasError) throw firstError;
+        });
+      }
+      if (hasError) throw firstError;
     },
   };
 }
@@ -299,6 +326,14 @@ function assertRoomSignalingSource(source) {
   ) {
     throw new Error(
       'createRoomSignaling: source refreshPresence must be a function',
+    );
+  }
+  if (
+    source.cleanupSignaling != null &&
+    typeof source.cleanupSignaling !== 'function'
+  ) {
+    throw new Error(
+      'createRoomSignaling: source cleanupSignaling must be a function',
     );
   }
 }
