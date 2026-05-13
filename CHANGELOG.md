@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.1.9
+
+### Patch Changes
+
+- be85e8f: Add room signaling cleanup hook
+
 ## 0.1.8
 
 ### Patch Changes
