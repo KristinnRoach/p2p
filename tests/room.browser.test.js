@@ -392,6 +392,27 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('suppresses async signaling cleanup failures when closed during factory setup', async () => {
+    const signaling = createTestRoomSignaling({
+      cleanupSignaling: vi.fn(() => Promise.reject(new Error('cleanup failed'))),
+    });
+    const deferred = createDeferred();
+    const room = new P2PRoom({
+      roomId: 'room-a',
+      createSignaling: () => deferred.promise,
+      peerId: 'a',
+      autoJoin: false,
+    });
+
+    room.close();
+    deferred.resolve(signaling);
+
+    await expect(room.ready).rejects.toMatchObject({ name: 'AbortError' });
+    await flushAsyncWork();
+
+    expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
+  });
+
   it('retries factory signaling after a failed lazy join', async () => {
     const signaling = createTestRoomSignaling();
     const createSignaling = vi
