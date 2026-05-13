@@ -42,7 +42,7 @@ export function createBrowserMeshRoomSignaling(roomId) {
     },
     createPeerSignaling: ({ localPeerId, remotePeerId }) =>
       createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }),
-    close() {
+    cleanupSignaling() {
       channel?.close();
     },
   };

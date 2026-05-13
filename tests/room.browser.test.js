@@ -34,7 +34,7 @@ function createTestRoomSignaling(overrides = {}) {
   return {
     join: vi.fn(),
     leave: vi.fn(),
-    close: vi.fn(),
+    cleanupSignaling: vi.fn(),
     onPeers: vi.fn((callback) => {
       onPeers = callback;
       return () => {
@@ -110,7 +110,7 @@ describe('P2PRoom', () => {
     room.close();
 
     expect(signaling.leave).not.toHaveBeenCalled();
-    expect(signaling.close).toHaveBeenCalledOnce();
+    expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
   });
 
   it('joins from watch mode and connects to existing peers', async () => {
@@ -511,7 +511,7 @@ describe('P2PRoom', () => {
 
     expect(signaling.leave).toHaveBeenCalledWith('a');
     expect(session.close).toHaveBeenCalled();
-    expect(signaling.close).not.toHaveBeenCalled();
+    expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
 
     await room.join();
