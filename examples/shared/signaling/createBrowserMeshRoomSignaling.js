@@ -121,9 +121,6 @@ function createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }) {
         remoteCandidateIndex = candidates.length;
       });
     },
-    close() {
-      channel?.close();
-    },
   };
 }
 
