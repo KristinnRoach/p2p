@@ -106,24 +106,24 @@ keyboard focus styles on video tiles. WCAG audit before V1 cut.
 
 ## Quick wins
 
-These are small, isolated, and purely beneficial — knock them out
-opportunistically rather than as a batch.
+Small, isolated, purely beneficial. Status reflects current branch.
 
-- **Chat `max-messages` attribute.** Replace the hardcoded
-  `CHAT_HISTORY_LIMIT = 50` with an attribute-driven cap. ~5 lines.
-- **`peer-id` attribute / setter on `<p2p-room>`.** Cheap, unlocks
-  stable identities in apps that already have one.
-- **`<p2p-chat>` opt-in JSON.parse.** Skip parsing when no chat element
-  is mounted. Same module, no API change.
-- **Defer-and-cancel in `disconnectedCallback`.** Five-line guard that
-  fixes the React-strict-mode foot-gun.
-- **Expose CSS custom properties for the existing palette** (`--p2p-accent`,
-  `--p2p-border`, `--p2p-radius`, `--p2p-bg`). Doesn't unlock full theming
-  but covers 80% of the brand-color use case.
-- **`part` attributes on the obvious targets** (message list, send button,
-  video figure). Pairs with the above; consumers can style the rest later.
-- **`role="alert"` on the status error region.** One attribute, real a11y
-  improvement.
-- **Drop the unused `escapeHtml` import path** — already done as part of
-  the chat textContent refactor; flagged here only as a reminder that
-  similar dead-code passes are cheap.
+- [x] **Chat `max-messages` attribute.** Replaces hardcoded
+  `CHAT_HISTORY_LIMIT`. Re-trims on attribute change.
+- [x] **`peer-id` attribute / setter on `<p2p-room>`.** Falls back to a
+  per-instance generated UUID when unset.
+- [x] **`<p2p-chat>` opt-in JSON.parse.** Room tracks a chat-listener
+  counter via `addChatListener` / `removeChatListener`; data-channel
+  messages skip parsing when the counter is zero.
+- [x] **Defer-and-cancel in `disconnectedCallback`.** `queueMicrotask`
+  with an `isConnected` recheck so reparenting doesn't tear the room
+  down. Items 4 above (the full version) covers the rest of the
+  edge cases.
+- [x] **CSS custom properties** (`--p2p-accent`, `--p2p-accent-fg`,
+  `--p2p-border`, `--p2p-radius`, `--p2p-bg`, `--p2p-fg`,
+  `--p2p-muted-fg`, `--p2p-error`) on every component's `:host`.
+- [x] **`part` attributes** on controls (`form`, `room-id-input`,
+  `join-button`, `leave-button`), status (`status`, `members`,
+  `error`), video grid (`grid`, `empty`, `tile`, `video`, `caption`),
+  and chat (`messages`, `message`, `form`, `input`, `send-button`).
+- [x] **`role="alert"`** on the status error region.

@@ -54,6 +54,45 @@ room.roomOptions = {
 };
 ```
 
+## Attributes
+
+`p2p-room`:
+
+- `room-id` (string)
+- `member-capacity` (number)
+- `peer-id` (string, optional) — supply a stable identity. When omitted, the
+  element generates a UUID once on construction.
+
+`p2p-chat`:
+
+- `max-messages` (number, default 50) — in-memory cap for rendered messages.
+
+## Styling
+
+All elements expose CSS custom properties on `:host`:
+
+| Property            | Default   |
+|---------------------|-----------|
+| `--p2p-accent`      | `#1455d9` |
+| `--p2p-accent-fg`   | `#fff`    |
+| `--p2p-border`      | `#c9ced6` |
+| `--p2p-radius`      | `6px`     |
+| `--p2p-bg`          | `#fff`    |
+| `--p2p-fg`          | `#354052` |
+| `--p2p-muted-fg`    | `#667085` |
+| `--p2p-error`       | `#b42318` |
+
+Shadow parts are exposed for deeper overrides:
+
+- `p2p-room-controls`: `form`, `room-id-input`, `join-button`, `leave-button`
+- `p2p-room-status`: `status`, `members`, `error`
+- `p2p-video-grid`: `grid`, `empty`, `tile`, `video`, `caption`
+- `p2p-chat`: `messages`, `message`, `form`, `input`, `send-button`
+
+```css
+p2p-chat::part(send-button) { background: rebeccapurple; }
+```
+
 ## Events And Methods
 
 `p2p-room` dispatches:

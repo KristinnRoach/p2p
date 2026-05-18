@@ -60,6 +60,8 @@ export declare class P2PRoomElement extends HTMLElement {
   memberCapacity: number;
 
   subscribe(callback: (snapshot: P2PRoomSnapshot) => void): () => void;
+  addChatListener(): void;
+  removeChatListener(): void;
   join(): Promise<void>;
   leave(): void;
   sendChat(text: string): number;
@@ -72,4 +74,6 @@ export declare class P2PRoomElement extends HTMLElement {
 export declare class P2PRoomControlsElement extends HTMLElement {}
 export declare class P2PRoomStatusElement extends HTMLElement {}
 export declare class P2PVideoGridElement extends HTMLElement {}
-export declare class P2PChatElement extends HTMLElement {}
+export declare class P2PChatElement extends HTMLElement {
+  maxMessages: number;
+}

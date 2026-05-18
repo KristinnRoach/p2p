@@ -2,6 +2,20 @@ import { joinP2PRoom } from '../index.js';
 
 const CHAT_TYPE = 'kidlib:p2p:components:chat';
 const DEFAULT_MEMBER_CAPACITY = 6;
+const DEFAULT_CHAT_HISTORY_LIMIT = 50;
+
+const SHARED_VARS = `
+  :host {
+    --p2p-accent: #1455d9;
+    --p2p-accent-fg: #fff;
+    --p2p-border: #c9ced6;
+    --p2p-radius: 6px;
+    --p2p-bg: #fff;
+    --p2p-fg: #354052;
+    --p2p-muted-fg: #667085;
+    --p2p-error: #b42318;
+  }
+`;
 
 const componentDefaults = {
   createSignaling: null,
@@ -52,13 +66,13 @@ export function defineP2PChat() {
 
 export class P2PRoomElement extends HTMLElement {
   static get observedAttributes() {
-    return ['room-id', 'member-capacity'];
+    return ['room-id', 'member-capacity', 'peer-id'];
   }
 
   constructor() {
     super();
     this.room = null;
-    this.peerId = crypto.randomUUID();
+    this._generatedPeerId = crypto.randomUUID();
     this.createSignaling = null;
     this.getLocalStream = null;
     this.roomOptions = null;
@@ -67,14 +81,22 @@ export class P2PRoomElement extends HTMLElement {
     this.localStream = null;
     this.remoteStreams = [];
     this.subscribers = new Set();
+    this.chatListenerCount = 0;
+    this._leavePending = false;
   }
 
   connectedCallback() {
+    this._leavePending = false;
     this.notify();
   }
 
   disconnectedCallback() {
-    this.leave();
+    this._leavePending = true;
+    queueMicrotask(() => {
+      if (this.isConnected || !this._leavePending) return;
+      this._leavePending = false;
+      this.leave();
+    });
   }
 
   attributeChangedCallback() {
@@ -100,10 +122,27 @@ export class P2PRoomElement extends HTMLElement {
     this.setAttribute('member-capacity', String(value));
   }
 
+  get peerId() {
+    return this.getAttribute('peer-id') || this._generatedPeerId;
+  }
+
+  set peerId(value) {
+    if (value) this.setAttribute('peer-id', value);
+    else this.removeAttribute('peer-id');
+  }
+
   subscribe(callback) {
     this.subscribers.add(callback);
     callback(this.snapshot());
     return () => this.subscribers.delete(callback);
+  }
+
+  addChatListener() {
+    this.chatListenerCount += 1;
+  }
+
+  removeChatListener() {
+    if (this.chatListenerCount > 0) this.chatListenerCount -= 1;
   }
 
   async join() {
@@ -149,6 +188,7 @@ export class P2PRoomElement extends HTMLElement {
         onDataChannelOpen: () => this.notify(),
         onDataChannelClose: () => this.notify(),
         onDataChannelMessage: ({ memberId, data }) => {
+          if (this.chatListenerCount === 0) return;
           const message = parseChatMessage(data);
           if (!message) return;
           this.dispatchEvent(
@@ -245,17 +285,18 @@ export class P2PRoomControlsElement extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
+        ${SHARED_VARS}
         form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-        input, button { font: inherit; padding: 0.55rem 0.7rem; border: 1px solid #c9ced6; border-radius: 6px; }
-        input { min-width: 12rem; }
-        button { cursor: pointer; background: white; }
-        button.primary { color: white; background: #1455d9; border-color: #1455d9; }
+        input, button { font: inherit; padding: 0.55rem 0.7rem; border: 1px solid var(--p2p-border); border-radius: var(--p2p-radius); }
+        input { min-width: 12rem; background: var(--p2p-bg); color: var(--p2p-fg); }
+        button { cursor: pointer; background: var(--p2p-bg); color: var(--p2p-fg); }
+        button.primary { color: var(--p2p-accent-fg); background: var(--p2p-accent); border-color: var(--p2p-accent); }
         button:disabled, input:disabled { cursor: not-allowed; opacity: 0.55; }
       </style>
-      <form>
-        <input name="roomId" aria-label="Room ID">
-        <button class="primary" type="submit">Join room</button>
-        <button name="leave" type="button">Leave</button>
+      <form part="form">
+        <input name="roomId" part="room-id-input" aria-label="Room ID">
+        <button class="primary" type="submit" part="join-button">Join room</button>
+        <button name="leave" type="button" part="leave-button">Leave</button>
       </form>
     `;
     const form = this.shadowRoot.querySelector('form');
@@ -300,13 +341,14 @@ export class P2PRoomStatusElement extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; color: #354052; }
+        ${SHARED_VARS}
+        :host { display: block; color: var(--p2p-fg); }
         p { margin: 0.35rem 0; }
-        .error { color: #b42318; }
+        .error { color: var(--p2p-error); }
       </style>
-      <p class="status"></p>
-      <p class="members"></p>
-      <p class="error" hidden></p>
+      <p class="status" part="status"></p>
+      <p class="members" part="members"></p>
+      <p class="error" part="error" role="alert" hidden></p>
     `;
     this.statusEl = this.shadowRoot.querySelector('.status');
     this.membersEl = this.shadowRoot.querySelector('.members');
@@ -339,16 +381,17 @@ export class P2PVideoGridElement extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
+        ${SHARED_VARS}
         :host { display: block; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
         figure { margin: 0; }
-        video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #111; border-radius: 6px; object-fit: cover; }
-        figcaption { margin-top: 0.35rem; color: #354052; font-size: 0.9rem; }
-        .empty { min-height: 8rem; display: grid; place-items: center; border: 1px dashed #c9ced6; border-radius: 6px; color: #667085; }
+        video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #111; border-radius: var(--p2p-radius); object-fit: cover; }
+        figcaption { margin-top: 0.35rem; color: var(--p2p-fg); font-size: 0.9rem; }
+        .empty { min-height: 8rem; display: grid; place-items: center; border: 1px dashed var(--p2p-border); border-radius: var(--p2p-radius); color: var(--p2p-muted-fg); }
         [hidden] { display: none !important; }
       </style>
-      <div class="grid" hidden></div>
-      <div class="empty">Join a room to start video</div>
+      <div class="grid" part="grid" hidden></div>
+      <div class="empty" part="empty">Join a room to start video</div>
     `;
     this.unsubscribe = this.roomElement.subscribe((state) => {
       this.render(state);
@@ -405,36 +448,51 @@ export class P2PVideoGridElement extends HTMLElement {
   }
 }
 
-const CHAT_HISTORY_LIMIT = 50;
-
 export class P2PChatElement extends HTMLElement {
+  static get observedAttributes() {
+    return ['max-messages'];
+  }
+
   constructor() {
     super();
     this.messageCount = 0;
   }
 
+  get maxMessages() {
+    const value = Number(this.getAttribute('max-messages'));
+    return Number.isFinite(value) && value > 0
+      ? value
+      : DEFAULT_CHAT_HISTORY_LIMIT;
+  }
+
+  set maxMessages(value) {
+    this.setAttribute('max-messages', String(value));
+  }
+
   connectedCallback() {
     this.roomElement = findRoomElement(this);
+    this.roomElement.addChatListener();
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
+        ${SHARED_VARS}
         :host { display: block; }
-        .messages { min-height: 8rem; max-height: 16rem; overflow: auto; padding: 0.75rem; border: 1px solid #d7dce3; border-radius: 6px; background: #fff; }
+        .messages { min-height: 8rem; max-height: 16rem; overflow: auto; padding: 0.75rem; border: 1px solid var(--p2p-border); border-radius: var(--p2p-radius); background: var(--p2p-bg); }
         .message + .message { margin-top: 0.55rem; }
-        .meta { color: #667085; font-size: 0.8rem; }
-        .text { margin-top: 0.1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .meta { color: var(--p2p-muted-fg); font-size: 0.8rem; }
+        .text { margin-top: 0.1rem; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--p2p-fg); }
         form { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
-        input, button { font: inherit; padding: 0.55rem 0.7rem; border: 1px solid #c9ced6; border-radius: 6px; }
-        input { flex: 1; min-width: 0; }
-        button { color: white; background: #1455d9; border-color: #1455d9; }
+        input, button { font: inherit; padding: 0.55rem 0.7rem; border: 1px solid var(--p2p-border); border-radius: var(--p2p-radius); }
+        input { flex: 1; min-width: 0; background: var(--p2p-bg); color: var(--p2p-fg); }
+        button { color: var(--p2p-accent-fg); background: var(--p2p-accent); border-color: var(--p2p-accent); }
         button:disabled, input:disabled { cursor: not-allowed; opacity: 0.55; }
       </style>
-      <div class="messages" aria-live="polite">
+      <div class="messages" part="messages" aria-live="polite">
         <div class="meta empty">Messages appear here after another tab joins.</div>
       </div>
-      <form>
-        <input name="message" aria-label="Message" placeholder="Message" disabled>
-        <button type="submit" disabled>Send</button>
+      <form part="form">
+        <input name="message" part="input" aria-label="Message" placeholder="Message" disabled>
+        <button type="submit" part="send-button" disabled>Send</button>
       </form>
     `;
     this.messagesEl = this.shadowRoot.querySelector('.messages');
@@ -463,6 +521,12 @@ export class P2PChatElement extends HTMLElement {
   disconnectedCallback() {
     this.unsubscribe?.();
     this.roomElement?.removeEventListener('p2p-chat-message', this.onMessage);
+    this.roomElement?.removeChatListener();
+  }
+
+  attributeChangedCallback(name) {
+    if (name !== 'max-messages' || !this.messagesEl) return;
+    this.trimToCap();
   }
 
   updateSendState() {
@@ -482,11 +546,16 @@ export class P2PChatElement extends HTMLElement {
     const node = createChatMessageNode(message);
     this.messagesEl.append(node);
     this.messageCount += 1;
-    while (this.messageCount > CHAT_HISTORY_LIMIT && this.messagesEl.firstElementChild) {
+    this.trimToCap();
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+  }
+
+  trimToCap() {
+    const cap = this.maxMessages;
+    while (this.messageCount > cap && this.messagesEl.firstElementChild) {
       this.messagesEl.firstElementChild.remove();
       this.messageCount -= 1;
     }
-    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
   }
 }
 
@@ -534,6 +603,7 @@ function createChatMessageNode(message) {
     : `Peer ${(message.senderId || message.memberId || '').slice(0, 8)}`;
   const wrapper = document.createElement('div');
   wrapper.className = 'message';
+  wrapper.setAttribute('part', 'message');
   const meta = document.createElement('div');
   meta.className = 'meta';
   meta.textContent = label;
@@ -551,8 +621,11 @@ function getOrCreateVideoFigure(grid, id) {
   if (existing) return { figure: existing, created: false };
 
   const figure = document.createElement('figure');
+  figure.setAttribute('part', 'tile');
   const video = document.createElement('video');
+  video.setAttribute('part', 'video');
   const caption = document.createElement('figcaption');
+  caption.setAttribute('part', 'caption');
 
   figure.dataset.streamId = id;
   video.autoplay = true;
@@ -561,4 +634,3 @@ function getOrCreateVideoFigure(grid, id) {
 
   return { figure, created: true };
 }
-

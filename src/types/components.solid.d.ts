@@ -25,11 +25,16 @@ type BaseHTMLAttrs<E extends HTMLElement> = JSX.HTMLAttributes<E>;
 interface P2PRoomAttrs extends BaseHTMLAttrs<P2PRoomElement> {
   'room-id'?: string;
   'member-capacity'?: number | string;
+  'peer-id'?: string;
   'prop:createSignaling'?: P2PComponentsOptions['createSignaling'];
   'prop:getLocalStream'?: P2PComponentsOptions['getLocalStream'];
   'prop:roomOptions'?: P2PComponentsOptions['roomOptions'];
   'on:p2p-room-change'?: (event: P2PRoomChangeEvent) => void;
   'on:p2p-chat-message'?: (event: P2PChatMessageEvent) => void;
+}
+
+interface P2PChatAttrs extends BaseHTMLAttrs<HTMLElement> {
+  'max-messages'?: number | string;
 }
 
 declare module 'solid-js' {
@@ -39,7 +44,7 @@ declare module 'solid-js' {
       'p2p-room-controls': BaseHTMLAttrs<HTMLElement>;
       'p2p-room-status': BaseHTMLAttrs<HTMLElement>;
       'p2p-video-grid': BaseHTMLAttrs<HTMLElement>;
-      'p2p-chat': BaseHTMLAttrs<HTMLElement>;
+      'p2p-chat': P2PChatAttrs;
     }
 
     interface CustomEvents {
