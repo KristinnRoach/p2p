@@ -88,10 +88,8 @@ options:
 
 ```tsx
 import { onMount } from 'solid-js';
-import { isServer } from 'solid-js/web';
 
 onMount(() => {
-  if (isServer) return;
   defineP2PComponents({ createSignaling: ... });
 });
 ```

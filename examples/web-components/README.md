@@ -6,11 +6,11 @@ unpublished changes.
 
 ```html
 <script type="module">
-  import { defineP2PComponents } from "../../src/components/web-components.js";
-  import { createBrowserMeshRoomSignaling } from "../shared/index.js";
+  import { defineP2PComponents } from '../../src/components/web-components.js';
+  import { createBroadcastRoomSignaling } from '../shared/index.js';
 
   defineP2PComponents({
-    createSignaling: ({ roomId }) => createBrowserMeshRoomSignaling(roomId),
+    createSignaling: ({ roomId }) => createBroadcastRoomSignaling(roomId),
   });
 </script>
 

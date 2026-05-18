@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  clearBrowserMeshRoom,
-  createBrowserMeshRoomSignaling,
-} from '../examples/shared/signaling/createBrowserMeshRoomSignaling.js';
+  clearBroadcastRoomSignaling,
+  createBroadcastRoomSignaling,
+} from '../examples/shared/signaling/createBroadcastRoomSignaling.js';
 
 function nextPeers(signaling) {
   return new Promise((resolve) => {
@@ -14,29 +14,23 @@ function nextPeers(signaling) {
   });
 }
 
-describe('createBrowserMeshRoomSignaling', () => {
+describe('createBroadcastRoomSignaling', () => {
   it('keeps peer order stable when refreshing presence', async () => {
     const roomId = `test-${crypto.randomUUID()}`;
-    const signaling = createBrowserMeshRoomSignaling(roomId);
+    const signaling = createBroadcastRoomSignaling(roomId);
 
     try {
       await signaling.join('peer-a');
       await signaling.join('peer-b');
 
-      await expect(nextPeers(signaling)).resolves.toEqual([
-        'peer-a',
-        'peer-b',
-      ]);
+      await expect(nextPeers(signaling)).resolves.toEqual(['peer-a', 'peer-b']);
 
       await signaling.refreshPresence('peer-a');
 
-      await expect(nextPeers(signaling)).resolves.toEqual([
-        'peer-a',
-        'peer-b',
-      ]);
+      await expect(nextPeers(signaling)).resolves.toEqual(['peer-a', 'peer-b']);
     } finally {
       signaling.cleanupSignaling();
-      clearBrowserMeshRoom(roomId);
+      clearBroadcastRoomSignaling(roomId);
     }
   });
 });

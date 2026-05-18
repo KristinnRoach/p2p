@@ -3,7 +3,7 @@ import { useP2PRoom } from '@kidlib/p2p/solid';
 import RoomStatus from './RoomStatus';
 import LobbyForm from './LobbyForm';
 import VideoGrid from './VideoGrid';
-import { createBrowserMeshRoomSignaling } from '@shared/index';
+import { createBroadcastRoomSignaling } from '@shared/index';
 
 export default function Room() {
   const MAX_MEMBERS = 6;
@@ -18,7 +18,7 @@ export default function Room() {
     await p2p.join({
       roomId,
       peerId: crypto.randomUUID(),
-      createSignaling: createBrowserMeshRoomSignaling,
+      createSignaling: createBroadcastRoomSignaling,
       getLocalStream: () =>
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
       memberCapacity: MAX_MEMBERS,

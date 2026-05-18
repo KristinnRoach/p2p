@@ -78,8 +78,8 @@ cost on every frame.
 
 ## 8. Framework type augmentation gaps
 
-Only Solid currently has JSX typing (`components.solid.d.ts`). React, Vue,
-and others get red squiggles.
+Only Solid currently has JSX typing (`src/components/solid/index.d.ts`).
+React, Vue, and others get red squiggles.
 
 **Direction:** add `components.react.d.ts`, `components.vue.d.ts` etc. as
 needed, each with its own subpath export. Keep them strictly type-only —
@@ -113,7 +113,7 @@ Small, isolated, purely beneficial. Status reflects current branch.
 - [x] **`peer-id` attribute / setter on `<p2p-room>`.** Falls back to a
   per-instance generated UUID when unset.
 - [x] **`<p2p-chat>` opt-in JSON.parse.** Room tracks a chat-listener
-  counter via `addChatListener` / `removeChatListener`; data-channel
+  counter via `enableChatParsing` / `disableChatParsing`; data-channel
   messages skip parsing when the counter is zero.
 - [x] **Defer-and-cancel in `disconnectedCallback`.** `queueMicrotask`
   with an `isConnected` recheck so reparenting doesn't tear the room

@@ -68,6 +68,33 @@ describe('@kidlib/p2p/components', () => {
     expect(chat.shadowRoot.textContent).toContain('hello');
   });
 
+  it('cancels an in-flight join when the room leaves', async () => {
+    let resolveStream;
+    defineP2PComponents({
+      createSignaling: ({ roomId }) => createTestRoomSignaling(roomId),
+      getLocalStream: () =>
+        new Promise((resolve) => {
+          resolveStream = resolve;
+        }),
+    });
+
+    const room = document.createElement('p2p-room');
+    document.body.append(room);
+
+    const joinPromise = room.join();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    room.leave();
+    resolveStream(null);
+
+    await expect(joinPromise).resolves.toBeUndefined();
+    expect(room.snapshot()).toMatchObject({
+      room: null,
+      state: 'idle',
+      localStream: null,
+      remoteStreams: [],
+    });
+  });
+
   it('reports missing signaling without throwing from join', async () => {
     defineP2PComponents({
       createSignaling: null,

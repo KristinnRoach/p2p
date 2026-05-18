@@ -83,6 +83,7 @@ export class P2PRoomElement extends HTMLElement {
     this.subscribers = new Set();
     this.chatListenerCount = 0;
     this._leavePending = false;
+    this._joinController = null;
   }
 
   connectedCallback() {
@@ -137,11 +138,11 @@ export class P2PRoomElement extends HTMLElement {
     return () => this.subscribers.delete(callback);
   }
 
-  addChatListener() {
+  enableChatParsing() {
     this.chatListenerCount += 1;
   }
 
-  removeChatListener() {
+  disableChatParsing() {
     if (this.chatListenerCount > 0) this.chatListenerCount -= 1;
   }
 
@@ -163,10 +164,14 @@ export class P2PRoomElement extends HTMLElement {
     this.error = '';
     this.notify();
 
+    const controller = new AbortController();
+    this._joinController = controller;
+
     try {
       const room = await joinP2PRoom({
         ...componentDefaults.roomOptions,
         ...this.roomOptions,
+        signal: controller.signal,
         roomId,
         peerId: this.peerId,
         createSignaling,
@@ -175,6 +180,7 @@ export class P2PRoomElement extends HTMLElement {
         dataChannel: true,
         dataChannelOpenTimeoutMs: 0,
         onLocalStream: ({ stream }) => {
+          if (controller.signal.aborted) return;
           this.localStream = stream;
           this.notify();
         },
@@ -204,9 +210,16 @@ export class P2PRoomElement extends HTMLElement {
         },
       });
 
+      if (this._joinController !== controller || controller.signal.aborted) {
+        room.close();
+        return;
+      }
+      this._joinController = null;
       this.room = room;
       this.syncFromRoom();
     } catch (error) {
+      if (this._joinController === controller) this._joinController = null;
+      if (controller.signal.aborted && error?.name === 'AbortError') return;
       this.leave();
       this.state = 'idle';
       this.error = error?.message || String(error);
@@ -215,6 +228,8 @@ export class P2PRoomElement extends HTMLElement {
   }
 
   leave() {
+    this._joinController?.abort();
+    this._joinController = null;
     this.room?.close();
     this.room = null;
     this.localStream = null;
@@ -224,10 +239,12 @@ export class P2PRoomElement extends HTMLElement {
   }
 
   sendChat(text) {
+    const cleanText = String(text ?? '').trim();
+    if (!cleanText) return 0;
     const message = {
       type: CHAT_TYPE,
       id: crypto.randomUUID(),
-      text,
+      text: cleanText,
       senderId: this.peerId,
       createdAt: Date.now(),
     };
@@ -471,7 +488,7 @@ export class P2PChatElement extends HTMLElement {
 
   connectedCallback() {
     this.roomElement = findRoomElement(this);
-    this.roomElement.addChatListener();
+    this.roomElement.enableChatParsing();
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
@@ -488,7 +505,7 @@ export class P2PChatElement extends HTMLElement {
         button:disabled, input:disabled { cursor: not-allowed; opacity: 0.55; }
       </style>
       <div class="messages" part="messages" aria-live="polite">
-        <div class="meta empty">Messages appear here after another tab joins.</div>
+        <div class="meta empty">Messages appear here after you join.</div>
       </div>
       <form part="form">
         <input name="message" part="input" aria-label="Message" placeholder="Message" disabled>
@@ -521,7 +538,7 @@ export class P2PChatElement extends HTMLElement {
   disconnectedCallback() {
     this.unsubscribe?.();
     this.roomElement?.removeEventListener('p2p-chat-message', this.onMessage);
-    this.roomElement?.removeChatListener();
+    this.roomElement?.disableChatParsing();
   }
 
   attributeChangedCallback(name) {
@@ -532,7 +549,7 @@ export class P2PChatElement extends HTMLElement {
   updateSendState() {
     if (!this.input) return;
     const state = this.state || {};
-    const canSend = state.state === 'joined' && state.openDataChannels > 0;
+    const canSend = state.state === 'joined';
     this.input.disabled = !canSend;
     this.sendBtn.disabled = !canSend;
   }

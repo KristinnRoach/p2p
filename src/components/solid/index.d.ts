@@ -4,12 +4,15 @@ import type {
   P2PComponentsOptions,
   P2PRoomElement,
   P2PRoomSnapshot,
-} from './components.js';
+} from '../components.js';
 
-export {};
+export * from '../components.js';
 
-type RoomEventTargetAttrs<E extends Event> = E & {
-  currentTarget: P2PRoomElement;
+type RoomEventTargetAttrs<
+  E extends Event,
+  CurrentTarget extends Element = P2PRoomElement,
+> = E & {
+  currentTarget: CurrentTarget;
   target: Element;
 };
 
@@ -17,6 +20,10 @@ export type P2PRoomChangeEvent = RoomEventTargetAttrs<
   CustomEvent<P2PRoomSnapshot>
 >;
 export type P2PChatMessageEvent = RoomEventTargetAttrs<
+  CustomEvent<P2PChatMessage>,
+  HTMLElement
+>;
+export type P2PRoomChatMessageEvent = RoomEventTargetAttrs<
   CustomEvent<P2PChatMessage>
 >;
 
@@ -30,7 +37,7 @@ interface P2PRoomAttrs extends BaseHTMLAttrs<P2PRoomElement> {
   'prop:getLocalStream'?: P2PComponentsOptions['getLocalStream'];
   'prop:roomOptions'?: P2PComponentsOptions['roomOptions'];
   'on:p2p-room-change'?: (event: P2PRoomChangeEvent) => void;
-  'on:p2p-chat-message'?: (event: P2PChatMessageEvent) => void;
+  'on:p2p-chat-message'?: (event: P2PRoomChatMessageEvent) => void;
 }
 
 interface P2PChatAttrs extends BaseHTMLAttrs<HTMLElement> {
@@ -53,3 +60,31 @@ declare module 'solid-js' {
     }
   }
 }
+
+export declare function P2PRoom(
+  props: {
+    roomId?: string;
+    memberCapacity?: number | string;
+    peerId?: string;
+    createSignaling?: P2PComponentsOptions['createSignaling'];
+    getLocalStream?: P2PComponentsOptions['getLocalStream'];
+    roomOptions?: P2PComponentsOptions['roomOptions'];
+    onRoomChange?: (event: P2PRoomChangeEvent) => void;
+  } & BaseHTMLAttrs<P2PRoomElement>,
+): JSX.Element;
+
+export declare function P2PVideoGrid(
+  props: BaseHTMLAttrs<HTMLElement>,
+): JSX.Element;
+export declare function P2PChat(
+  props: {
+    maxMessages?: number | string;
+    onChatMessage?: (event: P2PChatMessageEvent) => void;
+  } & BaseHTMLAttrs<HTMLElement>,
+): JSX.Element;
+export declare function P2PRoomControls(
+  props: BaseHTMLAttrs<HTMLElement>,
+): JSX.Element;
+export declare function P2PRoomStatus(
+  props: BaseHTMLAttrs<HTMLElement>,
+): JSX.Element;

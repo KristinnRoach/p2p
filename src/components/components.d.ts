@@ -60,8 +60,8 @@ export declare class P2PRoomElement extends HTMLElement {
   memberCapacity: number;
 
   subscribe(callback: (snapshot: P2PRoomSnapshot) => void): () => void;
-  addChatListener(): void;
-  removeChatListener(): void;
+  enableChatParsing(): void;
+  disableChatParsing(): void;
   join(): Promise<void>;
   leave(): void;
   sendChat(text: string): number;

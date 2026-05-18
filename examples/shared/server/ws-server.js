@@ -1,0 +1,69 @@
+// server.js
+import { WebSocketServer } from 'ws';
+
+const PORT = 8080;
+
+const wss = new WebSocketServer({ port: PORT });
+
+const sockets = new Map(); // ws -> { roomId, peerId }
+const socketsByRoomPeer = new Map(); // `${roomId}:${peerId}` -> ws
+
+const keyOf = (roomId, peerId) => `${roomId}:${peerId}`;
+
+function send(ws, payload) {
+  if (ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+function broadcastPeers(roomId) {
+  const peerIds = [...sockets.values()]
+    .filter((x) => x.roomId === roomId)
+    .map((x) => x.peerId)
+    .sort();
+
+  for (const [ws, info] of sockets.entries()) {
+    if (info.roomId === roomId) {
+      send(ws, { type: 'peers', roomId, peerIds });
+    }
+  }
+}
+
+function removeSocket(ws) {
+  const info = sockets.get(ws);
+  if (!info) return;
+  sockets.delete(ws);
+  socketsByRoomPeer.delete(keyOf(info.roomId, info.peerId));
+  broadcastPeers(info.roomId);
+}
+
+wss.on('connection', (ws) => {
+  ws.on('message', (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+
+    if (msg.type === 'join-room') {
+      sockets.set(ws, { roomId: msg.roomId, peerId: msg.peerId });
+      socketsByRoomPeer.set(keyOf(msg.roomId, msg.peerId), ws);
+      broadcastPeers(msg.roomId);
+      return;
+    }
+
+    if (msg.type === 'leave-room') {
+      removeSocket(ws);
+      return;
+    }
+
+    if (msg.roomId && msg.to) {
+      const target = socketsByRoomPeer.get(keyOf(msg.roomId, msg.to));
+      if (target) send(target, msg);
+    }
+  });
+
+  ws.on('close', () => removeSocket(ws));
+  ws.on('error', () => removeSocket(ws));
+});

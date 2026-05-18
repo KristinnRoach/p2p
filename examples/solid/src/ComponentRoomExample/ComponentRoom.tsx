@@ -1,17 +1,28 @@
-import { createBrowserMeshRoomSignaling } from '@shared/index';
-import { defineP2PComponents } from '@kidlib/p2p/components/solid';
+import {
+  P2PRoom,
+  P2PRoomControls,
+  P2PRoomStatus,
+  P2PVideoGrid,
+  P2PChat,
+} from '@kidlib/p2p/components/solid';
 
-defineP2PComponents({ createSignaling: createBrowserMeshRoomSignaling });
+type ComponentRoomProps = {
+  createSignaling: (options: { roomId: string }) => any;
+};
 
-export default function ComponentRoom() {
+export default function ComponentRoom(props: ComponentRoomProps) {
   return (
     <div class='example'>
-      <p2p-room room-id='demo-room' member-capacity='6'>
-        <p2p-room-controls></p2p-room-controls>
-        <p2p-room-status></p2p-room-status>
-        <p2p-video-grid></p2p-video-grid>
-        <p2p-chat></p2p-chat>
-      </p2p-room>
+      <P2PRoom
+        roomId='demo-room'
+        memberCapacity={6}
+        createSignaling={props.createSignaling}
+      >
+        <P2PRoomControls />
+        <P2PRoomStatus />
+        <P2PVideoGrid />
+        <P2PChat maxMessages={10} />
+      </P2PRoom>
     </div>
   );
 }
