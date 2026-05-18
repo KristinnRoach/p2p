@@ -19,7 +19,7 @@ describe('@kidlib/p2p/components', () => {
     room.setAttribute('room-id', 'room-a');
     room.innerHTML = `
       <p2p-room-status></p2p-room-status>
-      <p2p-text-chat></p2p-text-chat>
+      <p2p-chat></p2p-chat>
     `;
     document.body.append(room);
 
@@ -46,7 +46,7 @@ describe('@kidlib/p2p/components', () => {
     });
 
     const room = document.createElement('p2p-room');
-    const chat = document.createElement('p2p-text-chat');
+    const chat = document.createElement('p2p-chat');
     room.append(chat);
     document.body.append(room);
     await room.join();

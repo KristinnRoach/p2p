@@ -17,7 +17,7 @@ defineP2PComponents({
   <p2p-room-controls></p2p-room-controls>
   <p2p-room-status></p2p-room-status>
   <p2p-video-grid></p2p-video-grid>
-  <p2p-text-chat></p2p-text-chat>
+  <p2p-chat></p2p-chat>
 </p2p-room>
 ```
 
@@ -29,7 +29,7 @@ defineP2PComponents({
 - `p2p-room-controls`
 - `p2p-room-status`
 - `p2p-video-grid`
-- `p2p-text-chat`
+- `p2p-chat`
 
 Supported options:
 
@@ -67,6 +67,28 @@ Useful methods:
 - `room.leave()`
 - `room.sendChat(text)`
 - `room.subscribe((snapshot) => {})`
+
+## Extending Chat
+
+`p2p-chat` is a minimal text chat widget. It is meant to be useful out of the
+box, not to be the main extension point for richer messaging.
+
+For file transfer, reactions, message persistence, or app-specific message
+types, build a custom element inside `p2p-room` and use the room primitive:
+
+```js
+const roomElement = document.querySelector('p2p-room');
+
+roomElement.subscribe(({ room }) => {
+  if (!room) return;
+  room.broadcast(JSON.stringify({ type: 'app:file-offer', name, size }));
+});
+```
+
+The underlying `P2PRoom` is available on the snapshot as `snapshot.room`, so a
+custom component can use `room.send()`, `room.broadcast()`, or
+`room.dataChannels` directly. That keeps `p2p-chat` small while leaving room for
+larger features such as file-transfer protocols.
 
 The default elements are intentionally modest. Use the `p2p-room` snapshot and
 events if you want to replace the controls, status, video grid, or chat UI with

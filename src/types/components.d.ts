@@ -67,4 +67,4 @@ export declare class P2PRoomElement extends HTMLElement {
 export declare class P2PRoomControlsElement extends HTMLElement {}
 export declare class P2PRoomStatusElement extends HTMLElement {}
 export declare class P2PVideoGridElement extends HTMLElement {}
-export declare class P2PTextChatElement extends HTMLElement {}
+export declare class P2PChatElement extends HTMLElement {}

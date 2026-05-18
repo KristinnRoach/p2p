@@ -27,7 +27,7 @@ export function defineP2PComponents(options = {}) {
   defineElement('p2p-room-controls', P2PRoomControlsElement);
   defineElement('p2p-room-status', P2PRoomStatusElement);
   defineElement('p2p-video-grid', P2PVideoGridElement);
-  defineElement('p2p-text-chat', P2PTextChatElement);
+  defineElement('p2p-chat', P2PChatElement);
 }
 
 export class P2PRoomElement extends HTMLElement {
@@ -368,7 +368,7 @@ export class P2PVideoGridElement extends HTMLElement {
   }
 }
 
-export class P2PTextChatElement extends HTMLElement {
+export class P2PChatElement extends HTMLElement {
   constructor() {
     super();
     this.messages = [];

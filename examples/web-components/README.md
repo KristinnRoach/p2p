@@ -18,7 +18,7 @@ unpublished changes.
   <p2p-room-controls></p2p-room-controls>
   <p2p-room-status></p2p-room-status>
   <p2p-video-grid></p2p-video-grid>
-  <p2p-text-chat></p2p-text-chat>
+  <p2p-chat></p2p-chat>
 </p2p-room>
 ```
 
