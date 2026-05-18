@@ -2,6 +2,7 @@ node_modules/
 .pnpm-store/
 .DS_Store
 docs/WIP/
+trash/
 TODO.md
 RELEASE.md
 tests/**/__screenshots__/
