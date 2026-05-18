@@ -15,6 +15,11 @@
       "import": "./src/config.js",
       "default": "./src/config.js"
     },
+    "./components": {
+      "types": "./src/types/components.d.ts",
+      "import": "./src/components/web-components.js",
+      "default": "./src/components/web-components.js"
+    },
     "./ice": {
       "types": "./src/types/ice.d.ts",
       "import": "./src/ice.js",
@@ -93,6 +98,7 @@
   },
   "scripts": {
     "dev:van": "pnpm --dir examples/web-components dev",
+    "dev:components": "pnpm --dir examples/web-components dev",
     "dev:react": "pnpm --dir examples/react dev",
     "dev:solid": "pnpm --dir examples/solid dev",
     "kill": "pkill -f vite",

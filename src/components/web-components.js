@@ -1,8 +1,34 @@
-import { joinP2PRoom } from '../../src/index.js';
-import { createBrowserMeshRoomSignaling } from '../shared/index.js';
+import { joinP2PRoom } from '../index.js';
 
-const CHAT_TYPE = 'kidlib:p2p:web-components:chat';
-const DEFAULT_CAPACITY = 6;
+const CHAT_TYPE = 'kidlib:p2p:components:chat';
+const DEFAULT_MEMBER_CAPACITY = 6;
+
+const componentDefaults = {
+  createSignaling: null,
+  getLocalStream: defaultGetLocalStream,
+  roomOptions: null,
+};
+
+export function configureP2PComponents(options = {}) {
+  if ('createSignaling' in options) {
+    componentDefaults.createSignaling = options.createSignaling;
+  }
+  if ('getLocalStream' in options) {
+    componentDefaults.getLocalStream = options.getLocalStream;
+  }
+  if ('roomOptions' in options) {
+    componentDefaults.roomOptions = options.roomOptions;
+  }
+}
+
+export function defineP2PComponents(options = {}) {
+  configureP2PComponents(options);
+  defineElement('p2p-room', P2PRoomElement);
+  defineElement('p2p-room-controls', P2PRoomControlsElement);
+  defineElement('p2p-room-status', P2PRoomStatusElement);
+  defineElement('p2p-video-grid', P2PVideoGridElement);
+  defineElement('p2p-text-chat', P2PTextChatElement);
+}
 
 export class P2PRoomElement extends HTMLElement {
   static get observedAttributes() {
@@ -13,6 +39,9 @@ export class P2PRoomElement extends HTMLElement {
     super();
     this.room = null;
     this.peerId = crypto.randomUUID();
+    this.createSignaling = null;
+    this.getLocalStream = null;
+    this.roomOptions = null;
     this.state = 'idle';
     this.error = '';
     this.localStream = null;
@@ -42,7 +71,13 @@ export class P2PRoomElement extends HTMLElement {
 
   get memberCapacity() {
     const value = Number(this.getAttribute('member-capacity'));
-    return Number.isFinite(value) && value > 0 ? value : DEFAULT_CAPACITY;
+    return Number.isFinite(value) && value > 0
+      ? value
+      : DEFAULT_MEMBER_CAPACITY;
+  }
+
+  set memberCapacity(value) {
+    this.setAttribute('member-capacity', String(value));
   }
 
   subscribe(callback) {
@@ -56,24 +91,30 @@ export class P2PRoomElement extends HTMLElement {
     const roomId = this.roomId.trim();
     if (!roomId) return;
 
+    const createSignaling =
+      this.createSignaling || componentDefaults.createSignaling;
+    if (typeof createSignaling !== 'function') {
+      this.setError(
+        'p2p-room requires a createSignaling function before joining',
+      );
+      return;
+    }
+
     this.state = 'joining';
     this.error = '';
     this.notify();
 
     try {
       const room = await joinP2PRoom({
+        ...componentDefaults.roomOptions,
+        ...this.roomOptions,
         roomId,
         peerId: this.peerId,
-        createSignaling: createBrowserMeshRoomSignaling,
-        getLocalStream: () =>
-          navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true,
-          }),
+        createSignaling,
+        getLocalStream: this.getLocalStream || componentDefaults.getLocalStream,
         memberCapacity: this.memberCapacity,
         dataChannel: true,
         dataChannelOpenTimeoutMs: 0,
-        rtcConfig: { iceServers: [] },
         onLocalStream: ({ stream }) => {
           this.localStream = stream;
           this.notify();
@@ -171,15 +212,20 @@ export class P2PRoomElement extends HTMLElement {
       new CustomEvent('p2p-room-change', { detail, bubbles: true }),
     );
   }
+
+  setError(message) {
+    this.error = message;
+    this.notify();
+  }
 }
 
 export class P2PRoomControlsElement extends HTMLElement {
   connectedCallback() {
     this.roomElement = findRoomElement(this);
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
-    this.unsubscribe = this.roomElement?.subscribe((state) =>
-      this.render(state),
-    );
+    this.unsubscribe = this.roomElement.subscribe((state) => {
+      this.render(state);
+    });
   }
 
   disconnectedCallback() {
@@ -226,9 +272,9 @@ export class P2PRoomStatusElement extends HTMLElement {
   connectedCallback() {
     this.roomElement = findRoomElement(this);
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
-    this.unsubscribe = this.roomElement?.subscribe((state) =>
-      this.render(state),
-    );
+    this.unsubscribe = this.roomElement.subscribe((state) => {
+      this.render(state);
+    });
   }
 
   disconnectedCallback() {
@@ -267,9 +313,9 @@ export class P2PVideoGridElement extends HTMLElement {
       <div class="grid" hidden></div>
       <div class="empty">Join a room to start video</div>
     `;
-    this.unsubscribe = this.roomElement?.subscribe((state) =>
-      this.render(state),
-    );
+    this.unsubscribe = this.roomElement.subscribe((state) => {
+      this.render(state);
+    });
   }
 
   disconnectedCallback() {
@@ -331,7 +377,7 @@ export class P2PTextChatElement extends HTMLElement {
   connectedCallback() {
     this.roomElement = findRoomElement(this);
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
-    this.unsubscribe = this.roomElement?.subscribe((state) => {
+    this.unsubscribe = this.roomElement.subscribe((state) => {
       this.state = state;
       this.render();
     });
@@ -339,7 +385,7 @@ export class P2PTextChatElement extends HTMLElement {
       this.messages = [...this.messages, event.detail].slice(-50);
       this.render();
     };
-    this.roomElement?.addEventListener('p2p-chat-message', this.onMessage);
+    this.roomElement.addEventListener('p2p-chat-message', this.onMessage);
   }
 
   disconnectedCallback() {
@@ -392,6 +438,14 @@ export class P2PTextChatElement extends HTMLElement {
         input.value = '';
       });
   }
+}
+
+function defaultGetLocalStream() {
+  return navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+}
+
+function defineElement(name, elementClass) {
+  if (!customElements.get(name)) customElements.define(name, elementClass);
 }
 
 function findRoomElement(element) {
@@ -460,20 +514,4 @@ function escapeHtml(value) {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
-}
-
-if (!customElements.get('p2p-room')) {
-  customElements.define('p2p-room', P2PRoomElement);
-}
-if (!customElements.get('p2p-room-controls')) {
-  customElements.define('p2p-room-controls', P2PRoomControlsElement);
-}
-if (!customElements.get('p2p-room-status')) {
-  customElements.define('p2p-room-status', P2PRoomStatusElement);
-}
-if (!customElements.get('p2p-video-grid')) {
-  customElements.define('p2p-video-grid', P2PVideoGridElement);
-}
-if (!customElements.get('p2p-text-chat')) {
-  customElements.define('p2p-text-chat', P2PTextChatElement);
 }

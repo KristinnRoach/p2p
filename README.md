@@ -70,6 +70,9 @@ down subscriptions, peer connections, owned media, and signaling.
 Solid apps can use the `@kidlib/p2p/solid` adapter. See
 [docs/solidjs.md](docs/solidjs.md).
 
+Browser-native apps can use the `@kidlib/p2p/components` web components. See
+[docs/web-components.md](docs/web-components.md).
+
 ## 1:1 calls — P2PSession
 
 For direct connections between exactly two peers.
