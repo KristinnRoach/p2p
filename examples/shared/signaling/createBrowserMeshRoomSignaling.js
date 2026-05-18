@@ -179,15 +179,22 @@ function readActivePeerIds(roomId, key) {
 
 function refreshPresence(roomId, key, peerId) {
   const now = Date.now();
-  return updatePresence(roomId, key, (peers) =>
-    [
-      ...peers.filter(
+  return updatePresence(roomId, key, (peers) => {
+    let found = false;
+    const activePeers = peers
+      .filter(
         (entry) =>
-          entry.peerId !== peerId && now - entry.lastSeen < presenceTtlMs,
-      ),
-      { peerId, lastSeen: now },
-    ],
-  );
+          entry.peerId === peerId || now - entry.lastSeen < presenceTtlMs,
+      )
+      .map((entry) => {
+        if (entry.peerId !== peerId) return entry;
+        found = true;
+        return { peerId, lastSeen: now };
+      });
+
+    if (!found) activePeers.push({ peerId, lastSeen: now });
+    return activePeers;
+  });
 }
 
 async function updatePresence(roomId, key, updater) {

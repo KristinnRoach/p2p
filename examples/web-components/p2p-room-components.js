@@ -254,6 +254,19 @@ export class P2PVideoGridElement extends HTMLElement {
   connectedCallback() {
     this.roomElement = findRoomElement(this);
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+        figure { margin: 0; }
+        video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #111; border-radius: 6px; object-fit: cover; }
+        figcaption { margin-top: 0.35rem; color: #354052; font-size: 0.9rem; }
+        .empty { min-height: 8rem; display: grid; place-items: center; border: 1px dashed #c9ced6; border-radius: 6px; color: #667085; }
+        [hidden] { display: none !important; }
+      </style>
+      <div class="grid" hidden></div>
+      <div class="empty">Join a room to start video</div>
+    `;
     this.unsubscribe = this.roomElement?.subscribe((state) =>
       this.render(state),
     );
@@ -265,6 +278,8 @@ export class P2PVideoGridElement extends HTMLElement {
 
   render(state) {
     if (!this.shadowRoot) return;
+    const grid = this.shadowRoot.querySelector('.grid');
+    const empty = this.shadowRoot.querySelector('.empty');
     const streams = [
       state.localStream && {
         id: 'local',
@@ -280,39 +295,29 @@ export class P2PVideoGridElement extends HTMLElement {
       })),
     ].filter(Boolean);
 
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host { display: block; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
-        figure { margin: 0; }
-        video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #111; border-radius: 6px; object-fit: cover; }
-        figcaption { margin-top: 0.35rem; color: #354052; font-size: 0.9rem; }
-        .empty { min-height: 8rem; display: grid; place-items: center; border: 1px dashed #c9ced6; border-radius: 6px; color: #667085; }
-      </style>
-      ${
-        streams.length
-          ? `<div class="grid">${streams
-              .map(
-                ({ id, title, muted }) => `
-                  <figure>
-                    <video data-stream-id="${escapeHtml(id)}" autoplay playsinline ${
-                      muted ? 'muted' : ''
-                    }></video>
-                    <figcaption>${escapeHtml(title)}</figcaption>
-                  </figure>
-                `,
-              )
-              .join('')}</div>`
-          : '<div class="empty">Join a room to start video</div>'
-      }
-    `;
+    grid.hidden = streams.length === 0;
+    empty.hidden = streams.length > 0;
 
+    const liveIds = new Set(streams.map((item) => item.id));
     for (const item of streams) {
-      const video = this.shadowRoot.querySelector(
-        `video[data-stream-id="${CSS.escape(item.id)}"]`,
-      );
-      video.srcObject = item.stream;
-      video.play().catch(() => {});
+      const figure = getOrCreateVideoFigure(grid, item.id);
+      const video = figure.querySelector('video');
+      const caption = figure.querySelector('figcaption');
+
+      caption.textContent = item.title;
+      video.muted = item.muted;
+      if (video.srcObject !== item.stream) {
+        video.srcObject = item.stream;
+        video.play().catch(() => {});
+      }
+      grid.append(figure);
+    }
+
+    for (const figure of [...grid.querySelectorAll('figure[data-stream-id]')]) {
+      if (liveIds.has(figure.dataset.streamId)) continue;
+      const video = figure.querySelector('video');
+      video.srcObject = null;
+      figure.remove();
     }
   }
 }
@@ -376,14 +381,16 @@ export class P2PTextChatElement extends HTMLElement {
 
     const messages = this.shadowRoot.querySelector('.messages');
     messages.scrollTop = messages.scrollHeight;
-    this.shadowRoot.querySelector('form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const input = event.currentTarget.elements.message;
-      const text = input.value.trim();
-      if (!text) return;
-      this.roomElement.sendChat(text);
-      input.value = '';
-    });
+    this.shadowRoot
+      .querySelector('form')
+      .addEventListener('submit', (event) => {
+        event.preventDefault();
+        const input = event.currentTarget.elements.message;
+        const text = input.value.trim();
+        if (!text) return;
+        this.roomElement.sendChat(text);
+        input.value = '';
+      });
   }
 }
 
@@ -427,6 +434,24 @@ function renderChatMessage(message) {
       <div class="text">${escapeHtml(message.text)}</div>
     </div>
   `;
+}
+
+function getOrCreateVideoFigure(grid, id) {
+  const existing = [...grid.querySelectorAll('figure[data-stream-id]')].find(
+    (figure) => figure.dataset.streamId === id,
+  );
+  if (existing) return existing;
+
+  const figure = document.createElement('figure');
+  const video = document.createElement('video');
+  const caption = document.createElement('figcaption');
+
+  figure.dataset.streamId = id;
+  video.autoplay = true;
+  video.playsInline = true;
+  figure.append(video, caption);
+
+  return figure;
 }
 
 function escapeHtml(value) {

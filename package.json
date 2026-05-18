@@ -92,6 +92,7 @@
     }
   },
   "scripts": {
+    "dev:van": "pnpm --dir examples/web-components dev",
     "dev:react": "pnpm --dir examples/react dev",
     "dev:solid": "pnpm --dir examples/solid dev",
     "kill": "pkill -f vite",

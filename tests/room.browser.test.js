@@ -248,6 +248,38 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('keeps remote member stream entries stable when member order changes', async () => {
+    const firstStream = createFakeStream();
+    const secondStream = createFakeStream();
+    const streams = [firstStream, secondStream];
+    sessionMocks.startP2PSession.mockImplementation(({ onRemoteStream }) => {
+      onRemoteStream({ stream: streams.shift() });
+      return Promise.resolve(createResolvedSession());
+    });
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    signaling.emitPeers(['b', 'c']);
+    await room.join();
+    await flushAsyncWork();
+
+    const previousStreams = room.remoteMemberStreams;
+    signaling.emitPeers(['c', 'b']);
+    await flushAsyncWork();
+
+    expect(room.remoteMemberStreams).toEqual([
+      previousStreams[1],
+      previousStreams[0],
+    ]);
+    expect(room.remoteMemberStreams[0]).toBe(previousStreams[1]);
+    expect(room.remoteMemberStreams[1]).toBe(previousStreams[0]);
+
+    room.close();
+  });
+
   it('refreshes provider-owned presence while joined', async () => {
     vi.useFakeTimers();
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
