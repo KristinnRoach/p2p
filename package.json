@@ -20,6 +20,11 @@
       "import": "./src/components/web-components.js",
       "default": "./src/components/web-components.js"
     },
+    "./components/solid": {
+      "types": "./src/types/components.solid-entry.d.ts",
+      "import": "./src/components/solid.js",
+      "default": "./src/components/solid.js"
+    },
     "./ice": {
       "types": "./src/types/ice.d.ts",
       "import": "./src/ice.js",

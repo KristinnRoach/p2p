@@ -93,3 +93,41 @@ larger features such as file-transfer protocols.
 The default elements are intentionally modest. Use the `p2p-room` snapshot and
 events if you want to replace the controls, status, video grid, or chat UI with
 app-specific components.
+
+## SolidJS
+
+Import from `@kidlib/p2p/components/solid` to register the elements and pull in
+JSX type augmentation in one step:
+
+```ts
+import {
+  defineP2PComponents,
+  // P2PRoomElement etc. also re-exported
+} from '@kidlib/p2p/components/solid';
+
+defineP2PComponents({
+  createSignaling: ({ roomId }) => createRoomSignalingForApp(roomId),
+});
+```
+
+Tags (`p2p-room`, `p2p-chat`, ...) are typed on `JSX.IntrinsicElements`.
+Object-shaped configuration must be passed as a property via Solid's `prop:`
+namespace (attributes coerce to strings):
+
+```tsx
+<p2p-room
+  room-id="demo-room"
+  member-capacity={6}
+  prop:createSignaling={({ roomId }) => createRoomSignalingForApp(roomId)}
+  prop:roomOptions={{ rtcConfig: { iceServers: [...] } }}
+  on:p2p-room-change={(event) => setSnapshot(event.detail)}
+  on:p2p-chat-message={(event) => appendMessage(event.detail)}
+>
+  <p2p-room-controls />
+  <p2p-video-grid />
+  <p2p-chat />
+</p2p-room>
+```
+
+`on:p2p-room-change` and `on:p2p-chat-message` are typed as
+`CustomEvent<P2PRoomSnapshot>` and `CustomEvent<P2PChatMessage>` respectively.
