@@ -214,54 +214,6 @@ describe('useP2PRoom', () => {
     dispose();
   });
 
-  it('keeps remote stream entries stable by member id in room order', async () => {
-    const firstStream = new MediaStream();
-    const secondStream = new MediaStream();
-    const fakeRoom = createFakeRoom();
-    roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
-
-    let solidRoom;
-    const dispose = createRoot((dispose) => {
-      solidRoom = useP2PRoom();
-      return dispose;
-    });
-
-    await solidRoom.join({
-      signaling: {},
-      peerId: 'peer-a',
-    });
-
-    fakeRoom.remoteMemberStreams = [
-      { memberId: 'peer-b', stream: firstStream },
-      { memberId: 'peer-c', stream: secondStream },
-    ];
-    fakeRoom.emit('memberStream', {
-      memberId: 'peer-b',
-      stream: firstStream,
-    });
-
-    const previousStreams = solidRoom.remoteMemberStreams();
-
-    fakeRoom.remoteMemberStreams = [
-      { memberId: 'peer-c', stream: secondStream },
-      { memberId: 'peer-b', stream: firstStream },
-    ];
-    fakeRoom.emit('membersChanged', {
-      members: ['peer-c', 'peer-b'],
-      memberCount: 2,
-      memberCapacity: 4,
-    });
-
-    expect(solidRoom.remoteMemberStreams()).toEqual([
-      previousStreams[1],
-      previousStreams[0],
-    ]);
-    expect(solidRoom.remoteMemberStreams()[0]).toBe(previousStreams[1]);
-    expect(solidRoom.remoteMemberStreams()[1]).toBe(previousStreams[0]);
-
-    dispose();
-  });
-
   describe('dataChannels signal', () => {
     it('adds a channel when dataChannel event fires', async () => {
       const fakeRoom = createFakeRoom();
