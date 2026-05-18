@@ -39,6 +39,11 @@ export interface P2PChatMessage {
 
 export function configureP2PComponents(options?: P2PComponentsOptions): void;
 export function defineP2PComponents(options?: P2PComponentsOptions): void;
+export function defineP2PRoom(): void;
+export function defineP2PRoomControls(): void;
+export function defineP2PRoomStatus(): void;
+export function defineP2PVideoGrid(): void;
+export function defineP2PChat(): void;
 
 export declare class P2PRoomElement extends HTMLElement {
   room: P2PRoom | null;

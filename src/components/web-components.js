@@ -23,10 +23,30 @@ export function configureP2PComponents(options = {}) {
 
 export function defineP2PComponents(options = {}) {
   configureP2PComponents(options);
+  defineP2PRoom();
+  defineP2PRoomControls();
+  defineP2PRoomStatus();
+  defineP2PVideoGrid();
+  defineP2PChat();
+}
+
+export function defineP2PRoom() {
   defineElement('p2p-room', P2PRoomElement);
+}
+
+export function defineP2PRoomControls() {
   defineElement('p2p-room-controls', P2PRoomControlsElement);
+}
+
+export function defineP2PRoomStatus() {
   defineElement('p2p-room-status', P2PRoomStatusElement);
+}
+
+export function defineP2PVideoGrid() {
   defineElement('p2p-video-grid', P2PVideoGridElement);
+}
+
+export function defineP2PChat() {
   defineElement('p2p-chat', P2PChatElement);
 }
 
@@ -223,19 +243,6 @@ export class P2PRoomControlsElement extends HTMLElement {
   connectedCallback() {
     this.roomElement = findRoomElement(this);
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
-    this.unsubscribe = this.roomElement.subscribe((state) => {
-      this.render(state);
-    });
-  }
-
-  disconnectedCallback() {
-    this.unsubscribe?.();
-  }
-
-  render(state) {
-    if (!this.shadowRoot) return;
-    const isJoined = state.state === 'joined';
-    const isJoining = state.state === 'joining';
     this.shadowRoot.innerHTML = `
       <style>
         form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
@@ -246,32 +253,24 @@ export class P2PRoomControlsElement extends HTMLElement {
         button:disabled, input:disabled { cursor: not-allowed; opacity: 0.55; }
       </style>
       <form>
-        <input name="roomId" aria-label="Room ID" value="${escapeHtml(
-          state.roomId,
-        )}" ${isJoined || isJoining ? 'disabled' : ''}>
-        <button class="primary" type="submit" ${
-          isJoined || isJoining ? 'disabled' : ''
-        }>${isJoining ? 'Joining...' : 'Join room'}</button>
-        <button name="leave" type="button" ${!isJoined ? 'disabled' : ''}>Leave</button>
+        <input name="roomId" aria-label="Room ID">
+        <button class="primary" type="submit">Join room</button>
+        <button name="leave" type="button">Leave</button>
       </form>
     `;
-
     const form = this.shadowRoot.querySelector('form');
+    this.form = form;
+    this.input = form.elements.roomId;
+    this.joinBtn = form.querySelector('button.primary');
+    this.leaveBtn = form.elements.leave;
+
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      this.roomElement.roomId = form.elements.roomId.value.trim();
+      this.roomElement.roomId = this.input.value.trim();
       this.roomElement.join();
     });
-    form.elements.leave.addEventListener('click', () =>
-      this.roomElement.leave(),
-    );
-  }
-}
+    this.leaveBtn.addEventListener('click', () => this.roomElement.leave());
 
-export class P2PRoomStatusElement extends HTMLElement {
-  connectedCallback() {
-    this.roomElement = findRoomElement(this);
-    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this.unsubscribe = this.roomElement.subscribe((state) => {
       this.render(state);
     });
@@ -282,17 +281,55 @@ export class P2PRoomStatusElement extends HTMLElement {
   }
 
   render(state) {
-    if (!this.shadowRoot) return;
+    if (!this.form) return;
+    const isJoined = state.state === 'joined';
+    const isJoining = state.state === 'joining';
+    if (document.activeElement !== this.input && this.input.value !== state.roomId) {
+      this.input.value = state.roomId;
+    }
+    this.input.disabled = isJoined || isJoining;
+    this.joinBtn.disabled = isJoined || isJoining;
+    this.joinBtn.textContent = isJoining ? 'Joining...' : 'Join room';
+    this.leaveBtn.disabled = !isJoined;
+  }
+}
+
+export class P2PRoomStatusElement extends HTMLElement {
+  connectedCallback() {
+    this.roomElement = findRoomElement(this);
+    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
         :host { display: block; color: #354052; }
         p { margin: 0.35rem 0; }
         .error { color: #b42318; }
       </style>
-      <p>Status: ${escapeHtml(state.state)}</p>
-      <p>Members: ${state.memberCount} / ${state.memberCapacity}</p>
-      ${state.error ? `<p class="error">Error: ${escapeHtml(state.error)}</p>` : ''}
+      <p class="status"></p>
+      <p class="members"></p>
+      <p class="error" hidden></p>
     `;
+    this.statusEl = this.shadowRoot.querySelector('.status');
+    this.membersEl = this.shadowRoot.querySelector('.members');
+    this.errorEl = this.shadowRoot.querySelector('.error');
+    this.unsubscribe = this.roomElement.subscribe((state) => {
+      this.render(state);
+    });
+  }
+
+  disconnectedCallback() {
+    this.unsubscribe?.();
+  }
+
+  render(state) {
+    if (!this.statusEl) return;
+    this.statusEl.textContent = `Status: ${state.state}`;
+    this.membersEl.textContent = `Members: ${state.memberCount} / ${state.memberCapacity}`;
+    if (state.error) {
+      this.errorEl.textContent = `Error: ${state.error}`;
+      this.errorEl.hidden = false;
+    } else {
+      this.errorEl.hidden = true;
+    }
   }
 }
 
@@ -346,7 +383,7 @@ export class P2PVideoGridElement extends HTMLElement {
 
     const liveIds = new Set(streams.map((item) => item.id));
     for (const item of streams) {
-      const figure = getOrCreateVideoFigure(grid, item.id);
+      const { figure, created } = getOrCreateVideoFigure(grid, item.id);
       const video = figure.querySelector('video');
       const caption = figure.querySelector('figcaption');
 
@@ -356,7 +393,7 @@ export class P2PVideoGridElement extends HTMLElement {
         video.srcObject = item.stream;
         video.play().catch(() => {});
       }
-      grid.append(figure);
+      if (created) grid.append(figure);
     }
 
     for (const figure of [...grid.querySelectorAll('figure[data-stream-id]')]) {
@@ -368,35 +405,17 @@ export class P2PVideoGridElement extends HTMLElement {
   }
 }
 
+const CHAT_HISTORY_LIMIT = 50;
+
 export class P2PChatElement extends HTMLElement {
   constructor() {
     super();
-    this.messages = [];
+    this.messageCount = 0;
   }
 
   connectedCallback() {
     this.roomElement = findRoomElement(this);
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
-    this.unsubscribe = this.roomElement.subscribe((state) => {
-      this.state = state;
-      this.render();
-    });
-    this.onMessage = (event) => {
-      this.messages = [...this.messages, event.detail].slice(-50);
-      this.render();
-    };
-    this.roomElement.addEventListener('p2p-chat-message', this.onMessage);
-  }
-
-  disconnectedCallback() {
-    this.unsubscribe?.();
-    this.roomElement?.removeEventListener('p2p-chat-message', this.onMessage);
-  }
-
-  render() {
-    if (!this.shadowRoot) return;
-    const state = this.state || {};
-    const canSend = state.state === 'joined' && state.openDataChannels > 0;
     this.shadowRoot.innerHTML = `
       <style>
         :host { display: block; }
@@ -411,32 +430,63 @@ export class P2PChatElement extends HTMLElement {
         button:disabled, input:disabled { cursor: not-allowed; opacity: 0.55; }
       </style>
       <div class="messages" aria-live="polite">
-        ${
-          this.messages.length
-            ? this.messages.map(renderChatMessage).join('')
-            : '<div class="meta">Messages appear here after another tab joins.</div>'
-        }
+        <div class="meta empty">Messages appear here after another tab joins.</div>
       </div>
       <form>
-        <input name="message" aria-label="Message" placeholder="Message" ${
-          canSend ? '' : 'disabled'
-        }>
-        <button type="submit" ${canSend ? '' : 'disabled'}>Send</button>
+        <input name="message" aria-label="Message" placeholder="Message" disabled>
+        <button type="submit" disabled>Send</button>
       </form>
     `;
+    this.messagesEl = this.shadowRoot.querySelector('.messages');
+    this.emptyEl = this.shadowRoot.querySelector('.empty');
+    this.input = this.shadowRoot.querySelector('input[name="message"]');
+    this.sendBtn = this.shadowRoot.querySelector('button[type="submit"]');
 
-    const messages = this.shadowRoot.querySelector('.messages');
-    messages.scrollTop = messages.scrollHeight;
     this.shadowRoot
       .querySelector('form')
       .addEventListener('submit', (event) => {
         event.preventDefault();
-        const input = event.currentTarget.elements.message;
-        const text = input.value.trim();
+        const text = this.input.value.trim();
         if (!text) return;
         this.roomElement.sendChat(text);
-        input.value = '';
+        this.input.value = '';
       });
+
+    this.unsubscribe = this.roomElement.subscribe((state) => {
+      this.state = state;
+      this.updateSendState();
+    });
+    this.onMessage = (event) => this.appendMessage(event.detail);
+    this.roomElement.addEventListener('p2p-chat-message', this.onMessage);
+  }
+
+  disconnectedCallback() {
+    this.unsubscribe?.();
+    this.roomElement?.removeEventListener('p2p-chat-message', this.onMessage);
+  }
+
+  updateSendState() {
+    if (!this.input) return;
+    const state = this.state || {};
+    const canSend = state.state === 'joined' && state.openDataChannels > 0;
+    this.input.disabled = !canSend;
+    this.sendBtn.disabled = !canSend;
+  }
+
+  appendMessage(message) {
+    if (!this.messagesEl) return;
+    if (this.emptyEl) {
+      this.emptyEl.remove();
+      this.emptyEl = null;
+    }
+    const node = createChatMessageNode(message);
+    this.messagesEl.append(node);
+    this.messageCount += 1;
+    while (this.messageCount > CHAT_HISTORY_LIMIT && this.messagesEl.firstElementChild) {
+      this.messagesEl.firstElementChild.remove();
+      this.messageCount -= 1;
+    }
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
   }
 }
 
@@ -478,23 +528,27 @@ function parseChatMessage(data) {
   }
 }
 
-function renderChatMessage(message) {
+function createChatMessageNode(message) {
   const label = message.local
     ? 'You'
     : `Peer ${(message.senderId || message.memberId || '').slice(0, 8)}`;
-  return `
-    <div class="message">
-      <div class="meta">${escapeHtml(label)}</div>
-      <div class="text">${escapeHtml(message.text)}</div>
-    </div>
-  `;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'message';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = label;
+  const text = document.createElement('div');
+  text.className = 'text';
+  text.textContent = message.text;
+  wrapper.append(meta, text);
+  return wrapper;
 }
 
 function getOrCreateVideoFigure(grid, id) {
-  const existing = [...grid.querySelectorAll('figure[data-stream-id]')].find(
-    (figure) => figure.dataset.streamId === id,
+  const existing = grid.querySelector(
+    `figure[data-stream-id="${CSS.escape(id)}"]`,
   );
-  if (existing) return existing;
+  if (existing) return { figure: existing, created: false };
 
   const figure = document.createElement('figure');
   const video = document.createElement('video');
@@ -505,13 +559,6 @@ function getOrCreateVideoFigure(grid, id) {
   video.playsInline = true;
   figure.append(video, caption);
 
-  return figure;
+  return { figure, created: true };
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-}

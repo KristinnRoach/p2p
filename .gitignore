@@ -11,3 +11,4 @@ webrtc/
 coverage/
 dist/
 *.tsbuildinfo
+.claude/settings.local.json
