@@ -19,7 +19,7 @@ export default function Room() {
     await p2p.join({
       roomId: id,
       peerId: crypto.randomUUID(),
-      createSignaling: createBroadcastRoomSignaling,
+      createSignaling: ({ roomId }) => createBroadcastRoomSignaling(roomId),
       getLocalStream: () =>
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
       memberCapacity: MAX_MEMBERS,
