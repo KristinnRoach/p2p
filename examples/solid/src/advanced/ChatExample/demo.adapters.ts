@@ -148,14 +148,124 @@ export const localStorageCallSignaling = createLocalStorageInvitationSignaling(
   'kidlib:chat:call-invite:',
 );
 
+export function createWebSocketInvitationSignaling(options: {
+  url: string;
+  topic: string;
+}): InvitationSignaling {
+  const { url, topic } = options;
+  const namespacedRoom = (chatRoomId: string) => `${topic}:${chatRoomId}`;
+
+  let socket: WebSocket | null = null;
+  let openPromise: Promise<void> | null = null;
+  let activeChatRoomId: string | null = null;
+  let myPeerId: string | null = null;
+  let callbacks: InviteCallbacks | null = null;
+
+  const ensureOpen = (chatRoomId: string, peerId: string) => {
+    if (socket && activeChatRoomId === chatRoomId) return openPromise!;
+    socket?.close();
+    activeChatRoomId = chatRoomId;
+    myPeerId = peerId;
+    const ws = new WebSocket(url);
+    socket = ws;
+    openPromise = new Promise<void>((resolve, reject) => {
+      ws.addEventListener('open', () => {
+        ws.send(
+          JSON.stringify({
+            type: 'join-room',
+            roomId: namespacedRoom(chatRoomId),
+            peerId,
+          }),
+        );
+        resolve();
+      });
+      ws.addEventListener('error', (event) => reject(event));
+    });
+    ws.addEventListener('message', (event) => {
+      let msg: {
+        type?: string;
+        roomId?: string;
+        kind?: 'request' | 'response' | 'cancel';
+        from?: string;
+        privateRoomId?: string;
+        accepted?: boolean;
+      };
+      try {
+        msg = JSON.parse(event.data as string);
+      } catch {
+        return;
+      }
+      if (msg.type !== 'invite' || msg.roomId !== namespacedRoom(chatRoomId)) {
+        return;
+      }
+      if (!callbacks) return;
+      if (
+        msg.kind === 'request' &&
+        msg.from &&
+        msg.from !== myPeerId &&
+        msg.privateRoomId
+      ) {
+        callbacks.onRequest(msg.from, msg.privateRoomId);
+      } else if (msg.kind === 'response') {
+        callbacks.onResponse(Boolean(msg.accepted));
+      } else if (msg.kind === 'cancel') {
+        callbacks.onCancel?.();
+      }
+    });
+    return openPromise;
+  };
+
+  const sendInvite = async (
+    chatRoomId: string,
+    payload: Record<string, unknown>,
+  ) => {
+    if (!myPeerId) return;
+    await ensureOpen(chatRoomId, myPeerId);
+    socket?.send(
+      JSON.stringify({
+        type: 'invite',
+        roomId: namespacedRoom(chatRoomId),
+        ...payload,
+      }),
+    );
+  };
+
+  return {
+    async subscribe(chatRoomId, peerId, cbs) {
+      callbacks = cbs;
+      await ensureOpen(chatRoomId, peerId);
+      return () => {
+        callbacks = null;
+        socket?.close();
+        socket = null;
+        openPromise = null;
+        activeChatRoomId = null;
+      };
+    },
+    async send(chatRoomId, fromPeerId, privateRoomId) {
+      myPeerId = fromPeerId;
+      await sendInvite(chatRoomId, { kind: 'request', privateRoomId });
+    },
+    async respond(chatRoomId, accepted) {
+      await sendInvite(chatRoomId, { kind: 'response', accepted });
+    },
+    async cancel(chatRoomId) {
+      await sendInvite(chatRoomId, { kind: 'cancel' });
+    },
+  };
+}
+
 export const createBrowserMeshPrivateRoom: CreatePrivateRoom = ({
   roomId,
   peerId,
+  createRtcSignaling,
 }) =>
   joinP2PRoom({
     roomId,
     peerId,
-    createSignaling: ({ roomId }) => createBrowserMeshRoomSignaling(roomId),
+    createSignaling:
+      createRtcSignaling ??
+      (({ roomId }) => createBrowserMeshRoomSignaling(roomId)),
     dataChannel: true,
     memberCapacity: 6,
   });

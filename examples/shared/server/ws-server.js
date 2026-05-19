@@ -73,6 +73,21 @@ wss.on('connection', (ws) => {
           from: sender.peerId,
         });
       }
+      return;
+    }
+
+    if (msg.type === 'invite') {
+      const sender = sockets.get(ws);
+      if (!sender) return;
+      for (const [peerWs, info] of sockets.entries()) {
+        if (info.roomId === sender.roomId && peerWs !== ws) {
+          send(peerWs, {
+            ...msg,
+            roomId: sender.roomId,
+            from: sender.peerId,
+          });
+        }
+      }
     }
   });
 

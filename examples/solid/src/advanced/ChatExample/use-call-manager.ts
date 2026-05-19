@@ -8,21 +8,30 @@ import {
 } from './chat.state';
 import { createChatActions, type ChatActions } from './chat.actions';
 import { createBrowserMeshRoomSignaling } from './demo.adapters';
+import type { P2PRoomSignaling } from '@kidlib/p2p';
 
 type CallManagerOptions = {
   enabled: boolean;
   callSignaling?: InvitationSignaling;
   store?: ChatStateStore;
   actions?: ChatActions;
+  createRtcSignaling?: (options: { roomId: string }) => P2PRoomSignaling;
 };
 
-export function useCallManager(p2p: SolidP2PRoom, options?: CallManagerOptions) {
-  const store: ChatStateStore =
-    options?.store ?? { state: defaultChatState, setState: setChatState };
+export function useCallManager(
+  p2p: SolidP2PRoom,
+  options?: CallManagerOptions,
+) {
+  const store: ChatStateStore = options?.store ?? {
+    state: defaultChatState,
+    setState: setChatState,
+  };
   const chatState = store.state;
   const actions: ChatActions = options?.actions ?? createChatActions(store);
   const [isPendingCallResponse, setIsPendingCallResponse] = createSignal(false);
-  const [pendingCallRoomId, setPendingCallRoomId] = createSignal<string | null>(null);
+  const [pendingCallRoomId, setPendingCallRoomId] = createSignal<string | null>(
+    null,
+  );
   const [incomingCallInvite, setIncomingCallInvite] = createSignal<{
     from: string;
     callRoomId: string;
@@ -80,7 +89,9 @@ export function useCallManager(p2p: SolidP2PRoom, options?: CallManagerOptions) 
     await p2p.join({
       roomId: callRoomId,
       peerId,
-      createSignaling: ({ roomId }) => createBrowserMeshRoomSignaling(roomId),
+      createSignaling:
+        options?.createRtcSignaling ??
+        (({ roomId }) => createBrowserMeshRoomSignaling(roomId)),
       getLocalStream: () =>
         navigator.mediaDevices.getUserMedia({ video: true, audio: false }),
       dataChannel: true,

@@ -116,6 +116,7 @@ function ChatPanel(props: {
     callSignaling: props.demoCallSignaling,
     store: props.store,
     actions: props.actions,
+    createRtcSignaling: props.config.createRtcSignaling,
   });
 
   const isPrivate = () => chatState.transportMode === 'private';

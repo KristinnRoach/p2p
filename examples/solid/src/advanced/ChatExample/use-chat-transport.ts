@@ -8,10 +8,7 @@ import {
   type ChatStateStore,
 } from './chat.state';
 import { configureChatDebug, logChatDebug } from './chat.debug';
-import {
-  createChatActions,
-  type ChatActions,
-} from './chat.actions';
+import { createChatActions, type ChatActions } from './chat.actions';
 
 export function useChatTransport(
   config: ChatExampleConfig | Accessor<ChatExampleConfig>,
@@ -111,6 +108,7 @@ export function useChatTransport(
       const room = await privateChat.createRoom({
         roomId: privateRoomId,
         peerId: current.peerId,
+        createRtcSignaling: getConfig().createRtcSignaling,
       });
 
       if (attempt !== privateRoomAttempt) {
@@ -159,14 +157,17 @@ export function useChatTransport(
   onCleanup(closePrivateRoom);
 
   createEffect(() => {
-    const cleanupMessage = getConfig().callChannel?.onMessage(handleCallMessage);
+    const cleanupMessage =
+      getConfig().callChannel?.onMessage(handleCallMessage);
     if (cleanupMessage) onCleanup(cleanupMessage);
   });
 
   createEffect(() => {
-    const cleanupJoined = getConfig().callChannel?.onMemberJoined?.((detail) => {
-      addSystemMessage(`${detail.memberId} joined the call`);
-    });
+    const cleanupJoined = getConfig().callChannel?.onMemberJoined?.(
+      (detail) => {
+        addSystemMessage(`${detail.memberId} joined the call`);
+      },
+    );
     if (cleanupJoined) onCleanup(cleanupJoined);
   });
 
