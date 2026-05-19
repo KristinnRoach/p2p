@@ -33,7 +33,10 @@ function removeSocket(ws) {
   const info = sockets.get(ws);
   if (!info) return;
   sockets.delete(ws);
-  socketsByRoomPeer.delete(keyOf(info.roomId, info.peerId));
+  const key = keyOf(info.roomId, info.peerId);
+  if (socketsByRoomPeer.get(key) === ws) {
+    socketsByRoomPeer.delete(key);
+  }
   broadcastPeers(info.roomId);
 }
 

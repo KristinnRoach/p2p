@@ -4,9 +4,9 @@ import type {
   P2PComponentsOptions,
   P2PRoomElement,
   P2PRoomSnapshot,
-} from '../components.js';
+} from '../web-components.js';
 
-export * from '../components.js';
+export * from '../web-components.js';
 
 type RoomEventTargetAttrs<
   E extends Event,
@@ -42,6 +42,7 @@ interface P2PRoomAttrs extends BaseHTMLAttrs<P2PRoomElement> {
 
 interface P2PChatAttrs extends BaseHTMLAttrs<HTMLElement> {
   'max-messages'?: number | string;
+  'on:p2p-chat-message'?: (event: P2PChatMessageEvent) => void;
 }
 
 declare module 'solid-js' {

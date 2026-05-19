@@ -16,7 +16,7 @@
       "default": "./src/config.js"
     },
     "./components": {
-      "types": "./src/components/components.d.ts",
+      "types": "./src/components/web-components.d.ts",
       "import": "./src/components/web-components.js",
       "default": "./src/components/web-components.js"
     },

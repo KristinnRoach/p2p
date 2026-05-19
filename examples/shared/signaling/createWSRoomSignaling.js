@@ -9,6 +9,7 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
   let localPeerId = null;
   let manuallyClosed = false;
   let isOpen = false;
+  let closedError = null;
   let openPromiseResolve;
   let openPromiseReject;
 
@@ -18,13 +19,21 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
   });
 
   const waitForOpen = () => {
-    if (isOpen && socket.readyState === WebSocket.OPEN)
-      return Promise.resolve();
+    if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
+    if (
+      socket.readyState === WebSocket.CLOSING ||
+      socket.readyState === WebSocket.CLOSED
+    ) {
+      return Promise.reject(closedError ?? new Error('WebSocket is closed'));
+    }
     return openPromise;
   };
 
   const send = async (message) => {
     await waitForOpen();
+    if (socket.readyState !== WebSocket.OPEN) {
+      throw closedError ?? new Error('WebSocket is closed');
+    }
     socket.send(JSON.stringify(message));
   };
 
@@ -54,7 +63,16 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
   });
 
   socket.addEventListener('error', (error) => {
+    closedError = error;
     if (!isOpen) openPromiseReject(error);
+  });
+
+  socket.addEventListener('close', () => {
+    isOpen = false;
+    closedError ??= new Error(
+      manuallyClosed ? 'WebSocket was closed intentionally' : 'WebSocket closed',
+    );
+    openPromiseReject(closedError);
   });
 
   socket.addEventListener('message', (event) => {
