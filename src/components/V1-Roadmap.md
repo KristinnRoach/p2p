@@ -97,9 +97,7 @@ between sessions.
 
 ## 10. Accessibility is minimal
 
-Form has `aria-label`s but no visible labels. Errors are rendered to the
-DOM but not announced. Video tiles have captions but no live status when
-a remote leaves. Keyboard interaction on video tiles is undefined.
+Form has `aria-label`s but no visible labels. Errors are rendered to the DOM and announced via `role="alert"`, but broader live-region behavior is still limited. Video tiles have captions but no live status when a remote leaves. Keyboard interaction on video tiles is undefined.
 
 **Direction:** add visible labels (or proper `<label>` elements) in the
 controls, `role="alert"` / `aria-live="assertive"` on error region, and
@@ -110,20 +108,20 @@ keyboard focus styles on video tiles. WCAG audit before V1 cut.
 Small, isolated, purely beneficial. Status reflects current branch.
 
 - [x] **Chat `max-messages` attribute.** Replaces hardcoded
-  `CHAT_HISTORY_LIMIT`. Re-trims on attribute change.
+      `CHAT_HISTORY_LIMIT`. Re-trims on attribute change.
 - [x] **`peer-id` attribute / setter on `<p2p-room>`.** Falls back to a
-  per-instance generated UUID when unset.
+      per-instance generated UUID when unset.
 - [x] **`<p2p-chat>` opt-in JSON.parse.** Room tracks a chat-listener
-  counter via `enableChatParsing` / `disableChatParsing`; data-channel
-  messages skip parsing when the counter is zero.
+      counter via `enableChatParsing` / `disableChatParsing`; data-channel
+      messages skip parsing when the counter is zero.
 - [x] **Defer-and-cancel in `disconnectedCallback`.** `queueMicrotask`
-  with an `isConnected` recheck so reparenting doesn't tear the room
-  down. Remaining: documentation and an explicit escape hatch.
+      with an `isConnected` recheck so reparenting doesn't tear the room
+      down. Remaining: documentation and an explicit escape hatch.
 - [x] **CSS custom properties** (`--p2p-accent`, `--p2p-accent-fg`,
-  `--p2p-border`, `--p2p-radius`, `--p2p-bg`, `--p2p-fg`,
-  `--p2p-muted-fg`, `--p2p-error`) on every component's `:host`.
+      `--p2p-border`, `--p2p-radius`, `--p2p-bg`, `--p2p-fg`,
+      `--p2p-muted-fg`, `--p2p-error`) on every component's `:host`.
 - [x] **`part` attributes** on controls (`form`, `room-id-input`,
-  `join-button`, `leave-button`), status (`status`, `members`,
-  `error`), video grid (`grid`, `empty`, `tile`, `video`, `caption`),
-  and chat (`messages`, `message`, `form`, `input`, `send-button`).
+      `join-button`, `leave-button`), status (`status`, `members`,
+      `error`), video grid (`grid`, `empty`, `tile`, `video`, `caption`),
+      and chat (`messages`, `message`, `form`, `input`, `send-button`).
 - [x] **`role="alert"`** on the status error region.
