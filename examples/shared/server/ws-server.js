@@ -58,9 +58,18 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    if (msg.roomId && msg.to) {
-      const target = socketsByRoomPeer.get(keyOf(msg.roomId, msg.to));
-      if (target) send(target, msg);
+    if (msg.to) {
+      const sender = sockets.get(ws);
+      if (!sender) return;
+
+      const target = socketsByRoomPeer.get(keyOf(sender.roomId, msg.to));
+      if (target) {
+        send(target, {
+          ...msg,
+          roomId: sender.roomId,
+          from: sender.peerId,
+        });
+      }
     }
   });
 
