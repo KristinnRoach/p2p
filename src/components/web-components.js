@@ -342,7 +342,10 @@ export class P2PRoomControlsElement extends HTMLElement {
     if (!this.form) return;
     const isJoined = state.state === 'joined';
     const isJoining = state.state === 'joining';
-    if (document.activeElement !== this.input && this.input.value !== state.roomId) {
+    if (
+      this.shadowRoot.activeElement !== this.input &&
+      this.input.value !== state.roomId
+    ) {
       this.input.value = state.roomId;
     }
     this.input.disabled = isJoined || isJoining;
@@ -512,6 +515,7 @@ export class P2PChatElement extends HTMLElement {
         <button type="submit" part="send-button" disabled>Send</button>
       </form>
     `;
+    this.messageCount = 0;
     this.messagesEl = this.shadowRoot.querySelector('.messages');
     this.emptyEl = this.shadowRoot.querySelector('.empty');
     this.input = this.shadowRoot.querySelector('input[name="message"]');

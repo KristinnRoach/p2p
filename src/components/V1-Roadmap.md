@@ -3,18 +3,17 @@
 Tracking the remaining gaps before `@kidlib/p2p/components` should be
 considered production-ready. Items are ordered by impact on real consumers.
 
-## 1. Styling is locked inside shadow DOM
+## 1. Styling extensibility is incomplete
 
-No `::part`, no exposed CSS custom properties, no slots for caption/message
-templates. The default styles are reasonable for a demo but force consumers
-to either accept the look or rewrite the component. This is the biggest
-practical adoption blocker.
+Done: `part` attributes and CSS custom properties are exposed for the shipped
+controls, status, video grid, and chat surfaces. Remaining: no slots for
+caption/message templates. The default markup is reasonable for a demo but
+still forces consumers to accept the rendered structure or rewrite the
+component.
 
-**Direction:** add `part` attributes to every styleable element (`messages`,
-`message`, `input`, `send-button`, `video`, `caption`, ...), document a small
-set of CSS custom properties (`--p2p-accent`, `--p2p-border`, `--p2p-radius`),
-and replace the message/caption renderers with `<slot>`-based templates so
-apps can fully override markup.
+**Direction:** document the exposed parts and CSS custom properties, then
+replace the message/caption renderers with `<slot>`-based templates so apps
+can fully override markup.
 
 ## 2. Global singleton config (`componentDefaults`)
 
@@ -36,15 +35,14 @@ error.
 elements that takes either an element reference or a selector, and fall back
 to ascending through `getRootNode().host` chains before throwing.
 
-## 4. `disconnectedCallback` calls `leave()` unconditionally
+## 4. Disconnect behavior needs documentation and escape hatch
 
-Any framework that reparents the node (React strict mode, conditional render,
-portals, view transitions) tears the room down. Common custom-element gotcha
-but real.
+Done: `disconnectedCallback` defers `leave()` to the next microtask and cancels
+it if the room reconnects first. Remaining: document the behavior and provide
+an explicit escape hatch for consumers that need different teardown semantics.
 
-**Direction:** defer the `leave()` to the next microtask and cancel it if
-`connectedCallback` re-fires before it runs. Document the behavior and
-escape hatch.
+**Direction:** keep the defer-and-cancel default, document how framework
+reparenting is handled, and add the escape hatch.
 
 ## 5. Chat ephemeral, no hydrate hook, 50-message cap hardcoded
 
@@ -66,15 +64,16 @@ gap from a user's perspective.
 and a device picker. Keep it optional — `<p2p-video-grid>` should keep
 working without it.
 
-## 7. Every data-channel message gets JSON.parse'd
+## 7. Chat parsing is opt-in but send-only usage is unresolved
 
-`P2PRoomElement.onDataChannelMessage` parses every payload looking for the
-chat type. Apps with their own binary or large-message protocols pay the
-cost on every frame.
+Done: `<p2p-chat>` mount/unmount enables and disables the chat parser, and
+data-channel messages skip `JSON.parse` while the chat-listener count is zero.
+Remaining: clarify or implement the parser behavior for consumers that call
+`room.sendChat` without mounting `<p2p-chat>`.
 
-**Direction:** opt-in chat: only attach the chat parser when a
-`<p2p-chat>` element is mounted inside the room (or when the consumer calls
-`room.sendChat`). Track mount/unmount via the existing subscriber set.
+**Direction:** keep parser activation tied to `<p2p-chat>` mount/unmount, then
+decide whether `room.sendChat` should also opt the room into receiving chat
+messages or whether send-only chat is intentionally unsupported.
 
 ## 8. Framework type augmentation gaps
 
@@ -85,14 +84,16 @@ React, Vue, and others get red squiggles.
 needed, each with its own subpath export. Keep them strictly type-only —
 the runtime stays framework-agnostic.
 
-## 9. No stable peer identity setter
+## 9. Stable peer identity needs final docs
 
-`peerId` is minted in the constructor. Apps cannot pass in a stable
-identity tied to a user account, signal, or store.
+Done: apps can set `element.peerId = '...'` before `join()` or use the
+`peer-id` attribute; unset rooms fall back to a per-instance generated UUID.
+Remaining: document stable identity usage and the leave/rejoin behavior so
+reminting is explicitly opt-in, not accidental.
 
-**Direction:** allow `element.peerId = '...'` before `join()` and a
-`peer-id` attribute. Re-minting on every leave/rejoin should be opt-in,
-not the default.
+**Direction:** document the `peerId` setter, `peer-id` attribute, and generated
+fallback, including how consumers should intentionally choose a new identity
+between sessions.
 
 ## 10. Accessibility is minimal
 
@@ -117,8 +118,7 @@ Small, isolated, purely beneficial. Status reflects current branch.
   messages skip parsing when the counter is zero.
 - [x] **Defer-and-cancel in `disconnectedCallback`.** `queueMicrotask`
   with an `isConnected` recheck so reparenting doesn't tear the room
-  down. Items 4 above (the full version) covers the rest of the
-  edge cases.
+  down. Remaining: documentation and an explicit escape hatch.
 - [x] **CSS custom properties** (`--p2p-accent`, `--p2p-accent-fg`,
   `--p2p-border`, `--p2p-radius`, `--p2p-bg`, `--p2p-fg`,
   `--p2p-muted-fg`, `--p2p-error`) on every component's `:host`.
