@@ -5,10 +5,9 @@ docs/WIP/
 trash/
 TODO.md
 RELEASE.md
+*.tsbuildinfo
+dist/
 tests/**/__screenshots__/
 test-results/
-webrtc/
 coverage/
-dist/
-*.tsbuildinfo
 .claude/settings.local.json
