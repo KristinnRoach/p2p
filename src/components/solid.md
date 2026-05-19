@@ -1,123 +1,84 @@
 # SolidJS Compatibility Considerations
 
-This document covers what already works, what to do for idiomatic Solid
-usage, and decisions worth taking before recommending the components to
-Solid users at scale.
+This document covers the SolidJS wrapper components included for the web components,
+and recommendations for when to use them versus `@kidlib/p2p/solid`.
 
 ## What's already in place
 
-- **Subpath export** `@kidlib/p2p/components/solid` re-exports the
-  runtime `defineP2P*` and the element classes, and pulls in JSX module
-  augmentation in one import.
-- **JSX type augmentation** for `p2p-room`, `p2p-room-controls`,
-  `p2p-room-status`, `p2p-video-grid`, `p2p-chat`, including:
-  - Attribute typing (`room-id`, `member-capacity`, `peer-id`,
-    `max-messages`).
-  - `prop:` namespace for object-shaped configuration (`createSignaling`,
-    `getLocalStream`, `roomOptions`).
-  - `on:p2p-room-change` and `on:p2p-chat-message` typed against
-    `CustomEvent<P2PRoomSnapshot>` / `CustomEvent<P2PChatMessage>`.
+- **Wrapper Components**: Capitalized JSX components (`P2PRoom`, `P2PRoomControls`, `P2PVideoGrid`, etc.) from `@kidlib/p2p/components/solid`.
+- **Automatic Registration**: The wrappers safely check for `customElements` and call `defineP2PComponents()` automatically. This prevents SSR crashes.
+- **Prop Wrapping**: The wrappers handle forwarding object-shaped configuration (`createSignaling`, `getLocalStream`, `roomOptions`) under the hood so you don't need to manually prefix them with the `prop:` namespace.
 
 ## Idiomatic usage notes
 
-### Pass object configuration with `prop:`
+### Use the wrapper components
 
-Solid coerces unprefixed attribute values to strings. The three
-object-shaped options must use the `prop:` namespace or a `ref`:
-
-```tsx
-<p2p-room
-  room-id="demo"
-  prop:createSignaling={({ roomId }) => createRoomSignalingForApp(roomId)}
-  prop:roomOptions={{ rtcConfig: { iceServers: [...] } }}
-/>
-```
-
-Without `prop:`, you'll see `"[object Object]"` as the attribute value
-and `createSignaling` will end up as a string.
-
-### Listen with the `on:` namespace
-
-Native Solid event binding for custom events:
+Instead of using raw lowercase tags (`<p2p-room>`), use the exported Solid wrappers:
 
 ```tsx
-<p2p-room on:p2p-room-change={(e) => setSnapshot(e.detail)} />
-```
+import { P2PRoom, P2PVideoGrid } from '@kidlib/p2p/components/solid';
 
-The augmentation types `e.currentTarget` as `P2PRoomElement`, so
-`e.currentTarget.sendChat(...)` is type-safe.
+<P2PRoom
+  roomId='demo'
+  createSignaling={({ roomId }) => createRoomSignalingForApp(roomId)}
+>
+  <P2PVideoGrid />
+</P2PRoom>;
+```
 
 ### Reach inside with `ref`
 
-Imperative access (call `join()` on mount, expose `room`, etc.):
+Imperative access (call `join()` on mount, expose `room`, etc.) works just by passing a ref to the wrapper:
 
 ```tsx
 let room!: P2PRoomElement;
-return <p2p-room ref={room} room-id="demo" />;
+return <P2PRoom ref={room} roomId='demo' />;
 ```
 
-`room.subscribe((snap) => ...)` returns an unsubscribe; pair it with
-`onCleanup`.
+### Two paths to a room: wrapper components vs. `useP2PRoom`
 
-### Two paths to a room: web components vs. `useP2PRoom`
-
-The package now exposes two parallel surfaces to Solid users:
+The package exposes two parallel surfaces to Solid users:
 
 | Use case                                | Prefer                                |
-|-----------------------------------------|---------------------------------------|
-| Drop-in UI, minimal code                | Web components                        |
+| --------------------------------------- | ------------------------------------- |
+| Drop-in UI, minimal code                | Wrapper components (`P2PRoom` etc.)   |
 | Custom UI with Solid signals everywhere | `useP2PRoom` from `@kidlib/p2p/solid` |
 
 The web components own their DOM (shadow root) and their state.
 `useP2PRoom` returns fine-grained accessors (`localStream`,
 `remoteStreams`, `state`, ...) that compose with `<For>`, `<Show>`,
-stores, and resources. **Mixing is fine** — use `<p2p-video-grid>` and
-`<p2p-chat>` for the standard bits while rendering your own Solid UI
-for the rest, via `p2p-room-change` subscription.
+stores, and resources. **Mixing is fine** — use `<P2PVideoGrid>` and
+`<P2PChat>` while rendering your own Solid UI for the rest, via the `onRoomChange` prop.
 
 Caveat: web components subscribe internally; their state cannot be
 "lifted" into a Solid signal without forwarding through
-`on:p2p-room-change`. For apps that want to drive everything from one
+`onRoomChange`. For apps that want to drive everything from one
 store, `useP2PRoom` is the better fit.
-
-### Cleanup in SSR / SolidStart
-
-`customElements.define` only exists in the browser. If you call
-`defineP2PComponents` at module top-level it'll throw during SSR. Two
-options:
-
-```tsx
-import { onMount } from 'solid-js';
-
-onMount(() => {
-  defineP2PComponents({ createSignaling: ... });
-});
-```
-
-Or guard at import time with a dynamic `import('@kidlib/p2p/components/solid')`
-inside an `onMount`. The custom elements will not hydrate on the server
-in any case (they have no SSR representation today), so render them
-inside a `<Show when={mounted()}>` gate or accept a flash.
 
 ### HMR
 
-`defineElement` is idempotent (`customElements.get` guard), but live
-class redefinitions don't propagate to existing element instances.
+`defineElement` is idempotent, but live class redefinitions don't propagate to existing element instances.
 Editing `web-components.js` while the dev server is running leaves
 already-instantiated rooms running the old class. Refresh the page
 after changes that affect the element class.
 
+### Published JSX
+
+`@kidlib/p2p/components/solid` currently publishes a raw `.jsx` wrapper file.
+Solid apps must use tooling that runs the Solid JSX transform on that dependency
+path. In Vite, use `vite-plugin-solid`; if your setup excludes dependency
+transforms, explicitly include `@kidlib/p2p/components/solid`.
+
+Before treating this API as stable, add a package build step that compiles the
+wrapper to plain JavaScript and point the package export at the built file.
+
 ### Reactive children inside shadow DOM
 
-You cannot render Solid components into `<p2p-video-grid>`'s shadow
-root from outside. To customize tile rendering reactively, skip the
-component and write your own Solid grid driven by
-`useP2PRoom().remoteStreams`. The shadow parts (`tile`, `video`,
-`caption`) cover styling-only customization without ejecting.
+You cannot render Solid components into `<P2PVideoGrid>`'s shadow root from outside. To customize tile rendering reactively, skip the component and write your own Solid grid driven by `useP2PRoom().remoteStreams`. The shadow parts (`tile`, `video`, `caption`) cover styling-only customization without ejecting.
 
 ## Should we adopt `solid-element`?
 
-`solid-element` is a tool for *publishing* Solid components as custom
+`solid-element` is a tool for _publishing_ Solid components as custom
 elements. For the consumer ergonomics this doc is about, it would only
 matter if we rewrote the existing class-based components in Solid and
 re-shipped them through `solid-element`. Evaluation:
@@ -153,7 +114,7 @@ re-shipped them through `solid-element`. Evaluation:
 - The web components grow imperative re-render logic past the point
   where it's clearly worse than a reactive rewrite.
 
-In the meantime, `solid-element` *can* be used by consumers in their
+In the meantime, `solid-element` _can_ be used by consumers in their
 own apps without any package change. It's compatible with the existing
 components — they're just custom elements.
 
