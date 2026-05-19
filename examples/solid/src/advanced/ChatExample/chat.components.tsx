@@ -61,7 +61,9 @@ function createDemoCallChannel(p2p: SolidP2PRoom) {
       createEffect(() => {
         const room = p2p.room();
         if (!room) return;
-        const unsubscribe = room.on(type, callback);
+        const unsubscribe = room.on(type, (detail: unknown) =>
+          callback(detail as T),
+        );
         onCleanup(unsubscribe);
       });
       return dispose;
