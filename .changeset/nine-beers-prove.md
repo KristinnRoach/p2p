@@ -2,4 +2,6 @@
 "@kidlib/p2p": patch
 ---
 
-Bug fix: Stabilized P2PRoom.remoteMemberStreams identity and browser mesh presence ordering to prevent unnecessary remote video reordering and flicker in consuming UIs.
+- Added browser-native room UI components via `@kidlib/p2p/components`.
+- Added Solid JSX wrappers and types via `@kidlib/p2p/components/solid`.
+- Stabilized `P2PRoom.remoteMemberStreams` identity and browser mesh presence ordering to reduce remote video reordering and flicker.
