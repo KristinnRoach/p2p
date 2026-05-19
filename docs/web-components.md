@@ -145,7 +145,7 @@ import {
   P2PRoomControls,
   P2PRoomStatus,
   P2PVideoGrid,
-  P2PChat
+  P2PChat,
 } from '@kidlib/p2p/components/solid';
 
 // No need to call defineP2PComponents manually, the wrappers handle it
@@ -158,12 +158,11 @@ function App() {
       createSignaling={({ roomId }) => createRoomSignalingForApp(roomId)}
       roomOptions={{ rtcConfig: { iceServers: [...] } }}
       onRoomChange={(event) => setSnapshot(event.detail)}
-      onChatMessage={(event) => appendMessage(event.detail)}
     >
       <P2PRoomControls />
       <P2PRoomStatus />
       <P2PVideoGrid />
-      <P2PChat />
+      <P2PChat onChatMessage={(event) => appendMessage(event.detail)} />
     </P2PRoom>
   );
 }
