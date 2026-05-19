@@ -123,6 +123,7 @@ export class P2PRoom extends EventTarget {
     /** @type {Map<string, import('./session.js').P2PSession>} one entry per connected remote peer */
     this.pairs = new Map();
     this.remoteStreams = new Map();
+    this._remoteMemberStreamEntries = new Map();
     this.dataChannels = new Map();
     this._controllers = new Map();
     this._pairSignalings = new Map();
@@ -189,16 +190,23 @@ export class P2PRoom extends EventTarget {
   get remoteMemberStreams() {
     const streams = [];
     const seen = new Set();
+    const addStream = (memberId) => {
+      const stream = this.remoteStreams.get(memberId);
+      if (!stream) return;
+      const previous = this._remoteMemberStreamEntries.get(memberId);
+      const entry =
+        previous?.stream === stream ? previous : { memberId, stream };
+      this._remoteMemberStreamEntries.set(memberId, entry);
+      streams.push(entry);
+      seen.add(memberId);
+    };
 
     for (const memberId of this._memberIds) {
-      const stream = this.remoteStreams.get(memberId);
-      if (!stream) continue;
-      streams.push({ memberId, stream });
-      seen.add(memberId);
+      addStream(memberId);
     }
 
-    for (const [memberId, stream] of this.remoteStreams) {
-      if (!seen.has(memberId)) streams.push({ memberId, stream });
+    for (const memberId of this.remoteStreams.keys()) {
+      if (!seen.has(memberId)) addStream(memberId);
     }
 
     return streams;
@@ -655,6 +663,7 @@ export class P2PRoom extends EventTarget {
     this._closeDataChannel(memberId);
     const stream = this.remoteStreams.get(memberId) ?? null;
     this.remoteStreams.delete(memberId);
+    this._remoteMemberStreamEntries.delete(memberId);
     if (emitLeft) this._emitMemberLeft(memberId, stream);
   }
 

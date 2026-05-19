@@ -15,6 +15,17 @@
       "import": "./src/config.js",
       "default": "./src/config.js"
     },
+    "./components": {
+      "types": "./src/components/web-components.d.ts",
+      "import": "./src/components/web-components.js",
+      "default": "./src/components/web-components.js"
+    },
+    "./components/solid": {
+      "solid": "./src/components/solid/index.jsx",
+      "types": "./src/components/solid/index.d.ts",
+      "import": "./src/components/solid/index.jsx",
+      "default": "./src/components/solid/index.jsx"
+    },
     "./ice": {
       "types": "./src/types/ice.d.ts",
       "import": "./src/ice.js",
@@ -92,8 +103,11 @@
     }
   },
   "scripts": {
+    "dev:van": "pnpm --dir examples/web-components dev",
+    "dev:components": "pnpm --dir examples/web-components dev",
     "dev:react": "pnpm --dir examples/react dev",
     "dev:solid": "pnpm --dir examples/solid dev",
+    "server:ws": "node examples/shared/server/ws-server.js",
     "kill": "pkill -f vite",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -112,6 +126,7 @@
     "@vitest/browser-playwright": "^4.1.0",
     "playwright": "^1.57.0",
     "solid-js": "^1.9.12",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "ws": "^8.20.1"
   }
 }

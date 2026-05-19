@@ -8,19 +8,6 @@ function noopBroadcast() {
   return 0;
 }
 
-function reconcileRemoteMemberStreams(previous, next) {
-  const previousByMemberId = new Map(
-    previous.map((remoteStream) => [remoteStream.memberId, remoteStream]),
-  );
-
-  return next.map((nextStream) => {
-    const previousStream = previousByMemberId.get(nextStream.memberId);
-    return previousStream?.stream === nextStream.stream
-      ? previousStream
-      : nextStream;
-  });
-}
-
 export function useP2PRoom() {
   const [room, setRoom] = createSignal();
   const [ready, setReady] = createSignal(Promise.resolve(undefined), {
@@ -88,9 +75,7 @@ export function useP2PRoom() {
 
   function syncRoomSignals(nextRoom) {
     setLocalStream(nextRoom.localStream ?? undefined);
-    setRemoteMemberStreams((previous) =>
-      reconcileRemoteMemberStreams(previous, nextRoom.remoteMemberStreams),
-    );
+    setRemoteMemberStreams(nextRoom.remoteMemberStreams);
     setMembers(nextRoom.members);
     setMemberCount(nextRoom.memberCount);
     setMemberCapacity(nextRoom.memberCapacity);
@@ -99,9 +84,7 @@ export function useP2PRoom() {
   }
 
   function updateMembership(nextRoom) {
-    setRemoteMemberStreams((previous) =>
-      reconcileRemoteMemberStreams(previous, nextRoom.remoteMemberStreams),
-    );
+    setRemoteMemberStreams(nextRoom.remoteMemberStreams);
     setMembers(nextRoom.members);
     setMemberCount(nextRoom.memberCount);
     setMemberCapacity(nextRoom.memberCapacity);
@@ -110,9 +93,7 @@ export function useP2PRoom() {
 
   function bindRoomEvents(nextRoom) {
     const updateRemoteStreams = () =>
-      setRemoteMemberStreams((previous) =>
-        reconcileRemoteMemberStreams(previous, nextRoom.remoteMemberStreams),
-      );
+      setRemoteMemberStreams(nextRoom.remoteMemberStreams);
 
     const cleanups = [
       nextRoom.on('statechange', ({ state }) => setState(state)),

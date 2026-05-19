@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { useP2PRoom } from '@kidlib/p2p/solid';
-import { createBrowserMeshRoomSignaling } from '@shared/index';
+import { createBroadcastRoomSignaling } from '@shared/index';
 
 const MAX_MEMBERS = 6;
 
@@ -19,7 +19,7 @@ export default function Room() {
     await p2p.join({
       roomId: id,
       peerId: crypto.randomUUID(),
-      createSignaling: createBrowserMeshRoomSignaling,
+      createSignaling: ({ roomId }) => createBroadcastRoomSignaling(roomId),
       getLocalStream: () =>
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
       memberCapacity: MAX_MEMBERS,
