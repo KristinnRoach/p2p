@@ -131,6 +131,12 @@ export interface P2PRoomSignaling {
   /** Explicitly remove this peer from presence. Backend record semantics are adapter-owned. */
   leave(peerId: string): void | Promise<void>;
   refreshPresence?(peerId: string): void | Promise<void>;
+  /**
+   * Subscribe to room presence. MUST emit an initial snapshot to every
+   * subscriber — including watchers that have not joined — and keep them
+   * updated. Capacity enforcement (`memberCapacity`) and `watchP2PRoom`
+   * depend on it; a backend that only notifies joined peers breaks both.
+   */
   onPeers(callback: (peerIds: string[]) => void): void | (() => void);
   /** Must return synchronously — the room calls this inline during peer connection setup. */
   createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcSignalingSource;

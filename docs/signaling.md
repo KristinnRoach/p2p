@@ -37,6 +37,14 @@ interface P2PRoomSignaling {
 }
 ```
 
+`onPeers` is a hard contract: it MUST emit an initial presence snapshot to
+every subscriber — including watchers that have never called `join()` — and
+keep all subscribers updated on every change. `watchP2PRoom` and capacity
+enforcement (`memberCapacity`) both evaluate against this feed; a backend that
+only notifies joined peers breaks both (the room joins blind against an empty
+member list). `P2PRoom` waits briefly for the first snapshot before joining,
+but that is a degraded fallback, not a substitute.
+
 Presence cleanup is provider-owned. `leave(peerId)` is the explicit cleanup
 path. If an adapter implements `refreshPresence(peerId)`, `P2PRoom` calls it
 periodically after joining so the adapter can expire peers that disappear

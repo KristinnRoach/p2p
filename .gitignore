@@ -7,8 +7,9 @@ TODO.md
 RELEASE.md
 tests/**/__screenshots__/
 test-results/
-webrtc/
 coverage/
 dist/
 *.tsbuildinfo
-.claude/settings.local.json
+.claude/
+.fallow/
+

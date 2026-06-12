@@ -131,6 +131,8 @@ export class P2PRoom extends EventTarget {
     this._cleanups = [];
     this._listenerMap = new Map();
     this._memberIds = [];
+    this._presenceSeen = false;
+    this._presenceWaiters = new Set();
     this._state = 'watching';
     this._joinPromise = null;
     this._leavePromise = null;
@@ -306,6 +308,11 @@ export class P2PRoom extends EventTarget {
       throw createAbortError();
     }
     const cleanup = this.signaling.onPeers((memberIds) => {
+      if (!this._presenceSeen) {
+        this._presenceSeen = true;
+        for (const waiter of this._presenceWaiters) waiter();
+        this._presenceWaiters.clear();
+      }
       this._setMembers(memberIds);
       if (
         (this._state === 'watching' || this._state === 'joining') &&
@@ -352,6 +359,18 @@ export class P2PRoom extends EventTarget {
       throw new Error('P2PRoom.join: room is closed');
     }
     if (this._state === 'active') return;
+    // Capacity is evaluated against backend presence. Adapters must emit an
+    // initial onPeers snapshot to watchers; if it hasn't arrived yet, wait
+    // briefly rather than joining blind against an empty member list. Only
+    // yield when the wait can matter — unlimited rooms and rooms with a
+    // snapshot keep the synchronous join path.
+    if (!this._presenceSeen && Number.isFinite(this.memberCapacity)) {
+      await this._awaitPresenceSnapshot();
+      if (this._state === 'closed') {
+        throw new Error('P2PRoom.join: room is closed');
+      }
+      if (this.signal?.aborted) throw createAbortError();
+    }
     if (this._isFull()) {
       this._emitFull();
       throw createRoomFullError();
@@ -735,6 +754,26 @@ export class P2PRoom extends EventTarget {
     const state = this.state;
     if (state === previous) return;
     this._emit('statechange', { state, previous });
+  }
+
+  /**
+   * Resolve once the first onPeers snapshot has been received, or after a
+   * short timeout for adapters that violate the snapshot contract (degrades
+   * to the previous join-blind behavior instead of blocking forever).
+   */
+  _awaitPresenceSnapshot(timeoutMs = 2000) {
+    if (this._presenceSeen) return Promise.resolve();
+    return new Promise((resolve) => {
+      const waiter = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        this._presenceWaiters.delete(waiter);
+        resolve();
+      }, timeoutMs);
+      this._presenceWaiters.add(waiter);
+    });
   }
 
   _setMembers(memberIds) {

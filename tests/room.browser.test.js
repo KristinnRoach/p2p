@@ -648,6 +648,26 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('waits for the first presence snapshot before joining when capacity is finite', async () => {
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'c',
+      memberCapacity: 2,
+    });
+
+    // Join before any presence has been delivered (e.g. a backend that only
+    // pushes peers asynchronously). The room must not join blind.
+    const joinPromise = room.join();
+    signaling.emitPeers(['a', 'b']);
+
+    await expect(joinPromise).rejects.toBeInstanceOf(RoomFullError);
+    expect(signaling.join).not.toHaveBeenCalled();
+    expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
+
+    room.close();
+  });
+
   it('allows joining when memberCapacity is reached but local member is present', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();
