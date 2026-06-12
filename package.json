@@ -113,7 +113,7 @@
     "test:watch": "vitest",
     "changeset": "EDITOR='code --wait' changeset",
     "bump": "changeset version",
-    "release": "pnpm test && changeset publish"
+    "release": "pnpm test && changeset publish && git push --follow-tags"
   },
   "homepage": "https://github.com/KristinnRoach/p2p#readme",
   "license": "MIT",
