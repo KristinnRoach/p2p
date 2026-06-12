@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.1.11
+
+### Patch Changes
+
+- 2a098f4: Enforce memberCapacity on backends that deliver presence asynchronously: join waits for the first onPeers snapshot before checking capacity, and the watcher-snapshot contract is now documented.
+
 ## 0.1.10
 
 ### Patch Changes
