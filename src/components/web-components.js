@@ -65,37 +65,38 @@ export function defineP2PChat() {
 }
 
 export class P2PRoomElement extends HTMLElement {
+  #room = null;
+  #generatedPeerId = crypto.randomUUID();
+  #state = 'idle';
+  #error = '';
+  #localStream = null;
+  #remoteStreams = [];
+  #leavePending = false;
+  #joinController = null;
+
   static get observedAttributes() {
     return ['room-id', 'member-capacity', 'peer-id'];
   }
 
   constructor() {
     super();
-    this.room = null;
-    this._generatedPeerId = crypto.randomUUID();
     this.createSignaling = null;
     this.getLocalStream = null;
     this.roomOptions = null;
-    this.state = 'idle';
-    this.error = '';
-    this.localStream = null;
-    this.remoteStreams = [];
     this.subscribers = new Set();
     this.chatListenerCount = 0;
-    this._leavePending = false;
-    this._joinController = null;
   }
 
   connectedCallback() {
-    this._leavePending = false;
+    this.#leavePending = false;
     this.notify();
   }
 
   disconnectedCallback() {
-    this._leavePending = true;
+    this.#leavePending = true;
     queueMicrotask(() => {
-      if (this.isConnected || !this._leavePending) return;
-      this._leavePending = false;
+      if (this.isConnected || !this.#leavePending) return;
+      this.#leavePending = false;
       this.leave();
     });
   }
@@ -124,12 +125,28 @@ export class P2PRoomElement extends HTMLElement {
   }
 
   get peerId() {
-    return this.getAttribute('peer-id') || this._generatedPeerId;
+    return this.getAttribute('peer-id') || this.#generatedPeerId;
   }
 
   set peerId(value) {
     if (value) this.setAttribute('peer-id', value);
     else this.removeAttribute('peer-id');
+  }
+
+  get room() {
+    return this.#room;
+  }
+  get state() {
+    return this.#state;
+  }
+  get error() {
+    return this.#error;
+  }
+  get localStream() {
+    return this.#localStream;
+  }
+  get remoteStreams() {
+    return this.#remoteStreams;
   }
 
   subscribe(callback) {
@@ -160,12 +177,12 @@ export class P2PRoomElement extends HTMLElement {
       return;
     }
 
-    this.state = 'joining';
-    this.error = '';
+    this.#state = 'joining';
+    this.#error = '';
     this.notify();
 
     const controller = new AbortController();
-    this._joinController = controller;
+    this.#joinController = controller;
 
     try {
       const room = await joinP2PRoom({
@@ -181,14 +198,14 @@ export class P2PRoomElement extends HTMLElement {
         dataChannelOpenTimeoutMs: 0,
         onLocalStream: ({ stream }) => {
           if (controller.signal.aborted) return;
-          this.localStream = stream;
+          this.#localStream = stream;
           this.notify();
         },
         onMemberStream: () => this.syncFromRoom(),
         onMemberLeft: () => this.syncFromRoom(),
         onMembersChanged: () => this.syncFromRoom(),
         onStateChange: ({ state }) => {
-          this.state = state;
+          this.#state = state;
           this.notify();
         },
         onDataChannelOpen: () => this.notify(),
@@ -205,36 +222,36 @@ export class P2PRoomElement extends HTMLElement {
           );
         },
         onError: ({ error }) => {
-          this.error = error?.message || String(error);
+          this.#error = error?.message || String(error);
           this.notify();
         },
       });
 
-      if (this._joinController !== controller || controller.signal.aborted) {
+      if (this.#joinController !== controller || controller.signal.aborted) {
         room.close();
         return;
       }
-      this._joinController = null;
-      this.room = room;
+      this.#joinController = null;
+      this.#room = room;
       this.syncFromRoom();
     } catch (error) {
-      if (this._joinController === controller) this._joinController = null;
+      if (this.#joinController === controller) this.#joinController = null;
       if (controller.signal.aborted && error?.name === 'AbortError') return;
       this.leave();
-      this.state = 'idle';
-      this.error = error?.message || String(error);
+      this.#state = 'idle';
+      this.#error = error?.message || String(error);
       this.notify();
     }
   }
 
   leave() {
-    this._joinController?.abort();
-    this._joinController = null;
+    this.#joinController?.abort();
+    this.#joinController = null;
     this.room?.close();
-    this.room = null;
-    this.localStream = null;
-    this.remoteStreams = [];
-    this.state = 'idle';
+    this.#room = null;
+    this.#localStream = null;
+    this.#remoteStreams = [];
+    this.#state = 'idle';
     this.notify();
   }
 
@@ -260,9 +277,9 @@ export class P2PRoomElement extends HTMLElement {
 
   syncFromRoom() {
     if (!this.room) return;
-    this.state = this.room.state;
-    this.localStream = this.room.localStream;
-    this.remoteStreams = this.room.remoteMemberStreams;
+    this.#state = this.room.state;
+    this.#localStream = this.room.localStream;
+    this.#remoteStreams = this.room.remoteMemberStreams;
     this.notify();
   }
 
@@ -291,7 +308,7 @@ export class P2PRoomElement extends HTMLElement {
   }
 
   setError(message) {
-    this.error = message;
+    this.#error = message;
     this.notify();
   }
 }
