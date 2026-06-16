@@ -1,6 +1,9 @@
 export type {
   P2PRoomEvents,
   P2PRoomOptions,
+  P2PRoomPresenceData,
+  P2PRoomPresenceMember,
+  P2PRoomPresenceSnapshot,
   P2PRoomPeerSignalingOptions,
   P2PRoomSignaling,
   P2PRoomState,

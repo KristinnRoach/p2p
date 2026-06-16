@@ -331,6 +331,23 @@ describe('createRoomSignaling', () => {
     expect(source.leave).toHaveBeenCalledWith('peer-a');
   });
 
+  it('forwards optional presence data to the wrapped room source', async () => {
+    const source = createRoomSource({
+      refreshPresence: vi.fn(),
+      updatePresenceData: vi.fn(),
+    });
+    const signaling = createRoomSignaling(source);
+    const data = { displayName: 'Ada', muted: true };
+
+    await signaling.join('peer-a', data);
+    await signaling.refreshPresence('peer-a', data);
+    await signaling.updatePresenceData('peer-a', data);
+
+    expect(source.join).toHaveBeenCalledWith('peer-a', data);
+    expect(source.refreshPresence).toHaveBeenCalledWith('peer-a', data);
+    expect(source.updatePresenceData).toHaveBeenCalledWith('peer-a', data);
+  });
+
   it('forwards optional refreshPresence to the wrapped room source', async () => {
     const source = createRoomSource({
       refreshPresence: vi.fn(),

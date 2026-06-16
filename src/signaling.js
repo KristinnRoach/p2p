@@ -226,10 +226,22 @@ export function createRelayPeerSignaling(options) {
  *
  * @param {Object} source
  * @returns {{
- *   join: (peerId: string) => void|Promise<void>,
+ *   join: (
+ *     peerId: string,
+ *     data?: Record<string, unknown>,
+ *   ) => void|Promise<void>,
  *   leave: (peerId: string) => void|Promise<void>,
- *   refreshPresence?: (peerId: string) => void|Promise<void>,
- *   onPeers: (callback: (peerIds: string[]) => void) => (() => void),
+ *   refreshPresence?: (
+ *     peerId: string,
+ *     data?: Record<string, unknown>,
+ *   ) => void|Promise<void>,
+ *   updatePresenceData?: (
+ *     peerId: string,
+ *     data: Record<string, unknown>,
+ *   ) => void|Promise<void>,
+ *   onPeers: (callback: (
+ *     peers: Array<string|{memberId: string, data?: Record<string, unknown>}>,
+ *   ) => void) => (() => void),
  *   createPeerSignaling: (options: {
  *     localPeerId: string,
  *     remotePeerId: string,
@@ -299,18 +311,28 @@ export function createRoomSignaling(source) {
   };
 
   return {
-    join: (peerId) => {
+    join: (peerId, data) => {
       assertOpen('join');
-      return source.join(peerId);
+      return data === undefined
+        ? source.join(peerId)
+        : source.join(peerId, data);
     },
     leave: (peerId) => {
       assertOpen('leave');
       return source.leave(peerId);
     },
     refreshPresence: source.refreshPresence
-      ? (peerId) => {
+      ? (peerId, data) => {
           assertOpen('refreshPresence');
-          return source.refreshPresence(peerId);
+          return data === undefined
+            ? source.refreshPresence(peerId)
+            : source.refreshPresence(peerId, data);
+        }
+      : undefined,
+    updatePresenceData: source.updatePresenceData
+      ? (peerId, data) => {
+          assertOpen('updatePresenceData');
+          return source.updatePresenceData(peerId, data);
         }
       : undefined,
     onPeers: subscribe,
@@ -434,6 +456,14 @@ function assertRoomSignalingSource(source) {
   ) {
     throw new Error(
       'createRoomSignaling: source refreshPresence must be a function',
+    );
+  }
+  if (
+    source.updatePresenceData != null &&
+    typeof source.updatePresenceData !== 'function'
+  ) {
+    throw new Error(
+      'createRoomSignaling: source updatePresenceData must be a function',
     );
   }
   if (

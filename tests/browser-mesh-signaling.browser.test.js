@@ -33,4 +33,38 @@ describe('createBroadcastRoomSignaling', () => {
       clearBroadcastRoomSignaling(roomId);
     }
   });
+
+  it('carries optional presence data in peer snapshots', async () => {
+    const roomId = `test-${crypto.randomUUID()}`;
+    const signaling = createBroadcastRoomSignaling(roomId);
+
+    try {
+      await signaling.join('peer-a', { displayName: 'Ada', muted: false });
+      await signaling.join('peer-b');
+
+      await expect(nextPeers(signaling)).resolves.toEqual([
+        {
+          memberId: 'peer-a',
+          data: { displayName: 'Ada', muted: false },
+        },
+        { memberId: 'peer-b' },
+      ]);
+
+      await signaling.updatePresenceData('peer-a', {
+        displayName: 'Ada',
+        muted: true,
+      });
+
+      await expect(nextPeers(signaling)).resolves.toEqual([
+        {
+          memberId: 'peer-a',
+          data: { displayName: 'Ada', muted: true },
+        },
+        { memberId: 'peer-b' },
+      ]);
+    } finally {
+      signaling.cleanupSignaling();
+      clearBroadcastRoomSignaling(roomId);
+    }
+  });
 });

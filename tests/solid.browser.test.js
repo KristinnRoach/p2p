@@ -20,6 +20,7 @@ function createFakeRoom(overrides = {}) {
     localStream: null,
     remoteMemberStreams: [],
     members: [],
+    memberPresence: [],
     memberCount: 0,
     memberCapacity: 4,
     isFull: false,
@@ -157,16 +158,25 @@ describe('useP2PRoom', () => {
     fakeRoom.emit('localStream', { stream });
 
     fakeRoom.members = ['peer-b'];
+    fakeRoom.memberPresence = [
+      { memberId: 'peer-b', data: { displayName: 'Ben' } },
+    ];
     fakeRoom.memberCount = 1;
     fakeRoom.remoteMemberStreams = [{ memberId: 'peer-b', stream }];
     fakeRoom.emit('membersChanged', {
       members: ['peer-b'],
+      memberPresence: [
+        { memberId: 'peer-b', data: { displayName: 'Ben' } },
+      ],
       memberCount: 1,
       memberCapacity: 4,
     });
 
     expect(solidRoom.localStream()).toBe(stream);
     expect(solidRoom.members()).toEqual(['peer-b']);
+    expect(solidRoom.memberPresence()).toEqual([
+      { memberId: 'peer-b', data: { displayName: 'Ben' } },
+    ]);
     expect(solidRoom.memberCount()).toBe(1);
     expect(solidRoom.remoteMemberStreams()).toEqual([
       { memberId: 'peer-b', stream },

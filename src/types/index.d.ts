@@ -126,6 +126,17 @@ export interface P2PRoomPeerSignalingOptions {
   remotePeerId: string;
 }
 
+export type P2PRoomPresenceData = Record<string, unknown>;
+
+export interface P2PRoomPresenceMember {
+  memberId: string;
+  data?: P2PRoomPresenceData;
+}
+
+export type P2PRoomPresenceSnapshot =
+  | string[]
+  | P2PRoomPresenceMember[];
+
 export type RelaySignalingEnvelope =
   | { kind: 'offer'; offer: RTCSessionDescriptionInit }
   | { kind: 'answer'; answer: RTCSessionDescriptionInit }
@@ -143,17 +154,26 @@ export interface RelayPeerSignalingOptions {
 }
 
 export interface P2PRoomSignaling {
-  join(peerId: string): void | Promise<void>;
+  join(peerId: string, data?: P2PRoomPresenceData): void | Promise<void>;
   /** Explicitly remove this peer from presence. Backend record semantics are adapter-owned. */
   leave(peerId: string): void | Promise<void>;
-  refreshPresence?(peerId: string): void | Promise<void>;
+  refreshPresence?(
+    peerId: string,
+    data?: P2PRoomPresenceData,
+  ): void | Promise<void>;
+  updatePresenceData?(
+    peerId: string,
+    data: P2PRoomPresenceData,
+  ): void | Promise<void>;
   /**
    * Subscribe to room presence. MUST emit an initial snapshot to every
    * subscriber — including watchers that have not joined — and keep them
    * updated. Capacity enforcement (`memberCapacity`) and `watchP2PRoom`
    * depend on it; a backend that only notifies joined peers breaks both.
    */
-  onPeers(callback: (peerIds: string[]) => void): void | (() => void);
+  onPeers(
+    callback: (peers: P2PRoomPresenceSnapshot) => void,
+  ): void | (() => void);
   /** Must return synchronously — the room calls this inline during peer connection setup. */
   createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcSignalingSource;
   /**
@@ -231,6 +251,7 @@ export interface RoomFullDetail {
 
 export interface MembersChangedDetail {
   members: string[];
+  memberPresence: P2PRoomPresenceMember[];
   memberCount: number;
   memberCapacity: number;
 }
@@ -286,6 +307,7 @@ export interface P2PRoomOptions {
   dataChannelLabel?: string;
   dataChannelOpenTimeoutMs?: number;
   memberCapacity?: number;
+  presenceData?: P2PRoomPresenceData;
   /** @deprecated Use memberCapacity. */
   maxPeers?: number;
   rtcConfig?: RTCConfiguration;
@@ -338,6 +360,7 @@ export declare class P2PRoom extends EventTarget {
   readonly roomId: string | null;
   readonly peerId: string;
   readonly members: string[];
+  readonly memberPresence: P2PRoomPresenceMember[];
   readonly memberCount: number;
   readonly memberCapacity: number;
   /** @deprecated Use memberCapacity. */
@@ -360,7 +383,8 @@ export declare class P2PRoom extends EventTarget {
     callback: (detail: unknown, event: CustomEvent) => void,
   ): () => void;
   off(type: string, callback: (...args: unknown[]) => void): void;
-  join(): Promise<void>;
+  join(data?: P2PRoomPresenceData): Promise<void>;
+  setPresenceData(data: P2PRoomPresenceData): Promise<void>;
   leave(): Promise<void>;
   send(memberId: string, data: unknown): void;
   broadcast(data: unknown): number;

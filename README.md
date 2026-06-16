@@ -17,6 +17,7 @@ import { joinP2PRoom } from '@kidlib/p2p';
 
 const room = await joinP2PRoom({
   peerId: crypto.randomUUID(),
+  presenceData: { displayName: 'Ada', callState: 'joined' },
   roomId,
   createSignaling: ({ roomId }) => createRoomSignalingForApp(roomId),
   getLocalStream: () =>
@@ -28,9 +29,12 @@ const renderRemoteStreams = () => renderRemoteTiles(room.remoteMemberStreams);
 
 room.on('memberStream', renderRemoteStreams);
 room.on('memberLeft', renderRemoteStreams);
-room.on('membersChanged', ({ memberCount, memberCapacity }) => {
+room.on('membersChanged', ({ memberCount, memberCapacity, memberPresence }) => {
   renderCapacity(memberCount, memberCapacity);
+  renderRoster(memberPresence);
 });
+
+await room.setPresenceData({ displayName: 'Ada', muted: true });
 
 room.close();
 ```
