@@ -271,6 +271,14 @@ describe('P2PRoom', () => {
       memberCapacity: Infinity,
     });
 
+    const snapshot = room.memberPresence;
+    snapshot[0].data.muted = true;
+    snapshot.pop();
+    expect(room.memberPresence).toEqual([
+      { memberId: 'a', data: { displayName: 'Ada', muted: false } },
+      { memberId: 'b', data: { displayName: 'Ben', ringing: true } },
+    ]);
+
     room.close();
   });
 

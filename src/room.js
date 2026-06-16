@@ -974,7 +974,7 @@ function normalizePresenceSnapshot(peers) {
 function clonePresenceMember(member) {
   return member.data === undefined
     ? { memberId: member.memberId }
-    : { memberId: member.memberId, data: member.data };
+    : { memberId: member.memberId, data: structuredClone(member.data) };
 }
 
 function assertPresenceData(data, methodName) {
