@@ -40,7 +40,7 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
   };
 
   const emitPeers = () => {
-    const peerIds = [...knownPeers].filter((id) => id !== localPeerId).sort();
+    const peerIds = [...knownPeers].sort();
     for (const cb of peerListeners) cb(peerIds);
   };
 
