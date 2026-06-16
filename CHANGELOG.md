@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.1.12
+
+### Patch Changes
+
+- acc454c: Add per-member presence data so apps can attach roster metadata (e.g. display name, mute state) to room members and update it mid-call, and add `createRelayPeerSignaling()` for adapting peer-addressed relay transports into pair signaling.
+
 ## 0.1.11
 
 ### Patch Changes
