@@ -42,6 +42,11 @@ const ROOM_REQUIRED_METHODS = [
   'onPeers',
   'createPeerSignaling',
 ];
+const RELAY_ENVELOPE_KINDS = {
+  offer: 'offer',
+  answer: 'answer',
+  candidate: 'candidate',
+};
 
 /**
  * Validate and normalize a 1:1 pair signaling source.
@@ -119,6 +124,88 @@ export function createPairSignaling(source) {
       if (hasError) {
         throw firstError;
       }
+    },
+  };
+}
+
+/**
+ * Adapt a generic peer-addressed relay into a 1:1 signaling source.
+ *
+ * Relay adapters usually expose one message stream, so this helper owns the
+ * offer/answer/candidate envelope shape and routes only messages from the
+ * expected remote peer.
+ *
+ * @param {Object} options
+ * @param {string} options.remotePeerId
+ * @param {(toPeerId: string, message: Object) => void|Promise<void>} options.send
+ * @param {(callback: (fromPeerId: string, message: Object) => void) => void|(() => void)} options.onMessage
+ * @returns {RtcSignalingSource & { close: () => void }}
+ */
+export function createRelayPeerSignaling(options) {
+  assertRelayPeerSignalingOptions(options);
+
+  const { remotePeerId, send, onMessage } = options;
+  const listeners = {
+    offer: new Set(),
+    answer: new Set(),
+    candidate: new Set(),
+  };
+  let closed = false;
+
+  const unsubscribeMessages = normalizeUnsubscribe(
+    onMessage((fromPeerId, message) => {
+      if (closed) return;
+      if (fromPeerId !== remotePeerId) return;
+      const kind = message?.kind;
+      if (!isRelayEnvelopeKind(kind)) return;
+
+      const payload = message[kind];
+      if (payload == null) return;
+      for (const callback of listeners[kind]) callback(payload);
+    }),
+    'onMessage',
+  );
+
+  const subscribe = (kind, callback) => {
+    listeners[kind].add(callback);
+    return () => {
+      listeners[kind].delete(callback);
+    };
+  };
+
+  const pairSignaling = createPairSignaling({
+    sendOffer: (offer) =>
+      send(remotePeerId, {
+        kind: 'offer',
+        offer,
+      }),
+    sendAnswer: (answer) =>
+      send(remotePeerId, {
+        kind: 'answer',
+        answer,
+      }),
+    onOffer: (callback) => subscribe('offer', callback),
+    onAnswer: (callback) => subscribe('answer', callback),
+    sendCandidate: (candidate) =>
+      send(remotePeerId, {
+        kind: 'candidate',
+        candidate,
+      }),
+    onRemoteCandidate: (callback) => subscribe('candidate', callback),
+  });
+  const closePairSignaling = pairSignaling.close;
+
+  return {
+    ...pairSignaling,
+    close() {
+      if (closed) return;
+      closed = true;
+
+      const { capture, finish } = createCleanupCollector();
+      capture(closePairSignaling);
+      for (const bucket of Object.values(listeners)) bucket.clear();
+      capture(unsubscribeMessages);
+      return finish();
     },
   };
 }
@@ -295,6 +382,27 @@ function assertSignalingSource(source) {
       );
     }
   }
+}
+
+function assertRelayPeerSignalingOptions(options) {
+  if (!options) {
+    throw new Error('createRelayPeerSignaling: options are required');
+  }
+  if (typeof options.remotePeerId !== 'string' || !options.remotePeerId) {
+    throw new Error(
+      'createRelayPeerSignaling: remotePeerId must be a non-empty string',
+    );
+  }
+  if (typeof options.send !== 'function') {
+    throw new Error('createRelayPeerSignaling: send must be a function');
+  }
+  if (typeof options.onMessage !== 'function') {
+    throw new Error('createRelayPeerSignaling: onMessage must be a function');
+  }
+}
+
+function isRelayEnvelopeKind(kind) {
+  return Object.prototype.hasOwnProperty.call(RELAY_ENVELOPE_KINDS, kind);
 }
 
 /**

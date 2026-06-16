@@ -126,6 +126,22 @@ export interface P2PRoomPeerSignalingOptions {
   remotePeerId: string;
 }
 
+export type RelaySignalingEnvelope =
+  | { kind: 'offer'; offer: RTCSessionDescriptionInit }
+  | { kind: 'answer'; answer: RTCSessionDescriptionInit }
+  | { kind: 'candidate'; candidate: RTCIceCandidateInit };
+
+export interface RelayPeerSignalingOptions {
+  remotePeerId: string;
+  send(
+    toPeerId: string,
+    message: RelaySignalingEnvelope,
+  ): void | Promise<void>;
+  onMessage(
+    callback: (fromPeerId: string, message: unknown) => void,
+  ): void | (() => void);
+}
+
 export interface P2PRoomSignaling {
   join(peerId: string): void | Promise<void>;
   /** Explicitly remove this peer from presence. Backend record semantics are adapter-owned. */
@@ -370,6 +386,10 @@ export function isLocalStreamError(error: unknown): error is LocalStreamError;
 
 export function createPairSignaling(
   source: RtcSignalingSource,
+): RtcPairSignaling;
+
+export function createRelayPeerSignaling(
+  options: RelayPeerSignalingOptions,
 ): RtcPairSignaling;
 
 /**

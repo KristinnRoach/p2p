@@ -97,6 +97,7 @@ session.close();
 | Export | Description | Docs |
 |--------|-------------|------|
 | `createPairSignaling` | Normalize a 1:1 signaling source | [docs/signaling.md](docs/signaling.md) |
+| `createRelayPeerSignaling` | Adapt a peer-addressed relay stream into 1:1 signaling | [docs/signaling.md](docs/signaling.md) |
 | `createRoomSignaling` | Normalize a room signaling source | [docs/signaling.md](docs/signaling.md) |
 | `validateRoomSignaling` | Validate a room signaling source | [docs/signaling.md](docs/signaling.md) |
 | `Peer` | Direct `RTCPeerConnection` control | [docs/peer.md](docs/peer.md) |

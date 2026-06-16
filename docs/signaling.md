@@ -98,3 +98,57 @@ back/forward cache restores.
 For `startP2PSession`, `joinP2PSession`, `Peer`, and data-only helpers, pass a raw
 `RtcSignalingSource` or wrap it with `createPairSignaling` yourself when you
 want normalized listener cleanup.
+
+## Adapting relay transports
+
+Relay transports usually expose one addressed message stream instead of
+separate `sendOffer`, `sendAnswer`, and `sendCandidate` channels. Use
+`createRelayPeerSignaling` inside a room adapter's `createPeerSignaling()` to
+turn that stream into the pair signaling contract:
+
+```js
+import { createRelayPeerSignaling } from '@kidlib/p2p';
+
+const messageListeners = new Set();
+
+socket.addEventListener('message', (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.to !== localPeerId) return;
+
+  for (const callback of messageListeners) {
+    callback(msg.from, msg.envelope);
+  }
+});
+
+const roomSignaling = {
+  // join, leave, onPeers...
+  createPeerSignaling({ localPeerId, remotePeerId }) {
+    return createRelayPeerSignaling({
+      remotePeerId,
+      send: (toPeerId, envelope) =>
+        socket.send(JSON.stringify({
+          type: 'signal',
+          from: localPeerId,
+          to: toPeerId,
+          envelope,
+        })),
+      onMessage(callback) {
+        messageListeners.add(callback);
+        return () => messageListeners.delete(callback);
+      },
+    });
+  },
+};
+```
+
+The helper sends and receives these envelopes:
+
+```ts
+type RelaySignalingEnvelope =
+  | { kind: 'offer'; offer: RTCSessionDescriptionInit }
+  | { kind: 'answer'; answer: RTCSessionDescriptionInit }
+  | { kind: 'candidate'; candidate: RTCIceCandidateInit };
+```
+
+Incoming messages from other peers and unknown envelope kinds are ignored.
+`close()` removes the relay listener and all pair listeners.

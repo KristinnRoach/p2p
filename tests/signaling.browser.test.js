@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createPairSignaling,
+  createRelayPeerSignaling,
   createRoomSignaling,
 } from '../src/signaling.js';
 
@@ -173,6 +174,108 @@ describe('createPairSignaling', () => {
     const channel = createPairSignaling(source);
 
     expect(() => channel.onOffer(() => {})).toThrow(/unsubscribe function/);
+  });
+});
+
+describe('createRelayPeerSignaling', () => {
+  function createRelayOptions(overrides = {}) {
+    const listeners = new Set();
+    return {
+      remotePeerId: 'peer-b',
+      send: vi.fn(),
+      onMessage: vi.fn((callback) => {
+        listeners.add(callback);
+        return () => listeners.delete(callback);
+      }),
+      emit(fromPeerId, message) {
+        for (const callback of listeners) callback(fromPeerId, message);
+      },
+      listenerCount() {
+        return listeners.size;
+      },
+      ...overrides,
+    };
+  }
+
+  it('throws a clear error when required relay options are missing', () => {
+    expect(() => createRelayPeerSignaling()).toThrow(/options are required/);
+    expect(() =>
+      createRelayPeerSignaling({
+        remotePeerId: 'peer-b',
+        onMessage: () => {},
+      }),
+    ).toThrow(/send must be a function/);
+  });
+
+  it('sends offer, answer, and candidate envelopes to the remote peer', async () => {
+    const relay = createRelayOptions();
+    const signaling = createRelayPeerSignaling(relay);
+    const offer = { type: 'offer', sdp: 'offer-sdp' };
+    const answer = { type: 'answer', sdp: 'answer-sdp' };
+    const candidate = { candidate: 'candidate', sdpMid: '0' };
+
+    await signaling.sendOffer(offer);
+    await signaling.sendAnswer(answer);
+    await signaling.sendCandidate(candidate);
+
+    expect(relay.send).toHaveBeenCalledWith('peer-b', {
+      kind: 'offer',
+      offer,
+    });
+    expect(relay.send).toHaveBeenCalledWith('peer-b', {
+      kind: 'answer',
+      answer,
+    });
+    expect(relay.send).toHaveBeenCalledWith('peer-b', {
+      kind: 'candidate',
+      candidate,
+    });
+  });
+
+  it('routes only matching remote-peer relay messages by kind', () => {
+    const relay = createRelayOptions();
+    const signaling = createRelayPeerSignaling(relay);
+    const onOffer = vi.fn();
+    const onAnswer = vi.fn();
+    const onRemoteCandidate = vi.fn();
+    const offer = { type: 'offer', sdp: 'offer-sdp' };
+    const answer = { type: 'answer', sdp: 'answer-sdp' };
+    const candidate = { candidate: 'candidate', sdpMid: '0' };
+
+    signaling.onOffer(onOffer);
+    signaling.onAnswer(onAnswer);
+    signaling.onRemoteCandidate(onRemoteCandidate);
+    relay.emit('peer-c', { kind: 'offer', offer: { sdp: 'wrong-peer' } });
+    relay.emit('peer-b', { kind: 'ignored', ignored: true });
+    relay.emit('peer-b', { kind: 'offer', offer });
+    relay.emit('peer-b', { kind: 'answer', answer });
+    relay.emit('peer-b', { kind: 'candidate', candidate });
+
+    expect(onOffer).toHaveBeenCalledOnce();
+    expect(onOffer).toHaveBeenCalledWith(offer);
+    expect(onAnswer).toHaveBeenCalledOnce();
+    expect(onAnswer).toHaveBeenCalledWith(answer);
+    expect(onRemoteCandidate).toHaveBeenCalledOnce();
+    expect(onRemoteCandidate).toHaveBeenCalledWith(candidate);
+  });
+
+  it('unsubscribes from the relay and stops callbacks after close', () => {
+    const relay = createRelayOptions();
+    const signaling = createRelayPeerSignaling(relay);
+    const onOffer = vi.fn();
+
+    signaling.onOffer(onOffer);
+    expect(relay.listenerCount()).toBe(1);
+
+    signaling.close();
+    signaling.close();
+    relay.emit('peer-b', {
+      kind: 'offer',
+      offer: { type: 'offer', sdp: 'after-close' },
+    });
+
+    expect(relay.listenerCount()).toBe(0);
+    expect(onOffer).not.toHaveBeenCalled();
   });
 });
 

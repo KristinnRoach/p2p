@@ -14,6 +14,7 @@
 export { setLogger } from './logger.js';
 export {
   createPairSignaling,
+  createRelayPeerSignaling,
   createRoomSignaling,
   validateRoomSignaling,
 } from './signaling.js';

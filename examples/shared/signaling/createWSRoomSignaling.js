@@ -1,9 +1,11 @@
 // createWebSocketRoomSignaling.js
+import { createRelayPeerSignaling } from '@kidlib/p2p';
+
 export function createWebSocketRoomSignaling({ url, roomId }) {
   const socket = new WebSocket(url);
 
   const peerListeners = new Set();
-  const pairBuckets = new Map();
+  const messageListeners = new Set();
   const knownPeers = new Set();
 
   let localPeerId = null;
@@ -42,21 +44,6 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
     for (const cb of peerListeners) cb(peerIds);
   };
 
-  const pairKey = (localPeerId, remotePeerId) =>
-    `${localPeerId}::${remotePeerId}`;
-
-  const getBucket = (localPeerId, remotePeerId) => {
-    const key = pairKey(localPeerId, remotePeerId);
-    if (!pairBuckets.has(key)) {
-      pairBuckets.set(key, {
-        offer: new Set(),
-        answer: new Set(),
-        candidate: new Set(),
-      });
-    }
-    return pairBuckets.get(key);
-  };
-
   socket.addEventListener('open', () => {
     isOpen = true;
     openPromiseResolve();
@@ -89,16 +76,10 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
 
     if (!msg.to || msg.to !== localPeerId || !msg.from) return;
 
-    const bucket = pairBuckets.get(pairKey(localPeerId, msg.from));
-    if (!bucket) return;
+    const envelope = toRelayEnvelope(msg);
+    if (!envelope) return;
 
-    if (msg.type === 'offer') {
-      for (const cb of bucket.offer) cb(msg.offer);
-    } else if (msg.type === 'answer') {
-      for (const cb of bucket.answer) cb(msg.answer);
-    } else if (msg.type === 'candidate') {
-      for (const cb of bucket.candidate) cb(msg.candidate);
-    }
+    for (const callback of messageListeners) callback(msg.from, envelope);
   });
 
   return {
@@ -125,60 +106,29 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
     },
 
     createPeerSignaling({ localPeerId, remotePeerId }) {
-      const bucket = getBucket(localPeerId, remotePeerId);
-
-      return {
-        sendOffer(offer) {
-          return send({
-            type: 'offer',
+      return createRelayPeerSignaling({
+        remotePeerId,
+        send: (toPeerId, message) =>
+          send({
+            ...message,
+            type: message.kind,
             roomId,
             from: localPeerId,
-            to: remotePeerId,
-            offer,
-          });
+            to: toPeerId,
+          }),
+        onMessage(callback) {
+          messageListeners.add(callback);
+          return () => {
+            messageListeners.delete(callback);
+          };
         },
-
-        sendAnswer(answer) {
-          return send({
-            type: 'answer',
-            roomId,
-            from: localPeerId,
-            to: remotePeerId,
-            answer,
-          });
-        },
-
-        onOffer(callback) {
-          bucket.offer.add(callback);
-          return () => bucket.offer.delete(callback);
-        },
-
-        onAnswer(callback) {
-          bucket.answer.add(callback);
-          return () => bucket.answer.delete(callback);
-        },
-
-        sendCandidate(candidate) {
-          return send({
-            type: 'candidate',
-            roomId,
-            from: localPeerId,
-            to: remotePeerId,
-            candidate,
-          });
-        },
-
-        onRemoteCandidate(callback) {
-          bucket.candidate.add(callback);
-          return () => bucket.candidate.delete(callback);
-        },
-      };
+      });
     },
 
     cleanupSignaling() {
       manuallyClosed = true;
       peerListeners.clear();
-      pairBuckets.clear();
+      messageListeners.clear();
       if (
         socket.readyState === WebSocket.OPEN ||
         socket.readyState === WebSocket.CONNECTING
@@ -187,4 +137,17 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
       }
     },
   };
+}
+
+function toRelayEnvelope(message) {
+  if (message.type === 'offer') {
+    return { kind: 'offer', offer: message.offer };
+  }
+  if (message.type === 'answer') {
+    return { kind: 'answer', answer: message.answer };
+  }
+  if (message.type === 'candidate') {
+    return { kind: 'candidate', candidate: message.candidate };
+  }
+  return null;
 }
