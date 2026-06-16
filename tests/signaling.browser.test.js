@@ -201,10 +201,31 @@ describe('createRelayPeerSignaling', () => {
     expect(() => createRelayPeerSignaling()).toThrow(/options are required/);
     expect(() =>
       createRelayPeerSignaling({
+        remotePeerId: '',
+        send: () => {},
+        onMessage: () => {},
+      }),
+    ).toThrow(/remotePeerId must be a non-empty string/);
+    expect(() =>
+      createRelayPeerSignaling({
+        remotePeerId: 123,
+        send: () => {},
+        onMessage: () => {},
+      }),
+    ).toThrow(/remotePeerId must be a non-empty string/);
+    expect(() =>
+      createRelayPeerSignaling({
         remotePeerId: 'peer-b',
         onMessage: () => {},
       }),
     ).toThrow(/send must be a function/);
+    expect(() =>
+      createRelayPeerSignaling({
+        remotePeerId: 'peer-b',
+        send: () => {},
+        onMessage: 'not-a-function',
+      }),
+    ).toThrow(/onMessage must be a function/);
   });
 
   it('sends offer, answer, and candidate envelopes to the remote peer', async () => {
