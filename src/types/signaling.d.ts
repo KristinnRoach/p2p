@@ -1,5 +1,8 @@
 export type {
   IceTransport,
+  P2PRoomPresenceData,
+  P2PRoomPresenceMember,
+  P2PRoomPresenceSnapshot,
   P2PRoomPeerSignalingOptions,
   P2PRoomSignaling,
   RelayPeerSignalingOptions,

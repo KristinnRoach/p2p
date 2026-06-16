@@ -2,6 +2,7 @@ import type { Accessor } from 'solid-js';
 import type {
   P2PRoom,
   P2PRoomOptions,
+  P2PRoomPresenceMember,
   P2PRoomState,
   RemoteMemberStream,
 } from './index.js';
@@ -30,6 +31,7 @@ export interface SolidP2PRoom {
   readonly localStream: Accessor<MediaStream | undefined>;
   readonly remoteMemberStreams: Accessor<RemoteMemberStream[]>;
   readonly members: Accessor<string[]>;
+  readonly memberPresence: Accessor<P2PRoomPresenceMember[]>;
   readonly memberCount: Accessor<number>;
   readonly memberCapacity: Accessor<number | undefined>;
   readonly isFull: Accessor<boolean>;

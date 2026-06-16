@@ -58,6 +58,7 @@ export class P2PRoom extends EventTarget {
       startTimeoutMs = 8000,
       dataChannelOpenTimeoutMs = dataChannel ? 10000 : 0,
       memberCapacity = options.maxPeers ?? Infinity,
+      presenceData = undefined,
       autoJoin = true,
       signal = null,
       onMemberStream = null,
@@ -99,6 +100,9 @@ export class P2PRoom extends EventTarget {
     ) {
       throw new Error('P2PRoom: memberCapacity must be a positive number');
     }
+    if (presenceData !== undefined) {
+      assertPresenceData(presenceData, 'P2PRoom');
+    }
 
     this.signaling = signaling ? createRoomSignaling(signaling) : null;
     this._createSignaling = createSignaling;
@@ -117,6 +121,7 @@ export class P2PRoom extends EventTarget {
     this.dataChannelOpenTimeoutMs = dataChannelOpenTimeoutMs;
     this.memberCapacity = memberCapacity;
     this.maxPeers = memberCapacity;
+    this._presenceData = presenceData;
     this.autoJoin = autoJoin;
     this.signal = signal;
 
@@ -131,6 +136,7 @@ export class P2PRoom extends EventTarget {
     this._cleanups = [];
     this._listenerMap = new Map();
     this._memberIds = [];
+    this._memberPresence = [];
     this._presenceSeen = false;
     this._presenceWaiters = new Set();
     this._state = 'watching';
@@ -183,6 +189,10 @@ export class P2PRoom extends EventTarget {
 
   get members() {
     return [...this._memberIds];
+  }
+
+  get memberPresence() {
+    return this._memberPresence.map(clonePresenceMember);
   }
 
   get memberCount() {
@@ -262,11 +272,17 @@ export class P2PRoom extends EventTarget {
     this.removeEventListener(type, callback);
   }
 
-  join() {
+  join(data) {
     if (this._state === 'closed') {
       return Promise.reject(new Error('P2PRoom.join: room is closed'));
     }
-    if (this._state === 'active') return Promise.resolve();
+    if (data !== undefined) {
+      assertPresenceData(data, 'P2PRoom.join');
+      this._presenceData = data;
+    }
+    if (this._state === 'active') {
+      return data === undefined ? Promise.resolve() : this.setPresenceData(data);
+    }
     if (this._joinPromise) return this._joinPromise;
 
     this._joinPromise = this._join();
@@ -279,6 +295,28 @@ export class P2PRoom extends EventTarget {
       },
     );
     return this._joinPromise;
+  }
+
+  async setPresenceData(data) {
+    assertPresenceData(data, 'P2PRoom.setPresenceData');
+    this._presenceData = data;
+    if (this._state === 'closed') {
+      throw new Error('P2PRoom.setPresenceData: room is closed');
+    }
+    if (!this._joined) return;
+
+    const signaling = await this._ensureSignaling();
+    if (typeof signaling.updatePresenceData === 'function') {
+      await Promise.resolve(signaling.updatePresenceData(this.peerId, data));
+      return;
+    }
+    if (typeof signaling.refreshPresence === 'function') {
+      await Promise.resolve(signaling.refreshPresence(this.peerId, data));
+      return;
+    }
+    throw new Error(
+      'P2PRoom.setPresenceData: signaling does not support presence data updates',
+    );
   }
 
   leave() {
@@ -307,13 +345,15 @@ export class P2PRoom extends EventTarget {
     if (this._state === 'closed' || this.signal?.aborted) {
       throw createAbortError();
     }
-    const cleanup = this.signaling.onPeers((memberIds) => {
+    const cleanup = this.signaling.onPeers((peers) => {
+      const memberPresence = normalizePresenceSnapshot(peers);
+      const memberIds = memberPresence.map((member) => member.memberId);
       if (!this._presenceSeen) {
         this._presenceSeen = true;
         for (const waiter of this._presenceWaiters) waiter();
         this._presenceWaiters.clear();
       }
-      this._setMembers(memberIds);
+      this._setMembers(memberPresence);
       if (
         (this._state === 'watching' || this._state === 'joining') &&
         this._isFull(memberIds)
@@ -397,7 +437,7 @@ export class P2PRoom extends EventTarget {
       if (this._state === 'closed' || this.signal?.aborted) {
         throw createAbortError();
       }
-      await Promise.resolve(signaling.join(this.peerId));
+      await Promise.resolve(signaling.join(this.peerId, this._presenceData));
     } catch (error) {
       this._joinStarted = false;
       this._releaseOwnedLocalStream();
@@ -467,7 +507,7 @@ export class P2PRoom extends EventTarget {
     this._presenceHeartbeatTimer = setInterval(() => {
       if (this._state !== 'active' || !this._joined) return;
       Promise.resolve()
-        .then(() => signaling.refreshPresence(this.peerId))
+        .then(() => signaling.refreshPresence(this.peerId, this._presenceData))
         .catch((error) => {
           if (this._state !== 'closed') {
             this._emit('error', { peerId: this.peerId, error });
@@ -776,16 +816,18 @@ export class P2PRoom extends EventTarget {
     });
   }
 
-  _setMembers(memberIds) {
-    const nextMembers = [...memberIds];
-    if (areSameMembers(this._memberIds, nextMembers)) return;
-    this._memberIds = nextMembers;
+  _setMembers(memberPresence) {
+    const nextPresence = memberPresence.map(clonePresenceMember);
+    if (areSamePresenceMembers(this._memberPresence, nextPresence)) return;
+    this._memberPresence = nextPresence;
+    this._memberIds = nextPresence.map((member) => member.memberId);
     this._emitMembersChanged();
   }
 
   _emitMembersChanged() {
     this._emit('membersChanged', {
       members: this.members,
+      memberPresence: this.memberPresence,
       memberCount: this.memberCount,
       memberCapacity: this.memberCapacity,
     });
@@ -900,11 +942,55 @@ function stopStream(stream) {
   stream?.getTracks?.().forEach((track) => track.stop());
 }
 
-function areSameMembers(a, b) {
+function areSamePresenceMembers(a, b) {
   if (a.length !== b.length) return false;
-  return a.every((memberId, index) => memberId === b[index]);
+  return a.every((member, index) => {
+    const next = b[index];
+    if (member.memberId !== next.memberId) return false;
+    return presenceDataKey(member.data) === presenceDataKey(next.data);
+  });
 }
 
 function toPublicState(state) {
   return state === 'active' ? 'joined' : state;
+}
+
+function normalizePresenceSnapshot(peers) {
+  if (!Array.isArray(peers)) return [];
+  return peers
+    .map((entry) => {
+      if (typeof entry === 'string') return { memberId: entry };
+      if (!entry || typeof entry !== 'object') return null;
+      const memberId =
+        typeof entry.memberId === 'string' ? entry.memberId : null;
+      if (!memberId) return null;
+      if (entry.data === undefined) return { memberId };
+      if (!isPresenceData(entry.data)) return { memberId };
+      return { memberId, data: entry.data };
+    })
+    .filter(Boolean);
+}
+
+function clonePresenceMember(member) {
+  return member.data === undefined
+    ? { memberId: member.memberId }
+    : { memberId: member.memberId, data: member.data };
+}
+
+function assertPresenceData(data, methodName) {
+  if (isPresenceData(data)) return;
+  throw new TypeError(`${methodName}: presence data must be an object`);
+}
+
+function isPresenceData(data) {
+  return data != null && typeof data === 'object' && !Array.isArray(data);
+}
+
+function presenceDataKey(data) {
+  if (data === undefined) return undefined;
+  try {
+    return JSON.stringify(data);
+  } catch (_) {
+    return data;
+  }
 }

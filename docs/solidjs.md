@@ -15,6 +15,7 @@ export function Room({ createSignaling }) {
       roomId,
       peerId: crypto.randomUUID(),
       createSignaling,
+      presenceData: { displayName: 'Ada' },
       getLocalStream: () =>
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
       memberCapacity: 6,
@@ -72,3 +73,6 @@ function Video(props: { stream: MediaStream; muted?: boolean }) {
 
 `join()` watches presence, enters the room, and connects to peers. `close()`
 tears down the room, subscriptions, connections, and owned media.
+Use `room.memberPresence()` for the metadata-aware roster. It is the Solid
+accessor form of `P2PRoom.memberPresence`, while `room.members()` remains the
+ID-only compatibility list.

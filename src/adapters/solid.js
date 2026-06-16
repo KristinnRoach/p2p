@@ -19,6 +19,7 @@ export function useP2PRoom() {
   const [localStream, setLocalStream] = createSignal();
   const [remoteMemberStreams, setRemoteMemberStreams] = createSignal([]);
   const [members, setMembers] = createSignal([]);
+  const [memberPresence, setMemberPresence] = createSignal([]);
   const [memberCount, setMemberCount] = createSignal(0);
   const [memberCapacity, setMemberCapacity] = createSignal();
   const [isFull, setIsFull] = createSignal(false);
@@ -59,6 +60,7 @@ export function useP2PRoom() {
     setLocalStream(undefined);
     setRemoteMemberStreams([]);
     setMembers([]);
+    setMemberPresence([]);
     setMemberCount(0);
     setMemberCapacity(undefined);
     setIsFull(false);
@@ -77,6 +79,7 @@ export function useP2PRoom() {
     setLocalStream(nextRoom.localStream ?? undefined);
     setRemoteMemberStreams(nextRoom.remoteMemberStreams);
     setMembers(nextRoom.members);
+    setMemberPresence(nextRoom.memberPresence);
     setMemberCount(nextRoom.memberCount);
     setMemberCapacity(nextRoom.memberCapacity);
     setIsFull(nextRoom.isFull);
@@ -86,6 +89,7 @@ export function useP2PRoom() {
   function updateMembership(nextRoom) {
     setRemoteMemberStreams(nextRoom.remoteMemberStreams);
     setMembers(nextRoom.members);
+    setMemberPresence(nextRoom.memberPresence);
     setMemberCount(nextRoom.memberCount);
     setMemberCapacity(nextRoom.memberCapacity);
     setIsFull(nextRoom.isFull);
@@ -205,6 +209,7 @@ export function useP2PRoom() {
     localStream,
     remoteMemberStreams,
     members,
+    memberPresence,
     memberCount,
     memberCapacity,
     isFull,

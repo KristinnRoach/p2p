@@ -25,10 +25,23 @@ The room-level contract required by `joinP2PRoom`. Manages presence and creates 
 
 ```ts
 interface P2PRoomSignaling {
-  join(peerId: string): void | Promise<void>;
+  join(peerId: string, data?: Record<string, unknown>): void | Promise<void>;
   leave(peerId: string): void | Promise<void>;
-  refreshPresence?(peerId: string): void | Promise<void>;
-  onPeers(callback: (peerIds: string[]) => void): void | (() => void);
+  refreshPresence?(
+    peerId: string,
+    data?: Record<string, unknown>,
+  ): void | Promise<void>;
+  updatePresenceData?(
+    peerId: string,
+    data: Record<string, unknown>,
+  ): void | Promise<void>;
+  onPeers(
+    callback: (
+      peers:
+        | string[]
+        | Array<{ memberId: string; data?: Record<string, unknown> }>,
+    ) => void,
+  ): void | (() => void);
   createPeerSignaling(options: {
     localPeerId: string;
     remotePeerId: string;
@@ -50,6 +63,16 @@ path. If an adapter implements `refreshPresence(peerId)`, `P2PRoom` calls it
 periodically after joining so the adapter can expire peers that disappear
 without calling `leave()`. Adapters can also use `cleanupSignaling()`, server
 presence, or a combination of these mechanisms.
+
+Presence may carry app-defined data for each member. Keep it object-shaped and
+generic: `{ displayName: 'Ada', muted: true }`, for example. Existing adapters
+can keep emitting `string[]`; presence-data-aware adapters emit structured members:
+`{ memberId, data }`. `P2PRoom.members` remains the `string[]` ID projection,
+while `P2PRoom.memberPresence` exposes the structured snapshot. For mid-call
+changes like mute state or ringing-to-joined transitions, implement
+`updatePresenceData(peerId, data)`. If an adapter does not provide that method,
+`P2PRoom.setPresenceData(data)` falls back to `refreshPresence(peerId, data)`
+when available.
 
 `cleanupSignaling()` is an optional permanent teardown hook for adapter-owned
 resources. Use it to release provider listeners, sockets, timers, pending

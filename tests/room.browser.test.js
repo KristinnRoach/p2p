@@ -206,7 +206,12 @@ describe('P2PRoom', () => {
     expect(room.memberCapacity).toBe(3);
     expect(room.isFull).toBe(false);
     expect(membersChanged).toEqual([
-      { members: ['a', 'b'], memberCount: 2, memberCapacity: 3 },
+      {
+        members: ['a', 'b'],
+        memberPresence: [{ memberId: 'a' }, { memberId: 'b' }],
+        memberCount: 2,
+        memberCapacity: 3,
+      },
     ]);
 
     signaling.emitPeers(['a', 'b', 'c']);
@@ -215,9 +220,81 @@ describe('P2PRoom', () => {
     expect(room.members).toEqual(['a', 'b', 'c']);
     expect(room.memberCount).toBe(3);
     expect(membersChanged).toEqual([
-      { members: ['a', 'b'], memberCount: 2, memberCapacity: 3 },
-      { members: ['a', 'b', 'c'], memberCount: 3, memberCapacity: 3 },
+      {
+        members: ['a', 'b'],
+        memberPresence: [{ memberId: 'a' }, { memberId: 'b' }],
+        memberCount: 2,
+        memberCapacity: 3,
+      },
+      {
+        members: ['a', 'b', 'c'],
+        memberPresence: [
+          { memberId: 'a' },
+          { memberId: 'b' },
+          { memberId: 'c' },
+        ],
+        memberCount: 3,
+        memberCapacity: 3,
+      },
     ]);
+
+    room.close();
+  });
+
+  it('exposes structured member presence data without changing members', async () => {
+    const signaling = createTestRoomSignaling();
+    const membersChanged = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onMembersChanged: (detail) => membersChanged.push(detail),
+    });
+
+    signaling.emitPeers([
+      { memberId: 'a', data: { displayName: 'Ada', muted: false } },
+      { memberId: 'b', data: { displayName: 'Ben', ringing: true } },
+    ]);
+    await flushAsyncWork();
+
+    expect(room.members).toEqual(['a', 'b']);
+    expect(room.memberPresence).toEqual([
+      { memberId: 'a', data: { displayName: 'Ada', muted: false } },
+      { memberId: 'b', data: { displayName: 'Ben', ringing: true } },
+    ]);
+    expect(membersChanged.at(-1)).toEqual({
+      members: ['a', 'b'],
+      memberPresence: [
+        { memberId: 'a', data: { displayName: 'Ada', muted: false } },
+        { memberId: 'b', data: { displayName: 'Ben', ringing: true } },
+      ],
+      memberCount: 2,
+      memberCapacity: Infinity,
+    });
+
+    room.close();
+  });
+
+  it('passes initial and updated presence data to signaling', async () => {
+    const signaling = createTestRoomSignaling({
+      updatePresenceData: vi.fn(),
+    });
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      presenceData: { displayName: 'Ada', callState: 'ringing' },
+    });
+
+    await room.join();
+    await room.setPresenceData({ displayName: 'Ada', callState: 'joined' });
+
+    expect(signaling.join).toHaveBeenCalledWith('a', {
+      displayName: 'Ada',
+      callState: 'ringing',
+    });
+    expect(signaling.updatePresenceData).toHaveBeenCalledWith('a', {
+      displayName: 'Ada',
+      callState: 'joined',
+    });
 
     room.close();
   });
