@@ -282,6 +282,47 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('emits membersChanged on a data-only change with unchanged membership', async () => {
+    const signaling = createTestRoomSignaling();
+    const membersChanged = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onMembersChanged: (detail) => membersChanged.push(detail),
+    });
+
+    signaling.emitPeers([
+      { memberId: 'a', data: { muted: false } },
+      { memberId: 'b' },
+    ]);
+    await flushAsyncWork();
+    expect(membersChanged).toHaveLength(1);
+
+    // Same members, only 'a' presence data changes (e.g. mute toggle).
+    signaling.emitPeers([
+      { memberId: 'a', data: { muted: true } },
+      { memberId: 'b' },
+    ]);
+    await flushAsyncWork();
+
+    expect(room.members).toEqual(['a', 'b']);
+    expect(membersChanged).toHaveLength(2);
+    expect(membersChanged.at(-1).memberPresence).toEqual([
+      { memberId: 'a', data: { muted: true } },
+      { memberId: 'b' },
+    ]);
+
+    // An identical snapshot does not re-fire.
+    signaling.emitPeers([
+      { memberId: 'a', data: { muted: true } },
+      { memberId: 'b' },
+    ]);
+    await flushAsyncWork();
+    expect(membersChanged).toHaveLength(2);
+
+    room.close();
+  });
+
   it('passes initial and updated presence data to signaling', async () => {
     const signaling = createTestRoomSignaling({
       updatePresenceData: vi.fn(),
