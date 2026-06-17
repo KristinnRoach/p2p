@@ -82,6 +82,34 @@ Firestore, RTDB, Redis, in-memory, and server-owned signaling backends often
 have different retention and authorization rules. Whole-room cleanup should stay
 in the adapter or application layer that understands those rules.
 
+## Reconnect and stale presence
+
+`peerId` is a singleton identity. Within any one `onPeers` snapshot, duplicate
+`memberId`s are de-duped and the last entry wins. Emit a returning peer's fresh
+row last (or just emit it once) so the latest join is the one the room keeps.
+The room drives connections from membership: when a `memberId` drops out of the
+snapshot its session is torn down, and when the same `memberId` reappears a new
+session is built — a stale connection is never reused.
+
+Three independent mechanisms remove a peer that goes away. They are
+complementary, not interchangeable:
+
+- **`leave(peerId)`** — explicit, immediate departure. Called by `room.leave()`
+  and `room.close()`.
+- **`pagehide` leave** — in browsers, an active room makes a best-effort
+  `leave(peerId)` when the page is hidden, skipping back/forward-cache restores.
+  This covers tab close and navigation, but not crashes or lost connectivity.
+- **`refreshPresence(peerId)` + TTL** — for peers that vanish without a clean
+  `leave()`. While joined, the room calls `refreshPresence` on a short interval;
+  the adapter or backend expires any peer whose presence record is older than a
+  TTL. Size the TTL to a small multiple of the refresh interval so a brief gap
+  does not evict a live peer.
+
+When a socket becomes stale — replaced by a newer one for the same `peerId`, or
+expired by TTL — the adapter must stop relaying signaling messages to it.
+Otherwise offers, answers, and candidates fan out to a dead connection and the
+fresh one may never converge.
+
 ## Normalizing a signaling source
 
 `createPairSignaling` and `createRoomSignaling` validate a raw source and add lifecycle management:
