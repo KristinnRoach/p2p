@@ -44,4 +44,41 @@ export interface SolidP2PRoom {
   broadcast(data: unknown): number;
 }
 
+export interface AttachMediaStreamOptions {
+  autoplay?: boolean;
+  muted?: boolean;
+  playsInline?: boolean;
+  onPlaybackBlocked?: (error: unknown) => void;
+  onPlaybackStarted?: () => void;
+}
+
+export interface MediaStreamAttachment {
+  readonly ready: Promise<boolean>;
+  readonly playbackBlocked: unknown;
+  resumePlayback(): Promise<boolean>;
+  detach(): void;
+}
+
+export interface SolidMediaPlayback {
+  readonly playbackBlocked: Accessor<boolean>;
+  readonly playbackError: Accessor<unknown>;
+  attach(
+    video: HTMLVideoElement,
+    stream: MediaStream | null | undefined,
+    options?: AttachMediaStreamOptions,
+  ): Promise<boolean>;
+  resumePlayback(): Promise<boolean>;
+  detach(): void;
+}
+
+export function attachMediaStream(
+  video: HTMLVideoElement,
+  stream: MediaStream | null | undefined,
+  options?: AttachMediaStreamOptions,
+): MediaStreamAttachment;
+
+export function createMediaPlayback(
+  options?: AttachMediaStreamOptions,
+): SolidMediaPlayback;
+
 export function useP2PRoom(): SolidP2PRoom;

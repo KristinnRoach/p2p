@@ -5,7 +5,7 @@ Solid accessors.
 
 ```tsx
 import { For, Show, createEffect, onCleanup } from 'solid-js';
-import { useP2PRoom } from '@kidlib/p2p/solid';
+import { createMediaPlayback, useP2PRoom } from '@kidlib/p2p/solid';
 
 export function Room({ createSignaling }) {
   const room = useP2PRoom();
@@ -61,13 +61,22 @@ export function Room({ createSignaling }) {
 
 function Video(props: { stream: MediaStream; muted?: boolean }) {
   let video!: HTMLVideoElement;
+  const playback = createMediaPlayback();
 
   createEffect(() => {
-    video.srcObject = props.stream;
-    video.play().catch(() => {});
+    playback.attach(video, props.stream, { muted: props.muted });
   });
 
-  return <video ref={video} autoplay muted={props.muted} />;
+  return (
+    <>
+      <video ref={video} autoplay muted={props.muted} playsInline />
+      <Show when={playback.playbackBlocked()}>
+        <button onClick={() => playback.resumePlayback()}>
+          Continue call
+        </button>
+      </Show>
+    </>
+  );
 }
 ```
 
@@ -76,3 +85,9 @@ tears down the room, subscriptions, connections, and owned media.
 Use `room.memberPresence()` for the metadata-aware roster. It is the Solid
 accessor form of `P2PRoom.memberPresence`, while `room.members()` remains the
 ID-only compatibility list.
+
+`createMediaPlayback()` is independent from room state. Use it when the app
+owns the `<video>` elements and wants one reusable browser playback handshake:
+set `srcObject`, call `play()`, expose `playbackBlocked()`, and retry through
+`resumePlayback()` from a user gesture. For non-Solid element code, use
+`attachMediaStream(video, stream, options)` directly.

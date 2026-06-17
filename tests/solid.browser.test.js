@@ -9,7 +9,11 @@ const roomMocks = vi.hoisted(() => ({
 
 vi.mock('../src/room.js', () => roomMocks);
 
-import { useP2PRoom } from '../src/adapters/solid.js';
+import {
+  attachMediaStream,
+  createMediaPlayback,
+  useP2PRoom,
+} from '../src/adapters/solid.js';
 
 function createFakeRoom(overrides = {}) {
   const target = new EventTarget();
@@ -45,6 +49,98 @@ function createFakeRoom(overrides = {}) {
   };
   return room;
 }
+
+function createFakeVideo({ play } = {}) {
+  return {
+    muted: false,
+    playsInline: false,
+    srcObject: null,
+    play: play ?? vi.fn(() => Promise.resolve()),
+  };
+}
+
+describe('attachMediaStream', () => {
+  it('attaches a stream and reports blocked playback', async () => {
+    const stream = new MediaStream();
+    const blockedError = new DOMException('play blocked', 'NotAllowedError');
+    const onPlaybackBlocked = vi.fn();
+    const video = createFakeVideo({
+      play: vi.fn(() => Promise.reject(blockedError)),
+    });
+
+    const controller = attachMediaStream(video, stream, {
+      muted: true,
+      playsInline: true,
+      onPlaybackBlocked,
+    });
+
+    await expect(controller.ready).resolves.toBe(false);
+
+    expect(video.srcObject).toBe(stream);
+    expect(video.muted).toBe(true);
+    expect(video.playsInline).toBe(true);
+    expect(onPlaybackBlocked).toHaveBeenCalledWith(blockedError);
+    expect(controller.playbackBlocked).toBe(blockedError);
+
+    controller.detach();
+    expect(video.srcObject).toBeNull();
+  });
+
+  it('retries playback from resumePlayback', async () => {
+    const stream = new MediaStream();
+    const blockedError = new DOMException('play blocked', 'NotAllowedError');
+    const onPlaybackStarted = vi.fn();
+    const video = createFakeVideo({
+      play: vi
+        .fn()
+        .mockRejectedValueOnce(blockedError)
+        .mockResolvedValueOnce(undefined),
+    });
+
+    const controller = attachMediaStream(video, stream, {
+      onPlaybackStarted,
+    });
+
+    await expect(controller.ready).resolves.toBe(false);
+    await expect(controller.resumePlayback()).resolves.toBe(true);
+
+    expect(video.play).toHaveBeenCalledTimes(2);
+    expect(onPlaybackStarted).toHaveBeenCalledOnce();
+    expect(controller.playbackBlocked).toBeUndefined();
+  });
+});
+
+describe('createMediaPlayback', () => {
+  it('exposes playbackBlocked and resumePlayback for Solid consumers', async () => {
+    const stream = new MediaStream();
+    const blockedError = new DOMException('play blocked', 'NotAllowedError');
+    const video = createFakeVideo({
+      play: vi
+        .fn()
+        .mockRejectedValueOnce(blockedError)
+        .mockResolvedValueOnce(undefined),
+    });
+
+    let playback;
+    const dispose = createRoot((dispose) => {
+      playback = createMediaPlayback();
+      return dispose;
+    });
+
+    await expect(playback.attach(video, stream)).resolves.toBe(false);
+
+    expect(playback.playbackBlocked()).toBe(true);
+    expect(playback.playbackError()).toBe(blockedError);
+
+    await expect(playback.resumePlayback()).resolves.toBe(true);
+
+    expect(playback.playbackBlocked()).toBe(false);
+    expect(playback.playbackError()).toBeUndefined();
+
+    dispose();
+    expect(video.srcObject).toBeNull();
+  });
+});
 
 describe('useP2PRoom', () => {
   beforeEach(() => {
