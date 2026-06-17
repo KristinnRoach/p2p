@@ -1,5 +1,20 @@
 # @kidlib/p2p
 
+## 0.2.0
+
+### Minor Changes
+
+- 9eb893e: Add Solid media playback helpers to `@kidlib/p2p/solid`:
+
+  - `attachMediaStream(video, stream, options)`: framework-agnostic controller that sets `srcObject`, attempts `play()`, and exposes `resumePlayback()` for retrying after autoplay is blocked.
+  - `createMediaPlayback(options)`: Solid wrapper exposing reactive `playbackBlocked` / `playbackError` signals plus `attach`/`detach`/`resumePlayback`, with auto-cleanup on dispose.
+
+  Wire `resumePlayback()` to a user gesture (e.g. a "Continue call" button) to recover when the browser blocks autoplay. UI rendering stays in the consuming app.
+
+### Patch Changes
+
+- ff39bd9: Presence snapshots with duplicate member IDs are now de-duped at the library level.
+
 ## 0.1.12
 
 ### Patch Changes
