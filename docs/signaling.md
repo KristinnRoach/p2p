@@ -110,6 +110,67 @@ expired by TTL — the adapter must stop relaying signaling messages to it.
 Otherwise offers, answers, and candidates fan out to a dead connection and the
 fresh one may never converge.
 
+### Example: TTL expiry and stale-socket guard
+
+A minimal in-memory sketch. A real adapter would back `records` with the
+provider (RTDB, Firestore, Redis, a server table). The room calls
+`refreshPresence(peerId)` on a short interval while joined; expiry runs off a
+timer and removes any record older than the TTL. Each `peerId` maps to exactly
+one live socket, so a newer registration retires the previous one and signaling
+is only relayed to the current socket.
+
+```js
+const TTL_MS = 20_000; // a few times the room's refresh interval
+
+const records = new Map(); // peerId -> { lastSeen, socket }
+
+function publishPeers() {
+  const peers = [...records.keys()];
+  for (const callback of peerListeners) callback(peers);
+}
+
+const signaling = {
+  join(peerId) {
+    // A reconnecting peerId replaces its own previous socket: latest join wins.
+    records.set(peerId, { lastSeen: Date.now(), socket: currentSocket(peerId) });
+    publishPeers();
+  },
+  leave(peerId) {
+    records.delete(peerId);
+    publishPeers();
+  },
+  refreshPresence(peerId) {
+    const record = records.get(peerId);
+    if (record) record.lastSeen = Date.now();
+  },
+  onPeers(callback) {
+    peerListeners.add(callback);
+    callback([...records.keys()]); // required initial snapshot
+    return () => peerListeners.delete(callback);
+  },
+  // createPeerSignaling, cleanupSignaling...
+};
+
+// Expire peers that stopped refreshing (closed tab, crash, lost connectivity).
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  for (const [peerId, record] of records) {
+    if (now - record.lastSeen > TTL_MS) {
+      records.delete(peerId);
+      changed = true;
+    }
+  }
+  if (changed) publishPeers();
+}, TTL_MS / 2);
+
+// Only relay signaling to the peer's current socket. A stale socket (already
+// replaced or expired) is never addressed, so a fresh connection can converge.
+function relayTo(peerId, envelope) {
+  records.get(peerId)?.socket.send(envelope);
+}
+```
+
 ## Normalizing a signaling source
 
 `createPairSignaling` and `createRoomSignaling` validate a raw source and add lifecycle management:
