@@ -60,6 +60,8 @@ export function createMediaPlayback(options = {}) {
 
   const attach = (video, stream, attachOptions = {}) => {
     controller?.detach();
+    setPlaybackBlocked(false);
+    setPlaybackError(undefined);
     controller = attachMediaStream(video, stream, {
       ...options,
       ...attachOptions,
