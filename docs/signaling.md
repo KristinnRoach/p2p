@@ -82,6 +82,95 @@ Firestore, RTDB, Redis, in-memory, and server-owned signaling backends often
 have different retention and authorization rules. Whole-room cleanup should stay
 in the adapter or application layer that understands those rules.
 
+## Reconnect and stale presence
+
+`peerId` is a singleton identity. Within any one `onPeers` snapshot, duplicate
+`memberId`s are de-duped and the last entry wins. Emit a returning peer's fresh
+row last (or just emit it once) so the latest join is the one the room keeps.
+The room drives connections from membership: when a `memberId` drops out of the
+snapshot its session is torn down, and when the same `memberId` reappears a new
+session is built — a stale connection is never reused.
+
+Three independent mechanisms remove a peer that goes away. They are
+complementary, not interchangeable:
+
+- **`leave(peerId)`** — explicit, immediate departure. Called by `room.leave()`
+  and `room.close()`.
+- **`pagehide` leave** — in browsers, an active room makes a best-effort
+  `leave(peerId)` when the page is hidden, skipping back/forward-cache restores.
+  This covers tab close and navigation, but not crashes or lost connectivity.
+- **`refreshPresence(peerId)` + TTL** — for peers that vanish without a clean
+  `leave()`. While joined, the room calls `refreshPresence` on a short interval;
+  the adapter or backend expires any peer whose presence record is older than a
+  TTL. Size the TTL to a small multiple of the refresh interval so a brief gap
+  does not evict a live peer.
+
+When a socket becomes stale — replaced by a newer one for the same `peerId`, or
+expired by TTL — the adapter must stop relaying signaling messages to it.
+Otherwise offers, answers, and candidates fan out to a dead connection and the
+fresh one may never converge.
+
+### Example: TTL expiry and stale-socket guard
+
+A minimal in-memory sketch. A real adapter would back `records` with the
+provider (RTDB, Firestore, Redis, a server table). The room calls
+`refreshPresence(peerId)` on a short interval while joined; expiry runs off a
+timer and removes any record older than the TTL. Each `peerId` maps to exactly
+one live socket, so a newer registration retires the previous one and signaling
+is only relayed to the current socket.
+
+```js
+const TTL_MS = 20_000; // a few times the room's refresh interval
+
+const records = new Map(); // peerId -> { lastSeen, socket }
+
+function publishPeers() {
+  const peers = [...records.keys()];
+  for (const callback of peerListeners) callback(peers);
+}
+
+const signaling = {
+  join(peerId) {
+    // A reconnecting peerId replaces its own previous socket: latest join wins.
+    records.set(peerId, { lastSeen: Date.now(), socket: currentSocket(peerId) });
+    publishPeers();
+  },
+  leave(peerId) {
+    records.delete(peerId);
+    publishPeers();
+  },
+  refreshPresence(peerId) {
+    const record = records.get(peerId);
+    if (record) record.lastSeen = Date.now();
+  },
+  onPeers(callback) {
+    peerListeners.add(callback);
+    callback([...records.keys()]); // required initial snapshot
+    return () => peerListeners.delete(callback);
+  },
+  // createPeerSignaling, cleanupSignaling...
+};
+
+// Expire peers that stopped refreshing (closed tab, crash, lost connectivity).
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  for (const [peerId, record] of records) {
+    if (now - record.lastSeen > TTL_MS) {
+      records.delete(peerId);
+      changed = true;
+    }
+  }
+  if (changed) publishPeers();
+}, TTL_MS / 2);
+
+// Only relay signaling to the peer's current socket. A stale socket (already
+// replaced or expired) is never addressed, so a fresh connection can converge.
+function relayTo(peerId, envelope) {
+  records.get(peerId)?.socket.send(envelope);
+}
+```
+
 ## Normalizing a signaling source
 
 `createPairSignaling` and `createRoomSignaling` validate a raw source and add lifecycle management:

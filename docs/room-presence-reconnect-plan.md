@@ -102,5 +102,6 @@ Open design question:
 - Core cannot reliably emit `peerReplaced` / `peerReconnected` from de-duped
   presence alone. That likely needs adapter semantics, or a connection/session
   generation, so the room can distinguish a refreshed same-peer presence row
-  from a fresh socket replacing a stale one.
+  from a fresh socket replacing a stale one. Captured in
+  [peer-replaced-design.md](peer-replaced-design.md).
 

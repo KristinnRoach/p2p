@@ -316,6 +316,37 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('rebuilds the connection when the same peerId leaves and rejoins', async () => {
+    const sessions = [];
+    sessionMocks.startP2PSession.mockImplementation(() => {
+      const session = createResolvedSession();
+      sessions.push(session);
+      return Promise.resolve(session);
+    });
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({ signaling, peerId: 'a' });
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await flushAsyncWork();
+    expect(sessionMocks.startP2PSession).toHaveBeenCalledTimes(1);
+    expect(room.pairs.has('b')).toBe(true);
+
+    // 'b' drops out of presence (reload, disconnect, or TTL expiry).
+    signaling.emitPeers([]);
+    await flushAsyncWork();
+    expect(sessions[0].close).toHaveBeenCalledOnce();
+    expect(room.pairs.has('b')).toBe(false);
+
+    // The same peerId returns: a fresh session is built, not the stale one.
+    signaling.emitPeers(['b']);
+    await flushAsyncWork();
+    expect(sessionMocks.startP2PSession).toHaveBeenCalledTimes(2);
+    expect(room.pairs.has('b')).toBe(true);
+
+    room.close();
+  });
+
   it('emits membersChanged on a data-only change with unchanged membership', async () => {
     const signaling = createTestRoomSignaling();
     const membersChanged = [];

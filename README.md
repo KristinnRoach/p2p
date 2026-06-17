@@ -79,6 +79,11 @@ Use `leave()` when the app wants to keep observing the same room after the
 local member exits. Use `close()` when the user is done with the room; it tears
 down subscriptions, peer connections, owned media, and signaling.
 
+A `peerId` is a singleton identity: if a peer reloads or reconnects under the
+same id, the room tears down the old session and builds a fresh one. Your
+signaling adapter owns expiring peers that disappear without a clean `leave()`
+(e.g. a crash) — see [docs/signaling.md](docs/signaling.md#reconnect-and-stale-presence).
+
 Solid apps can use the `@kidlib/p2p/solid` adapter. See
 [docs/solidjs.md](docs/solidjs.md).
 
