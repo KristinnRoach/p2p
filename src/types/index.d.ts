@@ -220,6 +220,22 @@ export interface MemberLeftDetail {
   stream: MediaStream | null;
 }
 
+export interface MemberStreamRemovedDetail {
+  memberId: string;
+  stream: MediaStream;
+}
+
+export interface PeerStreamRemovedDetail {
+  peerId: string;
+  memberId?: string;
+  stream: MediaStream;
+}
+
+export interface AloneDetail {
+  members: string[];
+  memberCount: number;
+}
+
 export interface PeerErrorDetail {
   peerId: string;
   memberId?: string;
@@ -270,8 +286,11 @@ export interface P2PRoomEvents {
   memberJoined: { memberId: string };
   memberLeft: MemberLeftDetail;
   memberStream: MemberStreamDetail;
+  memberStreamRemoved: MemberStreamRemovedDetail;
   memberTrack: MemberStreamDetail;
   membersChanged: MembersChangedDetail;
+  /** Local peer is the only remaining member (fires when the last remote member leaves). */
+  alone: AloneDetail;
   statechange: P2PRoomStateChangeDetail;
   /** @deprecated Use memberJoined. */
   peerJoined: { peerId: string; memberId?: string };
@@ -279,6 +298,8 @@ export interface P2PRoomEvents {
   peerLeft: PeerLeftDetail;
   /** @deprecated Use memberStream. */
   peerStream: PeerStreamDetail;
+  /** @deprecated Use memberStreamRemoved. */
+  peerStreamRemoved: PeerStreamRemovedDetail;
   /** @deprecated Use memberTrack. */
   peerTrack: PeerStreamDetail;
   localStream: LocalStreamDetail;
@@ -308,6 +329,8 @@ export interface P2PRoomOptions {
   dataChannelOpenTimeoutMs?: number;
   memberCapacity?: number;
   presenceData?: P2PRoomPresenceData;
+  /** Close the room automatically when the last remote member leaves. Default false. */
+  autoCloseWhenAlone?: boolean;
   /** @deprecated Use memberCapacity. */
   maxPeers?: number;
   rtcConfig?: RTCConfiguration;
@@ -320,6 +343,11 @@ export interface P2PRoomOptions {
     event: CustomEvent,
   ) => void;
   onMemberLeft?: (detail: MemberLeftDetail, event: CustomEvent) => void;
+  onMemberStreamRemoved?: (
+    detail: MemberStreamRemovedDetail,
+    event: CustomEvent,
+  ) => void;
+  onAlone?: (detail: AloneDetail, event: CustomEvent) => void;
   onMembersChanged?: (
     detail: MembersChangedDetail,
     event: CustomEvent,

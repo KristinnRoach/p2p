@@ -456,6 +456,120 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('emits memberStreamRemoved (and peerStreamRemoved) when a member with a stream leaves', async () => {
+    const stream = createFakeStream();
+    sessionMocks.startP2PSession.mockImplementation(({ onRemoteStream }) => {
+      onRemoteStream({ stream });
+      return Promise.resolve(createResolvedSession());
+    });
+    const signaling = createTestRoomSignaling();
+    const removed = [];
+    const peerRemoved = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onMemberStreamRemoved: (detail) => removed.push(detail),
+    });
+    room.on('peerStreamRemoved', (detail) => peerRemoved.push(detail));
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await flushAsyncWork();
+
+    signaling.emitPeers([]);
+    await flushAsyncWork();
+
+    expect(removed).toEqual([{ memberId: 'b', stream }]);
+    expect(peerRemoved).toEqual([{ peerId: 'b', memberId: 'b', stream }]);
+
+    room.close();
+  });
+
+  it('does not emit memberStreamRemoved for a member that never had a stream', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const removed = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onMemberStreamRemoved: (detail) => removed.push(detail),
+    });
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await flushAsyncWork();
+
+    signaling.emitPeers([]);
+    await flushAsyncWork();
+
+    expect(removed).toEqual([]);
+
+    room.close();
+  });
+
+  it('emits alone when the last remote member leaves', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const alone = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onAlone: (detail) => alone.push(detail),
+    });
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await flushAsyncWork();
+    expect(alone).toEqual([]);
+
+    signaling.emitPeers([]);
+    await flushAsyncWork();
+
+    expect(alone).toEqual([{ members: [], memberCount: 0 }]);
+
+    room.close();
+  });
+
+  it('does not emit alone when joining an empty room', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const alone = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onAlone: (detail) => alone.push(detail),
+    });
+
+    signaling.emitPeers([]);
+    await room.join();
+    await flushAsyncWork();
+
+    expect(alone).toEqual([]);
+
+    room.close();
+  });
+
+  it('auto-closes the room when the last remote member leaves with autoCloseWhenAlone', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      autoCloseWhenAlone: true,
+    });
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await flushAsyncWork();
+    expect(room.state).toBe('joined');
+
+    signaling.emitPeers([]);
+    await flushAsyncWork();
+
+    expect(room.state).toBe('closed');
+    expect(signaling.leave).toHaveBeenCalledWith('a');
+  });
+
   it('refreshes provider-owned presence while joined', async () => {
     vi.useFakeTimers();
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
