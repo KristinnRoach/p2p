@@ -8,6 +8,97 @@ function noopBroadcast() {
   return 0;
 }
 
+export function attachMediaStream(video, stream, options = {}) {
+  const {
+    autoplay = true,
+    muted,
+    playsInline,
+    onPlaybackBlocked,
+    onPlaybackStarted,
+  } = options;
+  let blockedError;
+  let disposed = false;
+
+  if (!video) {
+    throw new Error('attachMediaStream: video element is required');
+  }
+  if (muted !== undefined) video.muted = muted;
+  if (playsInline !== undefined) video.playsInline = playsInline;
+  if (video.srcObject !== stream) video.srcObject = stream ?? null;
+
+  const resumePlayback = async () => {
+    if (disposed || !video.srcObject) return false;
+    try {
+      await Promise.resolve(video.play());
+      blockedError = undefined;
+      onPlaybackStarted?.();
+      return true;
+    } catch (error) {
+      blockedError = error;
+      onPlaybackBlocked?.(error);
+      return false;
+    }
+  };
+
+  return {
+    ready: autoplay ? resumePlayback() : Promise.resolve(false),
+    resumePlayback,
+    get playbackBlocked() {
+      return blockedError;
+    },
+    detach() {
+      disposed = true;
+      if (video.srcObject === stream) video.srcObject = null;
+    },
+  };
+}
+
+export function createMediaPlayback(options = {}) {
+  const [playbackBlocked, setPlaybackBlocked] = createSignal(false);
+  const [playbackError, setPlaybackError] = createSignal();
+  let controller = null;
+
+  const attach = (video, stream, attachOptions = {}) => {
+    controller?.detach();
+    setPlaybackBlocked(false);
+    setPlaybackError(undefined);
+    controller = attachMediaStream(video, stream, {
+      ...options,
+      ...attachOptions,
+      onPlaybackBlocked(error) {
+        setPlaybackBlocked(true);
+        setPlaybackError(error);
+        options.onPlaybackBlocked?.(error);
+        attachOptions.onPlaybackBlocked?.(error);
+      },
+      onPlaybackStarted() {
+        setPlaybackBlocked(false);
+        setPlaybackError(undefined);
+        options.onPlaybackStarted?.();
+        attachOptions.onPlaybackStarted?.();
+      },
+    });
+    return controller.ready;
+  };
+
+  const detach = () => {
+    controller?.detach();
+    controller = null;
+    setPlaybackBlocked(false);
+    setPlaybackError(undefined);
+  };
+
+  onCleanup(detach);
+
+  return {
+    playbackBlocked,
+    playbackError,
+    attach,
+    resumePlayback: () => controller?.resumePlayback() ?? Promise.resolve(false),
+    detach,
+  };
+}
+
 export function useP2PRoom() {
   const [room, setRoom] = createSignal();
   const [ready, setReady] = createSignal(Promise.resolve(undefined), {
