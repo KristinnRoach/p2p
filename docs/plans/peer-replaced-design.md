@@ -2,7 +2,7 @@
 
 Status: **not implemented, descoped.** This captures the problem and the options
 so the decision can be made later without re-deriving it. See the locked plan in
-[room-presence-reconnect-plan.md](room-presence-reconnect-plan.md).
+[room-presence-reconnect-plan.md](finished/room-presence-reconnect-plan.md).
 
 ## Problem
 

@@ -1,5 +1,9 @@
 # Room presence and reconnect plan
 
+> **Status: complete.** All planned PRs shipped (v0.2.0–v0.3.0). The only
+> remaining item, `peerReplaced` / `peerReconnected`, was deliberately descoped
+> to a separate spike: [peer-replaced-design.md](../peer-replaced-design.md).
+
 This plan is optimized for small, fast PRs with immediate consumer value.
 
 ## Shipped (v0.2.0)
@@ -9,13 +13,13 @@ This plan is optimized for small, fast PRs with immediate consumer value.
 - **Solid media playback helper** — `attachMediaStream()` / `createMediaPlayback()`
   in `@kidlib/p2p/solid` (details below).
 
-## Remaining Work: 2 PRs
+## Shipped (v0.3.0)
 
-- **PR A — Stream removal lifecycle + Alone/auto-exit ergonomics** (combined,
-  one `minor` changeset). Both touch the same `_closeMember` / membership path
-  in `src/room.js`.
-- **PR B — Signaling reconnect & stale presence**: docs + same-`peerId` reload
-  tests only. Low code churn.
+- **PR A — Stream removal lifecycle + Alone/auto-exit ergonomics** (#23) —
+  `memberStreamRemoved` event (+ `peerStreamRemoved` alias), `alone` event, and
+  `autoCloseWhenAlone` option. One `minor` changeset.
+- **PR B — Signaling reconnect & stale presence** (#24) — docs + same-`peerId`
+  reload tests only; no source changes.
 
 Locked decisions:
 
@@ -103,5 +107,5 @@ Open design question:
   presence alone. That likely needs adapter semantics, or a connection/session
   generation, so the room can distinguish a refreshed same-peer presence row
   from a fresh socket replacing a stale one. Captured in
-  [peer-replaced-design.md](peer-replaced-design.md).
+  [peer-replaced-design.md](../peer-replaced-design.md).
 
