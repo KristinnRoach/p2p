@@ -152,46 +152,34 @@ export class P2PRoom extends EventTarget {
     this._pagehideCleanup = null;
     this._hadRemoteMembers = false;
 
-    if (onMemberStream) {
-      this._cleanups.push(this.on('memberStream', onMemberStream));
+    // Map each on<Event> option to its event name. Iterated below to register
+    // handlers; add new events here rather than as another `if` branch.
+    // Note: onStateChange maps to the lowercase 'statechange' event, and the
+    // peer* names are deprecated aliases retained for backwards compatibility.
+    const handlers = [
+      ['memberStream', onMemberStream],
+      ['memberTrack', onMemberTrack],
+      ['memberJoined', onMemberJoined],
+      ['memberLeft', onMemberLeft],
+      ['memberStreamRemoved', onMemberStreamRemoved],
+      ['alone', onAlone],
+      ['membersChanged', onMembersChanged],
+      ['statechange', onStateChange],
+      ['peerStream', onPeerStream],
+      ['peerTrack', onPeerTrack],
+      ['peerJoined', onPeerJoined],
+      ['peerLeft', onPeerLeft],
+      ['full', onFull],
+      ['localStream', onLocalStream],
+      ['dataChannel', onDataChannel],
+      ['dataChannelOpen', onDataChannelOpen],
+      ['dataChannelMessage', onDataChannelMessage],
+      ['dataChannelClose', onDataChannelClose],
+      ['error', onError],
+    ];
+    for (const [event, handler] of handlers) {
+      if (handler) this._cleanups.push(this.on(event, handler));
     }
-    if (onMemberTrack) {
-      this._cleanups.push(this.on('memberTrack', onMemberTrack));
-    }
-    if (onMemberJoined) {
-      this._cleanups.push(this.on('memberJoined', onMemberJoined));
-    }
-    if (onMemberLeft) this._cleanups.push(this.on('memberLeft', onMemberLeft));
-    if (onMemberStreamRemoved) {
-      this._cleanups.push(this.on('memberStreamRemoved', onMemberStreamRemoved));
-    }
-    if (onAlone) this._cleanups.push(this.on('alone', onAlone));
-    if (onMembersChanged) {
-      this._cleanups.push(this.on('membersChanged', onMembersChanged));
-    }
-    if (onStateChange)
-      this._cleanups.push(this.on('statechange', onStateChange));
-    if (onPeerStream) this._cleanups.push(this.on('peerStream', onPeerStream));
-    if (onPeerTrack) this._cleanups.push(this.on('peerTrack', onPeerTrack));
-    if (onPeerJoined) this._cleanups.push(this.on('peerJoined', onPeerJoined));
-    if (onPeerLeft) this._cleanups.push(this.on('peerLeft', onPeerLeft));
-    if (onFull) this._cleanups.push(this.on('full', onFull));
-    if (onLocalStream) {
-      this._cleanups.push(this.on('localStream', onLocalStream));
-    }
-    if (onDataChannel) {
-      this._cleanups.push(this.on('dataChannel', onDataChannel));
-    }
-    if (onDataChannelOpen) {
-      this._cleanups.push(this.on('dataChannelOpen', onDataChannelOpen));
-    }
-    if (onDataChannelMessage) {
-      this._cleanups.push(this.on('dataChannelMessage', onDataChannelMessage));
-    }
-    if (onDataChannelClose) {
-      this._cleanups.push(this.on('dataChannelClose', onDataChannelClose));
-    }
-    if (onError) this._cleanups.push(this.on('error', onError));
 
     this.ready = this._start();
   }
