@@ -194,6 +194,7 @@ export function useP2PRoom() {
       nextRoom.on('statechange', ({ state }) => setState(state)),
       nextRoom.on('localStream', ({ stream }) => setLocalStream(stream)),
       nextRoom.on('memberStream', updateRemoteStreams),
+      nextRoom.on('memberStreamRemoved', updateRemoteStreams),
       nextRoom.on('memberLeft', updateMembership.bind(null, nextRoom)),
       nextRoom.on('membersChanged', updateMembership.bind(null, nextRoom)),
       nextRoom.on('full', () => {

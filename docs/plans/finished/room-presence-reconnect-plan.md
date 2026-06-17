@@ -1,6 +1,6 @@
 # Room presence and reconnect plan
 
-> **Status: complete.** All planned PRs shipped (v0.2.0–v0.2.1). The only
+> **Status: complete.** All planned PRs shipped (v0.2.0–v0.2.2). The only
 > remaining item, `peerReplaced` / `peerReconnected`, was deliberately descoped
 > to a separate spike: [peer-replaced-design.md](../peer-replaced-design.md).
 
@@ -20,6 +20,13 @@ This plan is optimized for small, fast PRs with immediate consumer value.
   `autoCloseWhenAlone` option. Released as a patch.
 - **PR B — Signaling reconnect & stale presence** (#24) — docs + same-`peerId`
   reload tests only; no source changes.
+
+## Shipped (v0.2.2)
+
+- **Solid stream removal bridge** — the Solid adapter updates
+  `remoteMemberStreams()` when core emits `memberStreamRemoved`, so Solid
+  consumers clear failed or aborted remote streams even when membership does not
+  change.
 
 Locked decisions:
 
@@ -108,4 +115,3 @@ Open design question:
   generation, so the room can distinguish a refreshed same-peer presence row
   from a fresh socket replacing a stale one. Captured in
   [peer-replaced-design.md](../peer-replaced-design.md).
-

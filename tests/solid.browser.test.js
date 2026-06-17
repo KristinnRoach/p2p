@@ -281,6 +281,40 @@ describe('useP2PRoom', () => {
     dispose();
   });
 
+  it('updates remote streams when memberStreamRemoved fires', async () => {
+    const stream = new MediaStream();
+    const fakeRoom = createFakeRoom();
+    fakeRoom.members = ['peer-b'];
+    fakeRoom.memberPresence = [{ memberId: 'peer-b' }];
+    fakeRoom.memberCount = 1;
+    fakeRoom.remoteMemberStreams = [{ memberId: 'peer-b', stream }];
+    roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
+
+    let solidRoom;
+    const dispose = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.join({
+      signaling: {},
+      peerId: 'peer-a',
+    });
+
+    expect(solidRoom.remoteMemberStreams()).toEqual([
+      { memberId: 'peer-b', stream },
+    ]);
+
+    fakeRoom.remoteMemberStreams = [];
+    fakeRoom.emit('memberStreamRemoved', { memberId: 'peer-b', stream });
+
+    expect(solidRoom.members()).toEqual(['peer-b']);
+    expect(solidRoom.memberCount()).toBe(1);
+    expect(solidRoom.remoteMemberStreams()).toEqual([]);
+
+    dispose();
+  });
+
   it('clears stale errors when the room becomes full', async () => {
     const stream = new MediaStream();
     const error = new Error('peer failed');
