@@ -1,126 +1,85 @@
 # Room presence and reconnect plan
 
-This captures the current assessment of presence, duplicate member IDs,
-same-`peerId` reloads, stale peers, reconnects, and UI stream removal. The
-consumer-facing goal is to make reload/reconnect behavior predictable without
-requiring every app to patch around duplicate presence rows, stale sockets, or
-missing stream-removal signals.
+This plan is optimized for small, fast PRs with immediate consumer value. After
+the duplicate room state guard PR merges, duplicate presence snapshots are
+handled in core and the next independent slice is the Solid media playback
+helper.
 
-## PR split
+## Done When This PR Merges: Duplicate Room State Guards
 
-Do not put all of this in one PR. There are at least three different risk
-profiles here:
+This PR completes the first fast slice:
 
-1. Defensive correctness and docs: low risk, mostly internal behavior and
-   adapter guidance. This should be the first PR.
-2. UI lifecycle helpers: small API additions for stream removal and optional
-   auto-leave/auto-close behavior. This can follow after the defensive fixes.
-3. Reconnect/session replacement semantics: larger API and adapter contract
-   work. This needs its own design pass and tests because behavior depends on
-   whether signaling relays messages through long-lived peer IDs, sockets, or
-   connection/session IDs.
+- Incoming presence snapshots are de-duped by `memberId` before assigning
+  `_memberPresence` / `_memberIds`.
+- `remoteMemberStreams` is de-duped defensively even if `_memberIds` somehow
+  contains duplicates.
+- Duplicate incoming `memberId`s emit a logger-backed warning through
+  `setLogger()`.
+- Focused tests cover duplicate presence snapshots and duplicate stream
+  prevention.
 
-## Recommended first PR
+Consumer impact:
 
-These are quick, easy, and beneficial from a consuming app:
+- Duplicate signaling snapshots no longer inflate `members`, `memberPresence`,
+  or `memberCount`.
+- A transient duplicate presence row cannot render the same remote stream twice.
+- Apps that wire `setLogger()` can spot bad adapter snapshots during
+  development without the package writing directly to `console`.
 
-- De-dupe presence snapshots by `memberId` before storing `members`,
-  `memberPresence`, and `memberCount`.
-- De-dupe `remoteMemberStreams` by `memberId` so duplicate presence cannot
-  render the same stream multiple times.
-- Add a development warning when a presence snapshot contains duplicate member
-  IDs.
-- Document signaling adapter expectations for reload/reconnect cases:
-  `peerId` is a singleton room identity, latest join wins, stale sockets must
-  stop receiving routed messages, and `onPeers` snapshots must not contain
-  duplicate peer/member IDs.
-- Add tests for duplicate presence snapshots and duplicate-stream prevention.
+## Next Independent PR: Solid Playback Helper
 
-These changes should be safe for consumers because duplicate peer IDs are
-already nonsensical in the public room model. De-duping makes the current API
-match the documented shape: one room member and one rendered remote stream per
-`memberId`.
+This slice does not depend on the duplicate room state guards landing first.
 
-## Good second PR
+Scope:
 
-These are feasible and useful, but they are public behavior/API additions and
-should be separate from the first defensive PR:
+- Add a small reusable helper such as `attachMediaStream(video, stream, options)`
+  / `createMediaPlayback()`.
+- Standardize the browser playback handshake:
+  `srcObject` -> `play()` -> blocked state -> user gesture retry.
+- Expose `playbackBlocked` and `resumePlayback()` so apps can show one
+  "Continue call" button and call `resumePlayback()` from that click.
+- Leave all UI prompt/button rendering to the consuming app.
 
-- Clear remote streams when a peer session closes, fails, or is aborted, not
-  only when presence changes.
-- Emit a reliable `memberStreamRemoved` event when a remote stream should be
-  removed from UI. Prefer this over overloading `memberLeft`, because a peer can
-  still be present while its current WebRTC session has failed or is being
-  replaced.
-- Add tests for remote hangup after same-`peerId` replacement: presence clears
-  or remains single-entry, the remote stream is removed, and the room can
-  auto-exit if that option is enabled.
+Why separate:
 
-This is not just cosmetic. Solid consumers currently update
-`remoteMemberStreams()` from room events, so they need an event that fires
-whenever the stream is no longer valid, independent of whether presence changed.
+- It is independent from room presence and can ship quickly.
+- It should not be hidden inside `useP2PRoom`, because the adapter does not own
+  the app's actual media elements.
 
-## Optional small API PR
+## Follow-Up PRs
 
-`autoCloseWhenAlone` / `autoLeaveWhenAlone` is feasible and probably useful, but
-it should be opt-in and documented carefully.
+These remain useful but should not block the two fast PRs above.
 
-Recommended semantics:
+### Stream Removal Lifecycle
 
-- Only evaluate after the local peer has joined.
-- Trigger when the de-duped room membership contains only the local `peerId`.
-- `autoLeaveWhenAlone` calls `leave()` and keeps watching the room.
-- `autoCloseWhenAlone` calls `close()` and tears down signaling/media.
-- If both are supplied, reject the options or make `autoCloseWhenAlone` win; do
-  not silently do both.
+- Emit a dedicated `memberStreamRemoved` event when a remote stream is removed
+  from `remoteStreams`.
+- Ensure remote streams are removed when a peer connection closes, fails, is
+  aborted, or leaves via presence.
+- Keep `memberLeft` behavior unchanged.
 
-This is not purely beneficial for every app because some rooms intentionally
-wait alone for another participant. Keep it separate from correctness fixes.
+### Alone / Auto-Exit Ergonomics
 
-## Larger design track
+- Prefer an `alone` / `roomAlone` event over `roomEmpty`, unless `roomEmpty` is
+  explicitly documented as "empty of remote members".
+- Add optional `autoCloseWhenAlone` / `autoLeaveWhenAlone` for common 1:1 call
+  flows.
+- Evaluate against de-duped membership after the local peer has joined.
 
-These suggestions belong together, but not in the first PR:
+### Signaling Reconnect And Stale Presence
 
-- Treat `peerId` as a singleton room identity in recommended signaling
-  semantics: latest connection wins.
-- Add explicit room events such as `peerReplaced`, `peerReconnected`,
-  `peerStale`, and `roomEmpty`.
-- Expose a `recovering` / `reconnecting` room state for transient signaling
-  disconnects.
-- On signaling reconnect, restart affected peer sessions with fresh SDP/ICE
-  when relay signaling is ephemeral.
-- Add optional stale-peer timeout / heartbeat handling for peers that disappear
-  without a clean leave.
-- Add tests for reload during active call: old socket still closing, same
-  `peerId` rejoins, no duplicate streams, and relays target the latest socket.
+- Document recommended singleton `peerId` semantics: latest join wins.
+- Document that stale sockets should stop receiving relayed messages.
+- Expand `refreshPresence` / TTL examples for peers that disappear without a
+  clean `leave()`.
+- Clarify the distinct roles of `pagehide` leave, `cleanupSignaling()`, and
+  heartbeat expiry.
+- Add same-`peerId` reload/reconnect tests or adapter examples.
 
-These affect the room state machine, signaling adapter contracts, and
-potentially peer session lifecycle. The main design question is whether
-replacement is modeled at the room layer using only `peerId`, or whether
-signaling adapters expose a connection/session generation so the room can
-distinguish a fresh peer from a stale socket with the same identity.
+Open design question:
 
-## Media playback helpers
-
-These are independent of room presence and should not be bundled with the
-duplicate/reconnect work:
-
-- Provide a Solid adapter event or helper for video playback blocked by browser
-  autoplay policy, while leaving the UI prompt to the app.
-- Consider `playAllMedia()` / `resumePlayback()` in the Solid adapter so apps
-  can call it from a user gesture.
-
-Feasibility is medium. The helper is straightforward, but the API needs to be
-honest about browser limits: it can retry `HTMLMediaElement.play()` from an app
-gesture, but it cannot bypass autoplay policy. This belongs in a Solid/media
-ergonomics PR.
-
-## Suggested order
-
-1. Defensive de-dupe plus signaling docs and tests.
-2. Reliable stream-removal event plus session close/fail cleanup tests.
-3. Optional alone-room auto-leave/auto-close behavior.
-4. Same-`peerId` latest-join-wins adapter semantics and reconnect/session
-   replacement design.
-5. Solid autoplay playback helpers.
+- Core cannot reliably emit `peerReplaced` / `peerReconnected` from de-duped
+  presence alone. That likely needs adapter semantics, or a connection/session
+  generation, so the room can distinguish a refreshed same-peer presence row
+  from a fresh socket replacing a stale one.
 
