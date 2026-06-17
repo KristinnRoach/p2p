@@ -62,6 +62,14 @@ room.on('full', ({ members, memberCapacity }) => {
   showRoomFull(members, memberCapacity);
 });
 
+// `alone` fires when the last remote member leaves. For 1:1 call flows,
+// pass `autoCloseWhenAlone: true` to close the room automatically instead.
+room.on('alone', () => endCall());
+
+// `memberStreamRemoved` fires whenever a remote stream is dropped (peer left,
+// connection closed, failed, or aborted). `memberLeft` is unchanged.
+room.on('memberStreamRemoved', ({ memberId }) => removeRemoteTile(memberId));
+
 await room.join();  // enter presence and connect
 await room.leave(); // leave presence, close sessions, keep watching
 room.close();       // permanent teardown

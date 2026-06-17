@@ -60,11 +60,14 @@ export class P2PRoom extends EventTarget {
       memberCapacity = options.maxPeers ?? Infinity,
       presenceData = undefined,
       autoJoin = true,
+      autoCloseWhenAlone = false,
       signal = null,
       onMemberStream = null,
       onMemberTrack = null,
       onMemberJoined = null,
       onMemberLeft = null,
+      onMemberStreamRemoved = null,
+      onAlone = null,
       onMembersChanged = null,
       onStateChange = null,
       onPeerStream = null,
@@ -123,6 +126,7 @@ export class P2PRoom extends EventTarget {
     this.maxPeers = memberCapacity;
     this._presenceData = presenceData;
     this.autoJoin = autoJoin;
+    this.autoCloseWhenAlone = autoCloseWhenAlone;
     this.signal = signal;
 
     /** @type {Map<string, import('./session.js').P2PSession>} one entry per connected remote peer */
@@ -146,6 +150,7 @@ export class P2PRoom extends EventTarget {
     this._joined = false;
     this._presenceHeartbeatTimer = null;
     this._pagehideCleanup = null;
+    this._hadRemoteMembers = false;
 
     if (onMemberStream) {
       this._cleanups.push(this.on('memberStream', onMemberStream));
@@ -157,6 +162,10 @@ export class P2PRoom extends EventTarget {
       this._cleanups.push(this.on('memberJoined', onMemberJoined));
     }
     if (onMemberLeft) this._cleanups.push(this.on('memberLeft', onMemberLeft));
+    if (onMemberStreamRemoved) {
+      this._cleanups.push(this.on('memberStreamRemoved', onMemberStreamRemoved));
+    }
+    if (onAlone) this._cleanups.push(this.on('alone', onAlone));
     if (onMembersChanged) {
       this._cleanups.push(this.on('membersChanged', onMembersChanged));
     }
@@ -241,6 +250,7 @@ export class P2PRoom extends EventTarget {
     this._unbindPagehideLeave();
     for (const cleanup of this._cleanups.splice(0)) cleanup();
     this._closeAllPeers({ emitLeft: false });
+    this._hadRemoteMembers = false;
 
     if (this._joinStarted || this._joined) {
       try {
@@ -483,6 +493,7 @@ export class P2PRoom extends EventTarget {
   async _leave() {
     this._setState('leaving');
     this._closeAllPeers({ emitLeft: true });
+    this._hadRemoteMembers = false;
     const shouldLeave = this._joined || this._joinStarted;
     try {
       if (shouldLeave) {
@@ -563,6 +574,22 @@ export class P2PRoom extends EventTarget {
     }
     for (const memberId of this._controllers.keys()) {
       if (!remoteMemberIds.has(memberId)) this._closeMember(memberId);
+    }
+    this._updateAloneState(remoteMemberIds.size);
+  }
+
+  _updateAloneState(remoteCount) {
+    if (remoteCount > 0) {
+      this._hadRemoteMembers = true;
+      return;
+    }
+    // Only fire on the transition from having remote members to none, so
+    // joining an empty room does not immediately emit `alone` / auto-close.
+    if (!this._hadRemoteMembers) return;
+    this._hadRemoteMembers = false;
+    this._emitAlone();
+    if (this.autoCloseWhenAlone) {
+      Promise.resolve(this.close()).catch(() => {});
     }
   }
 
@@ -724,6 +751,7 @@ export class P2PRoom extends EventTarget {
     const stream = this.remoteStreams.get(memberId) ?? null;
     this.remoteStreams.delete(memberId);
     this._remoteMemberStreamEntries.delete(memberId);
+    if (stream) this._emitMemberStreamRemoved(memberId, stream);
     if (emitLeft) this._emitMemberLeft(memberId, stream);
   }
 
@@ -847,6 +875,18 @@ export class P2PRoom extends EventTarget {
   _emitMemberStream(detail) {
     this._emit('memberStream', detail);
     this._emit('peerStream', { ...detail, peerId: detail.memberId });
+  }
+
+  _emitMemberStreamRemoved(memberId, stream) {
+    this._emit('memberStreamRemoved', { memberId, stream });
+    this._emit('peerStreamRemoved', { peerId: memberId, memberId, stream });
+  }
+
+  _emitAlone() {
+    this._emit('alone', {
+      members: this.members,
+      memberCount: this.memberCount,
+    });
   }
 
   _emitMemberTrack(detail) {
