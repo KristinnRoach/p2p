@@ -1,6 +1,6 @@
 # Room presence and reconnect plan
 
-> **Status: complete.** All planned PRs shipped (v0.2.0–v0.3.0). The only
+> **Status: complete.** All planned PRs shipped (v0.2.0–v0.2.1). The only
 > remaining item, `peerReplaced` / `peerReconnected`, was deliberately descoped
 > to a separate spike: [peer-replaced-design.md](../peer-replaced-design.md).
 
@@ -13,11 +13,11 @@ This plan is optimized for small, fast PRs with immediate consumer value.
 - **Solid media playback helper** — `attachMediaStream()` / `createMediaPlayback()`
   in `@kidlib/p2p/solid` (details below).
 
-## Shipped (v0.3.0)
+## Shipped (v0.2.1)
 
 - **PR A — Stream removal lifecycle + Alone/auto-exit ergonomics** (#23) —
   `memberStreamRemoved` event (+ `peerStreamRemoved` alias), `alone` event, and
-  `autoCloseWhenAlone` option. One `minor` changeset.
+  `autoCloseWhenAlone` option. Released as a patch.
 - **PR B — Signaling reconnect & stale presence** (#24) — docs + same-`peerId`
   reload tests only; no source changes.
 
@@ -72,7 +72,7 @@ Why separate:
 ## PR A: Stream Removal Lifecycle + Alone/Auto-Exit Ergonomics
 
 Combined into one PR; both touch `_closeMember` and membership in
-`src/room.js`. One `minor` changeset.
+`src/room.js`. Shipped as a single changeset (released as a patch, v0.2.1).
 
 ### Stream Removal Lifecycle
 
