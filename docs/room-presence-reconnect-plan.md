@@ -1,11 +1,32 @@
 # Room presence and reconnect plan
 
-This plan is optimized for small, fast PRs with immediate consumer value. After
-the duplicate room state guard PR merges, duplicate presence snapshots are
-handled in core and the next independent slice is the Solid media playback
-helper.
+This plan is optimized for small, fast PRs with immediate consumer value.
 
-## Done When This PR Merges: Duplicate Room State Guards
+## Shipped (v0.2.0)
+
+- **Duplicate room state guards** — presence snapshots de-duped by `memberId`
+  in core (details below).
+- **Solid media playback helper** — `attachMediaStream()` / `createMediaPlayback()`
+  in `@kidlib/p2p/solid` (details below).
+
+## Remaining Work: 2 PRs
+
+- **PR A — Stream removal lifecycle + Alone/auto-exit ergonomics** (combined,
+  one `minor` changeset). Both touch the same `_closeMember` / membership path
+  in `src/room.js`.
+- **PR B — Signaling reconnect & stale presence**: docs + same-`peerId` reload
+  tests only. Low code churn.
+
+Locked decisions:
+
+- Event/option naming: `alone` event + `autoCloseWhenAlone` option (not
+  `roomEmpty` / `roomAlone`). `memberStreamRemoved` gets a `peerStreamRemoved`
+  alias to match the existing `peerLeft` / `peerStream` pattern.
+- `peerReplaced` / `peerReconnected` is **descoped** from both PRs. It needs a
+  connection/session generation or adapter semantics (see open question below)
+  and must not block this work. Treat as a separate design spike later.
+
+## Done: Duplicate Room State Guards (shipped)
 
 This PR completes the first fast slice:
 
@@ -26,9 +47,7 @@ Consumer impact:
 - Apps that wire `setLogger()` can spot bad adapter snapshots during
   development without the package writing directly to `console`.
 
-## Next Independent PR: Solid Playback Helper
-
-This slice does not depend on the duplicate room state guards landing first.
+## Done: Solid Playback Helper (shipped)
 
 Scope:
 
@@ -46,27 +65,29 @@ Why separate:
 - It should not be hidden inside `useP2PRoom`, because the adapter does not own
   the app's actual media elements.
 
-## Follow-Up PRs
+## PR A: Stream Removal Lifecycle + Alone/Auto-Exit Ergonomics
 
-These remain useful but should not block the two fast PRs above.
+Combined into one PR; both touch `_closeMember` and membership in
+`src/room.js`. One `minor` changeset.
 
 ### Stream Removal Lifecycle
 
-- Emit a dedicated `memberStreamRemoved` event when a remote stream is removed
-  from `remoteStreams`.
+- Emit a dedicated `memberStreamRemoved` event (with `peerStreamRemoved` alias)
+  when a remote stream is removed from `remoteStreams`.
 - Ensure remote streams are removed when a peer connection closes, fails, is
   aborted, or leaves via presence.
 - Keep `memberLeft` behavior unchanged.
 
 ### Alone / Auto-Exit Ergonomics
 
-- Prefer an `alone` / `roomAlone` event over `roomEmpty`, unless `roomEmpty` is
-  explicitly documented as "empty of remote members".
-- Add optional `autoCloseWhenAlone` / `autoLeaveWhenAlone` for common 1:1 call
-  flows.
+- Emit an `alone` event when the local peer is the only remaining member.
+- Add optional `autoCloseWhenAlone` for common 1:1 call flows.
 - Evaluate against de-duped membership after the local peer has joined.
 
-### Signaling Reconnect And Stale Presence
+## PR B: Signaling Reconnect And Stale Presence
+
+Docs + tests only. `peerReplaced` / `peerReconnected` is descoped (see open
+question).
 
 - Document recommended singleton `peerId` semantics: latest join wins.
 - Document that stale sockets should stop receiving relayed messages.
