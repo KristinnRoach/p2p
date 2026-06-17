@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.2.2
+
+### Patch Changes
+
+- 55e976e: Update the Solid room adapter's `remoteMemberStreams` signal when core emits `memberStreamRemoved`, so Solid consumers clear failed or aborted remote streams even when membership does not change.
+
 ## 0.2.1
 
 ### Patch Changes

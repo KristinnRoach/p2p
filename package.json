@@ -1,6 +1,6 @@
 {
   "name": "@kidlib/p2p",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Signaling-agnostic WebRTC helpers.",
   "type": "module",
   "types": "./src/types/index.d.ts",
