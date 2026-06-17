@@ -16,6 +16,7 @@ import {
   joinP2PRoom,
   watchP2PRoom,
 } from '../src/room.js';
+import { setLogger } from '../src/logger.js';
 
 function createPairSignaling() {
   return {
@@ -87,6 +88,7 @@ describe('P2PRoom', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    setLogger(() => {});
   });
 
   it('watches peers without joining presence or connecting to peers', async () => {
@@ -282,6 +284,38 @@ describe('P2PRoom', () => {
     room.close();
   });
 
+  it('de-dupes duplicate presence snapshots by memberId', async () => {
+    const signaling = createTestRoomSignaling();
+    const logs = [];
+    setLogger((...args) => logs.push(args));
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    signaling.emitPeers([
+      { memberId: 'a', data: { displayName: 'Ada' } },
+      { memberId: 'b', data: { displayName: 'Ben', muted: false } },
+      { memberId: 'b', data: { displayName: 'Ben', muted: true } },
+      'c',
+      'c',
+    ]);
+    await flushAsyncWork();
+
+    expect(room.members).toEqual(['a', 'b', 'c']);
+    expect(room.memberPresence).toEqual([
+      { memberId: 'a', data: { displayName: 'Ada' } },
+      { memberId: 'b', data: { displayName: 'Ben', muted: true } },
+      { memberId: 'c' },
+    ]);
+    expect(room.memberCount).toBe(3);
+    expect(logs).toEqual([
+      ['[Room] Duplicate memberId(s) in presence snapshot ignored: b, c'],
+    ]);
+
+    room.close();
+  });
+
   it('emits membersChanged on a data-only change with unchanged membership', async () => {
     const signaling = createTestRoomSignaling();
     const membersChanged = [];
@@ -370,6 +404,22 @@ describe('P2PRoom', () => {
       { memberId: 'c', stream: firstStream },
       { memberId: 'b', stream: secondStream },
     ]);
+
+    room.close();
+  });
+
+  it('defensively de-dupes remote member streams by memberId', async () => {
+    const stream = createFakeStream();
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    room._memberIds = ['b', 'b'];
+    room.remoteStreams.set('b', stream);
+
+    expect(room.remoteMemberStreams).toEqual([{ memberId: 'b', stream }]);
 
     room.close();
   });

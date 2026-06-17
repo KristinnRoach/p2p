@@ -203,6 +203,7 @@ export class P2PRoom extends EventTarget {
     const streams = [];
     const seen = new Set();
     const addStream = (memberId) => {
+      if (seen.has(memberId)) return;
       const stream = this.remoteStreams.get(memberId);
       if (!stream) return;
       const previous = this._remoteMemberStreamEntries.get(memberId);
@@ -957,18 +958,35 @@ function toPublicState(state) {
 
 function normalizePresenceSnapshot(peers) {
   if (!Array.isArray(peers)) return [];
-  return peers
-    .map((entry) => {
-      if (typeof entry === 'string') return { memberId: entry };
-      if (!entry || typeof entry !== 'object') return null;
-      const memberId =
-        typeof entry.memberId === 'string' ? entry.memberId : null;
-      if (!memberId) return null;
-      if (entry.data === undefined) return { memberId };
-      if (!isPresenceData(entry.data)) return { memberId };
-      return { memberId, data: entry.data };
-    })
-    .filter(Boolean);
+  const byMemberId = new Map();
+  const duplicates = new Set();
+
+  for (const entry of peers) {
+    const member = normalizePresenceEntry(entry);
+    if (!member) continue;
+    if (byMemberId.has(member.memberId)) duplicates.add(member.memberId);
+    byMemberId.set(member.memberId, member);
+  }
+
+  if (duplicates.size > 0) {
+    log(
+      `[Room] Duplicate memberId(s) in presence snapshot ignored: ${[
+        ...duplicates,
+      ].join(', ')}`,
+    );
+  }
+
+  return [...byMemberId.values()];
+}
+
+function normalizePresenceEntry(entry) {
+  if (typeof entry === 'string') return { memberId: entry };
+  if (!entry || typeof entry !== 'object') return null;
+  const memberId = typeof entry.memberId === 'string' ? entry.memberId : null;
+  if (!memberId) return null;
+  if (entry.data === undefined) return { memberId };
+  if (!isPresenceData(entry.data)) return { memberId };
+  return { memberId, data: entry.data };
 }
 
 function clonePresenceMember(member) {
