@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.2.3
+
+### Patch Changes
+
+- 2c814c6: Make Solid room joins reject when joining fails.
+
 ## 0.2.2
 
 ### Patch Changes
