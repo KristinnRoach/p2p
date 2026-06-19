@@ -277,7 +277,7 @@ export function useP2PRoom() {
       if (runId !== currentRunId || room() !== currentRoom) return undefined;
       setRoomError(cause);
       if (isLocalStreamError(cause)) closeCurrentRoom('error');
-      return undefined;
+      throw cause;
     }
   }
 

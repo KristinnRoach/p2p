@@ -172,7 +172,7 @@ describe('useP2PRoom', () => {
     dispose();
   });
 
-  it('stores join errors instead of throwing them', async () => {
+  it('stores and rethrows join errors', async () => {
     const error = new Error('room full');
     error.name = 'RoomFullError';
     const fakeRoom = createFakeRoom({
@@ -193,7 +193,7 @@ describe('useP2PRoom', () => {
         signaling: {},
         peerId: 'peer-a',
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toBe(error);
 
     expect(solidRoom.state()).toBe('full');
     expect(solidRoom.error()).toBe(error);
@@ -223,7 +223,7 @@ describe('useP2PRoom', () => {
         signaling: {},
         peerId: 'peer-a',
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toBe(error);
 
     expect(fakeRoom.close).toHaveBeenCalledOnce();
     expect(solidRoom.room()).toBeUndefined();
