@@ -41,7 +41,7 @@ export function normalizeLocalTrackSlots(slots, owner) {
  * @param {string} owner
  */
 export function assertLocalTrackKind(slotId, kind, track, owner) {
-  if (track !== null && track?.kind !== kind) {
+  if (track != null && track?.kind !== kind) {
     throw new TypeError(
       `${owner}: track for slot "${slotId}" must be ${kind}, got ${track?.kind ?? typeof track}`,
     );
