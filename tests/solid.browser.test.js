@@ -1,4 +1,4 @@
-import { createRoot } from 'solid-js';
+import { createComputed, createRoot } from 'solid-js';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const roomMocks = vi.hoisted(() => ({
@@ -278,6 +278,27 @@ describe('useP2PRoom', () => {
       { memberId: 'peer-b', stream },
     ]);
 
+    dispose();
+  });
+
+  it('notifies Solid consumers when the same local stream changes tracks', async () => {
+    const stream = new MediaStream();
+    const fakeRoom = createFakeRoom({ localStream: stream });
+    roomMocks.watchP2PRoom.mockResolvedValue(fakeRoom);
+    const observed = [];
+
+    let solidRoom;
+    const dispose = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      createComputed(() => observed.push(solidRoom.localStream()));
+      return dispose;
+    });
+
+    await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+    fakeRoom.emit('localStream', { stream });
+    fakeRoom.emit('localStream', { stream });
+
+    expect(observed.filter((value) => value === stream)).toHaveLength(4);
     dispose();
   });
 

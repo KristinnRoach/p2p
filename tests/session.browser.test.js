@@ -39,14 +39,34 @@ async function waitForOpen(session) {
   await new Promise((resolve) => session.once('open', resolve));
 }
 
-function createVideoStream() {
+function createVideoStream(color = '#f00') {
   const canvas = document.createElement('canvas');
   canvas.width = 16;
   canvas.height = 16;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#f00';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  return canvas.captureStream(5);
+  let frame = 0;
+  let animationFrame;
+  const paint = () => {
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = frame++ % 2 === 0 ? '#000' : '#fff';
+    ctx.fillRect(0, 0, 1, 1);
+    animationFrame = requestAnimationFrame(paint);
+  };
+  paint();
+
+  const stream = canvas.captureStream(30);
+  const track = stream.getVideoTracks()[0];
+  const stop = track.stop.bind(track);
+  track.stop = () => {
+    cancelAnimationFrame(animationFrame);
+    stop();
+  };
+  return stream;
+}
+
+function createVideoTrack(color) {
+  return createVideoStream(color).getVideoTracks()[0];
 }
 
 function waitForRemoteStream(session) {
@@ -56,7 +76,140 @@ function waitForRemoteStream(session) {
   });
 }
 
+async function waitFor(predicate, timeoutMs = 5000) {
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`Timed out after ${timeoutMs}ms`);
+}
+
+async function waitForVideoColor(video, expected) {
+  await waitFor(() => video.videoWidth > 0 && video.readyState >= 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  await waitFor(() => {
+    ctx.drawImage(video, 0, 0, 1, 1);
+    const [red, green, blue] = ctx.getImageData(0, 0, 1, 1).data;
+    if (expected === 'red') return red > green * 2 && red > blue * 2;
+    if (expected === 'green') return green > red * 2 && green > blue * 2;
+    return blue > red * 2 && blue > green * 2;
+  });
+}
+
 describe('P2P session helpers', () => {
+  it('delivers null, replacement, removal, and restored slot video through one remote receiver', async () => {
+    const { a, b } = createLoopbackSignaling();
+    const [host, guest] = await Promise.all([
+      startP2PSession({
+        signaling: a,
+        localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
+        rtcConfig: loopbackRtcConfig,
+      }),
+      joinP2PSession({ signaling: b, rtcConfig: loopbackRtcConfig }),
+    ]);
+    const redTrack = createVideoTrack('#f00');
+    const greenTrack = createVideoTrack('#0f0');
+    const blueTrack = createVideoTrack('#00f');
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+
+    try {
+      const remoteStream = await waitForRemoteStream(guest);
+      const receiverTrack = remoteStream.getVideoTracks()[0];
+      expect(receiverTrack).toBeDefined();
+      video.srcObject = remoteStream;
+
+      await host.setLocalTrack('primary-video', redTrack);
+      await video.play();
+      await waitForVideoColor(video, 'red');
+      expect(remoteStream.getVideoTracks()[0]).toBe(receiverTrack);
+
+      await host.setLocalTrack('primary-video', greenTrack);
+      await waitForVideoColor(video, 'green');
+      expect(remoteStream.getVideoTracks()[0]).toBe(receiverTrack);
+
+      await host.setLocalTrack('primary-video', null);
+      expect(remoteStream.getVideoTracks()[0]).toBe(receiverTrack);
+      expect(receiverTrack.readyState).toBe('live');
+
+      await host.setLocalTrack('primary-video', blueTrack);
+      await waitForVideoColor(video, 'blue');
+      expect(remoteStream.getVideoTracks()[0]).toBe(receiverTrack);
+    } finally {
+      video.pause();
+      video.srcObject = null;
+      host.close();
+      guest.close();
+      redTrack.stop();
+      greenTrack.stop();
+      blueTrack.stop();
+    }
+  });
+
+  it('reserves nullable same-kind slots and replaces them independently', async () => {
+    const { a, b } = createLoopbackSignaling();
+    const hostPromise = startP2PSession({
+      signaling: a,
+      localTrackSlots: [
+        { id: 'primary-video', kind: 'video', track: null },
+        { id: 'secondary-video', kind: 'video', track: null },
+      ],
+      rtcConfig: loopbackRtcConfig,
+    });
+    const guestPromise = joinP2PSession({
+      signaling: b,
+      localTrackSlots: [
+        { id: 'primary-video', kind: 'video', track: null },
+        { id: 'secondary-video', kind: 'video', track: null },
+      ],
+      rtcConfig: loopbackRtcConfig,
+    });
+    const [host, guest] = await Promise.all([hostPromise, guestPromise]);
+    const first = createVideoTrack();
+    const replacement = createVideoTrack();
+    const second = createVideoTrack();
+
+    try {
+      const primarySender = host.peer._localTrackSenders.get('primary-video');
+      const secondarySender =
+        host.peer._localTrackSenders.get('secondary-video');
+
+      expect(primarySender).toBeDefined();
+      expect(secondarySender).toBeDefined();
+      expect(primarySender).not.toBe(secondarySender);
+      expect(primarySender.track).toBeNull();
+      expect(secondarySender.track).toBeNull();
+
+      await host.setLocalTrack('primary-video', first);
+      expect(primarySender.track).toBe(first);
+      expect(secondarySender.track).toBeNull();
+
+      await host.setLocalTrack('primary-video', replacement);
+      expect(primarySender.track).toBe(replacement);
+
+      await host.setLocalTrack('primary-video', null);
+      expect(primarySender.track).toBeNull();
+      await host.setLocalTrack('primary-video', first);
+      expect(primarySender.track).toBe(first);
+
+      await host.setLocalTrack('secondary-video', second);
+      expect(primarySender.track).toBe(first);
+      expect(secondarySender.track).toBe(second);
+    } finally {
+      host.close();
+      guest.close();
+      first.stop();
+      replacement.stop();
+      second.stop();
+    }
+  });
+
   itNeedsDataChannelLoopback(
     'start and join a data-channel session with the friendly API',
     async () => {
