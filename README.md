@@ -121,8 +121,8 @@ await room.setLocalTrack('primary-video', null);
 Slot tracks are caller-owned: replacement never stops the old or new track.
 The room adds/removes the current slot tracks from `room.localStream` and emits
 `localStream` so previews and Solid adapters can react. With `getLocalStream`,
-only tracks returned by that factory retain the existing room-owned cleanup
-behavior; later replacement tracks remain caller-owned.
+the room retains its existing whole-stream cleanup behavior, except that later
+slot replacement tracks remain caller-owned.
 If a slot still references a factory-owned track when the room releases that
 stream, the slot resets to null rather than retaining an ended track.
 

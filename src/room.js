@@ -1,7 +1,10 @@
 import { startP2PSession, joinP2PSession } from './session.js';
 import { createRoomSignaling } from './signaling.js';
 import { log } from './logger.js';
-import { assertLocalTrackKind, normalizeLocalTrackSlots } from './tracks.js';
+import {
+  assertLocalTrackKind,
+  normalizeLocalTrackSlots,
+} from './local-track-slots.js';
 
 const PRESENCE_HEARTBEAT_MS = 5000;
 
@@ -342,6 +345,9 @@ export class P2PRoom extends EventTarget {
    * same call can be retried and members joining later receive the new track.
    */
   async setLocalTrack(slotId, track) {
+    if (this._state === 'closed') {
+      throw new Error('P2PRoom.setLocalTrack: room is closed');
+    }
     const slot = this._localTrackSlots.get(slotId);
     if (!slot) {
       throw new Error(`P2PRoom.setLocalTrack: unknown slot "${slotId}"`);
@@ -651,7 +657,7 @@ export class P2PRoom extends EventTarget {
     const role = this.peerId < remoteMemberId ? 'initiator' : 'joiner';
     const createSession =
       role === 'initiator' ? startP2PSession : joinP2PSession;
-    const localTrackSlotVersion = this._localTrackSlotVersion;
+    const initialLocalTrackSlotVersion = this._localTrackSlotVersion;
 
     this._controllers.set(remoteMemberId, controller);
     this._pairSignalings.set(remoteMemberId, pairSignaling);
@@ -695,16 +701,19 @@ export class P2PRoom extends EventTarget {
           pairSignaling.close?.();
           return;
         }
-        if (localTrackSlotVersion !== this._localTrackSlotVersion) {
-          try {
+        try {
+          let appliedVersion = initialLocalTrackSlotVersion;
+          while (appliedVersion !== this._localTrackSlotVersion) {
+            const targetVersion = this._localTrackSlotVersion;
             for (const slot of this._localTrackSlots.values()) {
               await pair.setLocalTrack(slot.id, slot.track);
             }
-          } catch (error) {
-            pair.close();
-            pairSignaling.close?.();
-            throw error;
+            appliedVersion = targetVersion;
           }
+        } catch (error) {
+          pair.close();
+          pairSignaling.close?.();
+          throw error;
         }
         this.pairs.set(remoteMemberId, pair);
         this._controllers.delete(remoteMemberId);
@@ -781,10 +790,19 @@ export class P2PRoom extends EventTarget {
 
   _releaseOwnedLocalStream() {
     if (!this._ownsLocalStream) return;
+
+    const tracksToStop = new Set([
+      ...this.localStream.getTracks(),
+      ...this._ownedLocalTracks,
+    ]);
     for (const slot of this._localTrackSlots.values()) {
-      if (this._ownedLocalTracks.has(slot.track)) slot.track = null;
+      if (this._ownedLocalTracks.has(slot.track)) {
+        slot.track = null;
+      } else if (slot.track) {
+        tracksToStop.delete(slot.track);
+      }
     }
-    for (const track of this._ownedLocalTracks) track.stop();
+    for (const track of tracksToStop) track.stop();
     this._ownedLocalTracks.clear();
     this.localStream = null;
     this._ownsLocalStream = false;

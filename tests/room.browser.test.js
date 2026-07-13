@@ -177,6 +177,53 @@ describe('P2PRoom', () => {
     }
   });
 
+  it('repeats slot catch-up when replacement changes during pair registration', async () => {
+    const sessionDeferred = createDeferred();
+    const catchupDeferred = createDeferred();
+    const session = createResolvedSession();
+    session.setLocalTrack
+      .mockImplementationOnce(() => catchupDeferred.promise)
+      .mockResolvedValue(undefined);
+    sessionMocks.startP2PSession.mockReturnValue(sessionDeferred.promise);
+    const signaling = createTestRoomSignaling();
+    const first = createVideoTrack();
+    const second = createVideoTrack();
+    const room = await joinP2PRoom({
+      signaling,
+      peerId: 'a',
+      localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
+    });
+
+    try {
+      signaling.emitPeers(['b']);
+      await room.setLocalTrack('primary-video', first);
+      sessionDeferred.resolve(session);
+      await flushAsyncWork();
+
+      expect(session.setLocalTrack).toHaveBeenCalledWith(
+        'primary-video',
+        first,
+      );
+      expect(room.pairs.has('b')).toBe(false);
+
+      await room.setLocalTrack('primary-video', second);
+      catchupDeferred.resolve();
+      await flushAsyncWork();
+      await flushAsyncWork();
+
+      expect(session.setLocalTrack).toHaveBeenLastCalledWith(
+        'primary-video',
+        second,
+      );
+      expect(session.setLocalTrack).toHaveBeenCalledTimes(2);
+      expect(room.pairs.get('b')).toBe(session);
+    } finally {
+      room.close();
+      first.stop();
+      second.stop();
+    }
+  });
+
   it('rejects unknown slots and kind mismatches clearly', async () => {
     const signaling = createTestRoomSignaling();
     const video = createVideoTrack();
@@ -197,6 +244,25 @@ describe('P2PRoom', () => {
       room.close();
       video.stop();
     }
+  });
+
+  it('rejects slot replacement after the room is closed', async () => {
+    const signaling = createTestRoomSignaling();
+    const stream = new MediaStream();
+    const track = createVideoTrack();
+    const room = await joinP2PRoom({
+      signaling,
+      peerId: 'a',
+      localStream: stream,
+      localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
+    });
+
+    room.close();
+    await expect(room.setLocalTrack('primary-video', track)).rejects.toThrow(
+      'P2PRoom.setLocalTrack: room is closed',
+    );
+    expect(stream.getTracks()).toEqual([]);
+    track.stop();
   });
 
   it('reports per-member replacement failures while retaining desired state', async () => {
@@ -273,6 +339,26 @@ describe('P2PRoom', () => {
       room.close();
       replacement.stop();
     }
+  });
+
+  it('stops tracks added later to a legacy factory-owned stream', async () => {
+    const signaling = createTestRoomSignaling();
+    const initialTrack = createVideoTrack();
+    const laterTrack = createVideoTrack();
+    const ownedStream = new MediaStream([initialTrack]);
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      getLocalStream: () => ownedStream,
+    });
+
+    await room.join();
+    ownedStream.addTrack(laterTrack);
+    await room.leave();
+
+    expect(initialTrack.readyState).toBe('ended');
+    expect(laterTrack.readyState).toBe('ended');
+    room.close();
   });
 
   it('watches peers without joining presence or connecting to peers', async () => {

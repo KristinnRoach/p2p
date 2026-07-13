@@ -11,11 +11,11 @@
 import { rtcConfig as defaultRtcConfig } from './config.js';
 import { createOffer, createAnswer, setRemoteDescription } from './sdp.js';
 import { setupIceCandidates, drainIceCandidateQueue } from './ice.js';
+import { addLocalTracks } from './tracks.js';
 import {
-  addLocalTracks,
   assertLocalTrackKind,
   normalizeLocalTrackSlots,
-} from './tracks.js';
+} from './local-track-slots.js';
 import { log } from './logger.js';
 
 /** @typedef {import('./signaling.js').RtcSignalingSource} RtcSignalingSource */
