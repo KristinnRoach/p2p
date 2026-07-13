@@ -12,6 +12,8 @@ export type {
   P2PSession,
   MembersChangedDetail,
   LocalStreamDetail,
+  LocalTrackReplacementFailure,
+  LocalTrackSlot,
   MemberErrorDetail,
   MemberLeftDetail,
   MemberStreamRemovedDetail,
@@ -30,6 +32,7 @@ export type {
 
 export {
   LocalStreamError,
+  LocalTrackReplacementError,
   P2PRoom,
   RoomFullError,
   isLocalStreamError,

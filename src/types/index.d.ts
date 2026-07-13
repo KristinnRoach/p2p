@@ -97,12 +97,20 @@ export interface P2PSession {
 
   off(type: string, callback: (...args: unknown[]) => void): void;
   send(data: unknown): void;
+  setLocalTrack(slotId: string, track: MediaStreamTrack | null): Promise<void>;
   close(): void;
+}
+
+export interface LocalTrackSlot {
+  id: string;
+  kind: 'audio' | 'video';
+  track?: MediaStreamTrack | null;
 }
 
 export interface P2PSessionOptions {
   signaling: RtcSignalingSource;
   localStream?: MediaStream | null;
+  localTrackSlots?: LocalTrackSlot[];
   audioOnly?: boolean;
   dataChannel?: boolean;
   dataChannelLabel?: string;
@@ -323,6 +331,8 @@ export interface P2PRoomOptions {
   localStream?: MediaStream | null;
   /** Room-owned stream factory. Tracks are stopped by leave(), close(), and failed joins. */
   getLocalStream?: () => MediaStream | Promise<MediaStream | null> | null;
+  /** Opt-in stable publication slots. Slot tracks remain caller-owned. */
+  localTrackSlots?: LocalTrackSlot[];
   audioOnly?: boolean;
   dataChannel?: boolean;
   dataChannelLabel?: string;
@@ -413,6 +423,7 @@ export declare class P2PRoom extends EventTarget {
   off(type: string, callback: (...args: unknown[]) => void): void;
   join(data?: P2PRoomPresenceData): Promise<void>;
   setPresenceData(data: P2PRoomPresenceData): Promise<void>;
+  setLocalTrack(slotId: string, track: MediaStreamTrack | null): Promise<void>;
   leave(): Promise<void>;
   send(memberId: string, data: unknown): void;
   broadcast(data: unknown): number;
@@ -431,6 +442,17 @@ export declare class RoomFullError extends Error {
 export declare class LocalStreamError extends Error {
   readonly cause?: unknown;
   constructor(message?: string, options?: { cause?: unknown });
+}
+
+export interface LocalTrackReplacementFailure {
+  memberId: string;
+  error: unknown;
+}
+
+export declare class LocalTrackReplacementError extends AggregateError {
+  readonly slotId: string;
+  readonly failures: LocalTrackReplacementFailure[];
+  constructor(slotId: string, failures: LocalTrackReplacementFailure[]);
 }
 
 export function isRoomFullError(error: unknown): error is RoomFullError;
@@ -495,6 +517,7 @@ export declare class Peer extends EventTarget {
     role: 'initiator' | 'joiner';
     signaling: RtcSignalingSource;
     localStream?: MediaStream | null;
+    localTrackSlots?: LocalTrackSlot[];
     audioOnly?: boolean;
     dataChannel?: boolean;
     dataChannelLabel?: string;
@@ -522,6 +545,7 @@ export declare class Peer extends EventTarget {
 
   off(type: string, callback: (...args: unknown[]) => void): void;
   send(data: unknown): void;
+  setLocalTrack(slotId: string, track: MediaStreamTrack | null): Promise<void>;
   close(): void;
 
   start(options?: {

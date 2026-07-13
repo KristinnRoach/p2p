@@ -79,6 +79,72 @@ Use `leave()` when the app wants to keep observing the same room after the
 local member exits. Use `close()` when the user is done with the room; it tears
 down subscriptions, peer connections, owned media, and signaling.
 
+### Reserved local media slots
+
+Use `localTrackSlots` when a call must reserve a sender before initial SDP
+negotiation. Slots are keyed by caller-defined ID, so multiple slots may have
+the same media kind. A null slot needs no placeholder track or device
+permission and can later receive a same-kind track with `setLocalTrack()`:
+
+```js
+const localStream = await navigator.mediaDevices.getUserMedia({
+  audio: true,
+  video: isVideoCall,
+});
+
+const room = await joinP2PRoom({
+  peerId,
+  signaling,
+  localStream,
+  localTrackSlots: [
+    {
+      id: 'microphone',
+      kind: 'audio',
+      track: localStream.getAudioTracks()[0],
+    },
+    {
+      id: 'primary-video',
+      kind: 'video',
+      track: localStream.getVideoTracks()[0] ?? null,
+    },
+  ],
+});
+
+// Camera on, camera switch, screen capture, camera off, and restore all use
+// the same reserved sender and do not require SDP renegotiation.
+await room.setLocalTrack('primary-video', cameraTrack);
+await room.setLocalTrack('primary-video', backCameraTrack);
+await room.setLocalTrack('primary-video', screenTrack);
+await room.setLocalTrack('primary-video', null);
+```
+
+Slot tracks are caller-owned: replacement never stops the old or new track.
+The room adds/removes the current slot tracks from `room.localStream` and emits
+`localStream` so previews and Solid adapters can react. With `getLocalStream`,
+only tracks returned by that factory retain the existing room-owned cleanup
+behavior; later replacement tracks remain caller-owned.
+If a slot still references a factory-owned track when the room releases that
+stream, the slot resets to null rather than retaining an ended track.
+
+Unknown slot IDs and media-kind mismatches reject before changing state. For a
+room-wide replacement, the room commits the requested track as its desired
+state and attempts every active pair. If some `replaceTrack()` calls fail,
+`setLocalTrack()` rejects with `LocalTrackReplacementError`; its `slotId` and
+`failures` array identify each failed `memberId` and underlying error.
+Successful pairs and members joining later use the new track, while failed
+pairs retain their previous sender track. Calling `setLocalTrack()` again
+retries all active pairs.
+
+When `localTrackSlots` is omitted, publication continues to use the existing
+`localStream`/`getLocalStream` and `audioOnly` behavior unchanged. Slot mode is
+opt-in and its slots define which local tracks are published.
+
+Because the video m-line is negotiated up front, a remote browser may expose a
+muted video receiver track before the camera is installed. Consumers should
+treat track mute/unmute and media availability as transport state rather than
+as a semantic camera label; this package intentionally adds no remote slot
+labeling or signaling protocol.
+
 A `peerId` is a singleton identity: if a peer reloads or reconnects under the
 same id, the room tears down the old session and builds a fresh one. Your
 signaling adapter owns expiring peers that disappear without a clean `leave()`

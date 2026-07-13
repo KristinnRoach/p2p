@@ -2,6 +2,7 @@ export type {
   DataChannelDetail,
   ErrorDetail,
   MessageDetail,
+  LocalTrackSlot,
   PeerEvents,
   PeerState,
   RtcSignalingSource,

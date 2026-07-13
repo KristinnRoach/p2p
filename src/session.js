@@ -40,6 +40,7 @@ class P2PSession extends EventTarget {
     const {
       signaling,
       localStream = null,
+      localTrackSlots = [],
       audioOnly = false,
       dataChannel = false,
       dataChannelLabel = 'data',
@@ -57,6 +58,7 @@ class P2PSession extends EventTarget {
       role,
       signaling,
       localStream,
+      localTrackSlots,
       audioOnly,
       dataChannel,
       dataChannelLabel,
@@ -114,6 +116,10 @@ class P2PSession extends EventTarget {
 
   send(data) {
     this.peer.send(data);
+  }
+
+  setLocalTrack(slotId, track) {
+    return this.peer.setLocalTrack(slotId, track);
   }
 
   close() {

@@ -107,7 +107,9 @@ export function useP2PRoom() {
   const [state, setState] = createSignal('idle');
   const [error, setError] = createSignal();
   const [errorKind, setErrorKind] = createSignal();
-  const [localStream, setLocalStream] = createSignal();
+  const [localStream, setLocalStream] = createSignal(undefined, {
+    equals: false,
+  });
   const [remoteMemberStreams, setRemoteMemberStreams] = createSignal([]);
   const [members, setMembers] = createSignal([]);
   const [memberPresence, setMemberPresence] = createSignal([]);

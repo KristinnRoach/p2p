@@ -1,6 +1,7 @@
 import { startP2PSession, joinP2PSession } from './session.js';
 import { createRoomSignaling } from './signaling.js';
 import { log } from './logger.js';
+import { assertLocalTrackKind, normalizeLocalTrackSlots } from './tracks.js';
 
 const PRESENCE_HEARTBEAT_MS = 5000;
 
@@ -51,6 +52,7 @@ export class P2PRoom extends EventTarget {
       peerId,
       localStream = null,
       getLocalStream = null,
+      localTrackSlots = [],
       rtcConfig,
       audioOnly = false,
       dataChannel = false,
@@ -116,6 +118,22 @@ export class P2PRoom extends EventTarget {
     this._getLocalStream = getLocalStream;
     this._localStreamPromise = null;
     this._ownsLocalStream = false;
+    this._ownedLocalTracks = new Set();
+    this._localTrackSlots = new Map(
+      normalizeLocalTrackSlots(localTrackSlots, 'P2PRoom').map((slot) => [
+        slot.id,
+        slot,
+      ]),
+    );
+    this._localTrackSlotVersion = 0;
+    if (
+      this._localTrackSlots.size > 0 &&
+      !this.localStream &&
+      !getLocalStream
+    ) {
+      this.localStream = new MediaStream();
+    }
+    this._syncAllSlotTracksToLocalStream();
     this.rtcConfig = rtcConfig;
     this.audioOnly = audioOnly;
     this.dataChannel = dataChannel;
@@ -316,6 +334,41 @@ export class P2PRoom extends EventTarget {
     throw new Error(
       'P2PRoom.setPresenceData: signaling does not support presence data updates',
     );
+  }
+
+  /**
+   * Replace one reserved local publication slot on every active room pair.
+   * The room commits the desired track even if individual pairs fail, so the
+   * same call can be retried and members joining later receive the new track.
+   */
+  async setLocalTrack(slotId, track) {
+    const slot = this._localTrackSlots.get(slotId);
+    if (!slot) {
+      throw new Error(`P2PRoom.setLocalTrack: unknown slot "${slotId}"`);
+    }
+    const nextTrack = track ?? null;
+    assertLocalTrackKind(slotId, slot.kind, nextTrack, 'P2PRoom.setLocalTrack');
+
+    const previousTrack = slot.track;
+    slot.track = nextTrack;
+    this._localTrackSlotVersion += 1;
+    this._syncSlotTrackToLocalStream(previousTrack, nextTrack);
+
+    const pairs = [...this.pairs];
+    const results = await Promise.allSettled(
+      pairs.map(async ([memberId, pair]) => {
+        await pair.setLocalTrack(slotId, nextTrack);
+        return memberId;
+      }),
+    );
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [{ memberId: pairs[index][0], error: result.reason }]
+        : [],
+    );
+    if (failures.length > 0) {
+      throw new LocalTrackReplacementError(slotId, failures);
+    }
   }
 
   leave() {
@@ -598,6 +651,7 @@ export class P2PRoom extends EventTarget {
     const role = this.peerId < remoteMemberId ? 'initiator' : 'joiner';
     const createSession =
       role === 'initiator' ? startP2PSession : joinP2PSession;
+    const localTrackSlotVersion = this._localTrackSlotVersion;
 
     this._controllers.set(remoteMemberId, controller);
     this._pairSignalings.set(remoteMemberId, pairSignaling);
@@ -606,6 +660,7 @@ export class P2PRoom extends EventTarget {
     createSession({
       signaling: pairSignaling,
       localStream: this.localStream,
+      localTrackSlots: this._snapshotLocalTrackSlots(),
       rtcConfig: this.rtcConfig,
       audioOnly: this.audioOnly,
       dataChannel: this.dataChannel,
@@ -634,11 +689,22 @@ export class P2PRoom extends EventTarget {
         this._bindDataChannel(remoteMemberId, channel);
       },
     })
-      .then((pair) => {
+      .then(async (pair) => {
         if (this._state !== 'active' || controller.signal.aborted) {
           pair.close();
           pairSignaling.close?.();
           return;
+        }
+        if (localTrackSlotVersion !== this._localTrackSlotVersion) {
+          try {
+            for (const slot of this._localTrackSlots.values()) {
+              await pair.setLocalTrack(slot.id, slot.track);
+            }
+          } catch (error) {
+            pair.close();
+            pairSignaling.close?.();
+            throw error;
+          }
         }
         this.pairs.set(remoteMemberId, pair);
         this._controllers.delete(remoteMemberId);
@@ -693,13 +759,16 @@ export class P2PRoom extends EventTarget {
           throw createLocalStreamError(error);
         })
         .then((stream) => {
-          if (!stream) return null;
+          if (!stream && this._localTrackSlots.size === 0) return null;
+          stream ??= new MediaStream();
           if (this._state === 'closed' || this.signal?.aborted) {
             stopStream(stream);
             throw createAbortError();
           }
           this.localStream = stream;
           this._ownsLocalStream = true;
+          this._ownedLocalTracks = new Set(stream.getTracks());
+          this._syncAllSlotTracksToLocalStream();
           this._emit('localStream', { stream });
           return stream;
         })
@@ -712,9 +781,43 @@ export class P2PRoom extends EventTarget {
 
   _releaseOwnedLocalStream() {
     if (!this._ownsLocalStream) return;
-    stopStream(this.localStream);
+    for (const slot of this._localTrackSlots.values()) {
+      if (this._ownedLocalTracks.has(slot.track)) slot.track = null;
+    }
+    for (const track of this._ownedLocalTracks) track.stop();
+    this._ownedLocalTracks.clear();
     this.localStream = null;
     this._ownsLocalStream = false;
+  }
+
+  _snapshotLocalTrackSlots() {
+    return [...this._localTrackSlots.values()].map((slot) => ({ ...slot }));
+  }
+
+  _syncAllSlotTracksToLocalStream() {
+    if (!this.localStream) return;
+    const currentTracks = new Set(this.localStream.getTracks());
+    for (const { track } of this._localTrackSlots.values()) {
+      if (track && !currentTracks.has(track)) {
+        this.localStream.addTrack(track);
+        currentTracks.add(track);
+      }
+    }
+  }
+
+  _syncSlotTrackToLocalStream(previousTrack, nextTrack) {
+    if (!this.localStream) return;
+    const tracks = new Set(this.localStream.getTracks());
+    const previousStillUsed = [...this._localTrackSlots.values()].some(
+      (slot) => slot.track === previousTrack,
+    );
+    if (previousTrack && !previousStillUsed && tracks.has(previousTrack)) {
+      this.localStream.removeTrack(previousTrack);
+    }
+    if (nextTrack && !tracks.has(nextTrack)) {
+      this.localStream.addTrack(nextTrack);
+    }
+    this._emit('localStream', { stream: this.localStream });
   }
 
   _closeAllPeers({ emitLeft = true } = {}) {
@@ -938,6 +1041,20 @@ export class LocalStreamError extends Error {
     if (options.cause !== undefined && this.cause === undefined) {
       this.cause = options.cause;
     }
+  }
+}
+
+export class LocalTrackReplacementError extends AggregateError {
+  constructor(slotId, failures) {
+    super(
+      failures.map(({ error }) => error),
+      `P2PRoom.setLocalTrack: failed for slot "${slotId}" on member(s): ${failures
+        .map(({ memberId }) => memberId)
+        .join(', ')}`,
+    );
+    this.name = 'LocalTrackReplacementError';
+    this.slotId = slotId;
+    this.failures = failures;
   }
 }
 

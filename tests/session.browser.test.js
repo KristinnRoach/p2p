@@ -49,6 +49,10 @@ function createVideoStream() {
   return canvas.captureStream(5);
 }
 
+function createVideoTrack() {
+  return createVideoStream().getVideoTracks()[0];
+}
+
 function waitForRemoteStream(session) {
   if (session.remoteStream) return Promise.resolve(session.remoteStream);
   return new Promise((resolve) => {
@@ -57,6 +61,64 @@ function waitForRemoteStream(session) {
 }
 
 describe('P2P session helpers', () => {
+  it('reserves nullable same-kind slots and replaces them independently', async () => {
+    const { a, b } = createLoopbackSignaling();
+    const hostPromise = startP2PSession({
+      signaling: a,
+      localTrackSlots: [
+        { id: 'primary-video', kind: 'video', track: null },
+        { id: 'secondary-video', kind: 'video', track: null },
+      ],
+      rtcConfig: loopbackRtcConfig,
+    });
+    const guestPromise = joinP2PSession({
+      signaling: b,
+      localTrackSlots: [
+        { id: 'primary-video', kind: 'video', track: null },
+        { id: 'secondary-video', kind: 'video', track: null },
+      ],
+      rtcConfig: loopbackRtcConfig,
+    });
+    const [host, guest] = await Promise.all([hostPromise, guestPromise]);
+    const first = createVideoTrack();
+    const replacement = createVideoTrack();
+    const second = createVideoTrack();
+
+    try {
+      const primarySender = host.peer._localTrackSenders.get('primary-video');
+      const secondarySender =
+        host.peer._localTrackSenders.get('secondary-video');
+
+      expect(primarySender).toBeDefined();
+      expect(secondarySender).toBeDefined();
+      expect(primarySender).not.toBe(secondarySender);
+      expect(primarySender.track).toBeNull();
+      expect(secondarySender.track).toBeNull();
+
+      await host.setLocalTrack('primary-video', first);
+      expect(primarySender.track).toBe(first);
+      expect(secondarySender.track).toBeNull();
+
+      await host.setLocalTrack('primary-video', replacement);
+      expect(primarySender.track).toBe(replacement);
+
+      await host.setLocalTrack('primary-video', null);
+      expect(primarySender.track).toBeNull();
+      await host.setLocalTrack('primary-video', first);
+      expect(primarySender.track).toBe(first);
+
+      await host.setLocalTrack('secondary-video', second);
+      expect(primarySender.track).toBe(first);
+      expect(secondarySender.track).toBe(second);
+    } finally {
+      host.close();
+      guest.close();
+      first.stop();
+      replacement.stop();
+      second.stop();
+    }
+  });
+
   itNeedsDataChannelLoopback(
     'start and join a data-channel session with the friendly API',
     async () => {

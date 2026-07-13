@@ -11,7 +11,11 @@
 import { rtcConfig as defaultRtcConfig } from './config.js';
 import { createOffer, createAnswer, setRemoteDescription } from './sdp.js';
 import { setupIceCandidates, drainIceCandidateQueue } from './ice.js';
-import { addLocalTracks } from './tracks.js';
+import {
+  addLocalTracks,
+  assertLocalTrackKind,
+  normalizeLocalTrackSlots,
+} from './tracks.js';
 import { log } from './logger.js';
 
 /** @typedef {import('./signaling.js').RtcSignalingSource} RtcSignalingSource */
@@ -47,6 +51,7 @@ export class Peer extends EventTarget {
    * @param {'initiator'|'joiner'} options.role
    * @param {RtcSignalingSource} options.signaling
    * @param {MediaStream}  [options.localStream]
+   * @param {Array<{id:string, kind:'audio'|'video', track?:MediaStreamTrack|null}>} [options.localTrackSlots]
    * @param {boolean}      [options.audioOnly=false]
    * @param {boolean}      [options.dataChannel=false]
    *   Initiator: create a data channel up-front. Joiner: forward the remote
@@ -60,6 +65,7 @@ export class Peer extends EventTarget {
       role,
       signaling,
       localStream = null,
+      localTrackSlots = [],
       audioOnly = false,
       dataChannel = false,
       dataChannelLabel = 'data',
@@ -74,6 +80,13 @@ export class Peer extends EventTarget {
     this._role = role;
     this._signaling = signaling;
     this._localStream = localStream;
+    this._localTrackSlots = new Map(
+      normalizeLocalTrackSlots(localTrackSlots, 'Peer').map((slot) => [
+        slot.id,
+        slot,
+      ]),
+    );
+    this._localTrackSenders = new Map();
     this._audioOnly = audioOnly;
     this._wantsDataChannel = dataChannel;
     this._dataChannelLabel = dataChannelLabel;
@@ -239,6 +252,20 @@ export class Peer extends EventTarget {
       );
     }
     this._dataChannel.send(data);
+  }
+
+  /** Replace a reserved local publication slot without renegotiation. */
+  async setLocalTrack(slotId, track) {
+    const slot = this._localTrackSlots.get(slotId);
+    if (!slot) {
+      throw new Error(`Peer.setLocalTrack: unknown slot "${slotId}"`);
+    }
+    const nextTrack = track ?? null;
+    assertLocalTrackKind(slotId, slot.kind, nextTrack, 'Peer.setLocalTrack');
+
+    const sender = this._localTrackSenders.get(slotId);
+    if (sender) await sender.replaceTrack(nextTrack);
+    slot.track = nextTrack;
   }
 
   /**
@@ -438,7 +465,14 @@ export class Peer extends EventTarget {
     const pc = new RTCPeerConnection(this._rtcConfig);
     this._pc = pc;
 
-    if (this._localStream) {
+    if (this._localTrackSlots.size > 0) {
+      for (const slot of this._localTrackSlots.values()) {
+        const init = { direction: 'sendrecv' };
+        if (this._localStream) init.streams = [this._localStream];
+        const transceiver = pc.addTransceiver(slot.track ?? slot.kind, init);
+        this._localTrackSenders.set(slot.id, transceiver.sender);
+      }
+    } else if (this._localStream) {
       const health = addLocalTracks(pc, this._localStream, {
         audioOnly: this._audioOnly,
       });

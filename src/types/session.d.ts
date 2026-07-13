@@ -2,6 +2,7 @@ export type {
   DataChannelDetail,
   ErrorDetail,
   MessageDetail,
+  LocalTrackSlot,
   P2PSession,
   P2PSessionEvents,
   P2PSessionOptions,

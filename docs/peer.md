@@ -26,6 +26,28 @@ await peer.start({
 peer.close();
 ```
 
+To reserve a sender before negotiation, pass stable local track slots. This is
+the lower-level equivalent of the room API described in the README:
+
+```js
+const peer = new Peer({
+  role: 'initiator',
+  signaling,
+  localTrackSlots: [
+    { id: 'microphone', kind: 'audio', track: microphoneTrack },
+    { id: 'primary-video', kind: 'video', track: null },
+  ],
+});
+
+await peer.start();
+await peer.setLocalTrack('primary-video', cameraTrack);
+```
+
+Each slot owns a distinct transceiver/sender, including multiple slots of the
+same kind. `replaceTrack()` errors are propagated and tracks remain
+caller-owned. Without slots, `Peer` retains its original `localStream`
+publication behavior.
+
 ## attachRemoteStream
 
 Assembles incoming tracks into a `MediaStream` without touching the DOM:
