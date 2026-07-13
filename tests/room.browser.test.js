@@ -141,6 +141,12 @@ describe('P2PRoom', () => {
       await room.setLocalTrack('primary-video', first);
       expect(stream.getTracks()).toEqual([first]);
       expect(localStreamEvents).toEqual([stream, stream, stream, stream]);
+
+      // Replacing a slot with its current track leaves the stream unchanged
+      // and must not emit another localStream event.
+      await room.setLocalTrack('primary-video', first);
+      expect(stream.getTracks()).toEqual([first]);
+      expect(localStreamEvents).toHaveLength(4);
       expect(first.readyState).toBe('live');
       expect(second.readyState).toBe('live');
     } finally {

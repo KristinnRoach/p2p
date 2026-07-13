@@ -133,11 +133,14 @@ state and attempts every active pair. If some `replaceTrack()` calls fail,
 `failures` array identify each failed `memberId` and underlying error.
 Successful pairs and members joining later use the new track, while failed
 pairs retain their previous sender track. Calling `setLocalTrack()` again
-retries all active pairs.
+retries all active pairs. Overlapping calls for the same slot are not
+serialized; await each `setLocalTrack()` before issuing the next.
 
 When `localTrackSlots` is omitted, publication continues to use the existing
 `localStream`/`getLocalStream` and `audioOnly` behavior unchanged. Slot mode is
-opt-in and its slots define which local tracks are published.
+opt-in and its slots define which local tracks are published: tracks in
+`localStream` or a factory stream that no slot references appear in
+`room.localStream` but are never sent to remote members.
 
 Because the video m-line is negotiated up front, a remote browser may expose a
 muted video receiver track before the camera is installed. Consumers should

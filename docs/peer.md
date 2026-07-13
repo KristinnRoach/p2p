@@ -48,6 +48,11 @@ same kind. `replaceTrack()` errors are propagated and tracks remain
 caller-owned. Without slots, `Peer` retains its original `localStream`
 publication behavior.
 
+Peers that publish through slots should declare matching slot kinds in the
+same order (a receive-only peer needs no slots): a joiner slot
+transceiver with no counterpart m-line in the remote offer never associates, so
+its `setLocalTrack()` succeeds but the media is never transmitted.
+
 ## attachRemoteStream
 
 Assembles incoming tracks into a `MediaStream` without touching the DOM:

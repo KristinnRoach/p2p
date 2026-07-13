@@ -829,13 +829,16 @@ export class P2PRoom extends EventTarget {
     const previousStillUsed = [...this._localTrackSlots.values()].some(
       (slot) => slot.track === previousTrack,
     );
+    let changed = false;
     if (previousTrack && !previousStillUsed && tracks.has(previousTrack)) {
       this.localStream.removeTrack(previousTrack);
+      changed = true;
     }
     if (nextTrack && !tracks.has(nextTrack)) {
       this.localStream.addTrack(nextTrack);
+      changed = true;
     }
-    this._emit('localStream', { stream: this.localStream });
+    if (changed) this._emit('localStream', { stream: this.localStream });
   }
 
   _closeAllPeers({ emitLeft = true } = {}) {
