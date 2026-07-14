@@ -102,7 +102,7 @@ async function waitForVideoColor(video, expected) {
 }
 
 describe('P2P session helpers', () => {
-  it('delivers null, replacement, removal, and restored slot video through one remote receiver', async () => {
+  it('delivers nullable slot video in both directions through stable remote receivers', async () => {
     const { a, b } = createLoopbackSignaling();
     const [host, guest] = await Promise.all([
       startP2PSession({
@@ -110,7 +110,11 @@ describe('P2P session helpers', () => {
         localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
         rtcConfig: loopbackRtcConfig,
       }),
-      joinP2PSession({ signaling: b, rtcConfig: loopbackRtcConfig }),
+      joinP2PSession({
+        signaling: b,
+        localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
+        rtcConfig: loopbackRtcConfig,
+      }),
     ]);
     const redTrack = createVideoTrack('#f00');
     const greenTrack = createVideoTrack('#0f0');
@@ -141,6 +145,14 @@ describe('P2P session helpers', () => {
       await host.setLocalTrack('primary-video', blueTrack);
       await waitForVideoColor(video, 'blue');
       expect(remoteStream.getVideoTracks()[0]).toBe(receiverTrack);
+
+      const hostRemoteStream = await waitForRemoteStream(host);
+      const hostReceiverTrack = hostRemoteStream.getVideoTracks()[0];
+      video.srcObject = hostRemoteStream;
+      await guest.setLocalTrack('primary-video', redTrack);
+      await video.play();
+      await waitForVideoColor(video, 'red');
+      expect(hostRemoteStream.getVideoTracks()[0]).toBe(hostReceiverTrack);
     } finally {
       video.pause();
       video.srcObject = null;

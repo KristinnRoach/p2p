@@ -437,6 +437,25 @@ export class Peer extends EventTarget {
             if (!applied) return;
             this._emitReceiverTracks();
 
+            if (this._localTrackSlots.size > 0) {
+              const transceivers = this._pc.getTransceivers();
+              let index = 0;
+              for (const slot of this._localTrackSlots.values()) {
+                const transceiver = transceivers[index++];
+                if (transceiver?.receiver.track.kind !== slot.kind) {
+                  throw new Error(
+                    `Peer: local track slot "${slot.id}" has no matching remote ${slot.kind} transceiver`,
+                  );
+                }
+                transceiver.direction = 'sendrecv';
+                if (this._localStream) {
+                  transceiver.sender.setStreams(this._localStream);
+                }
+                await transceiver.sender.replaceTrack(slot.track);
+                this._localTrackSenders.set(slot.id, transceiver.sender);
+              }
+            }
+
             const answer = await createAnswer(this._pc);
             await this._signaling.sendAnswer({
               type: answer.type,
@@ -466,11 +485,13 @@ export class Peer extends EventTarget {
     this._pc = pc;
 
     if (this._localTrackSlots.size > 0) {
-      for (const slot of this._localTrackSlots.values()) {
-        const init = { direction: 'sendrecv' };
-        if (this._localStream) init.streams = [this._localStream];
-        const transceiver = pc.addTransceiver(slot.track ?? slot.kind, init);
-        this._localTrackSenders.set(slot.id, transceiver.sender);
+      if (this._role === 'initiator') {
+        for (const slot of this._localTrackSlots.values()) {
+          const init = { direction: 'sendrecv' };
+          if (this._localStream) init.streams = [this._localStream];
+          const transceiver = pc.addTransceiver(slot.track ?? slot.kind, init);
+          this._localTrackSenders.set(slot.id, transceiver.sender);
+        }
       }
     } else if (this._localStream) {
       const health = addLocalTracks(pc, this._localStream, {
