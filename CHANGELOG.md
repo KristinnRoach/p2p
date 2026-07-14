@@ -1,5 +1,12 @@
 # @kidlib/p2p
 
+## 0.3.0
+
+### Minor Changes
+
+- 20ad498: Add opt-in reserved local media publication slots that can replace or clear
+  tracks across active room members without SDP renegotiation.
+
 ## 0.2.3
 
 ### Patch Changes
