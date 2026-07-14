@@ -2,6 +2,7 @@ node_modules/
 .pnpm-store/
 .DS_Store
 docs/WIP/
+docs/plans/
 trash/
 TODO.md
 RELEASE.md
