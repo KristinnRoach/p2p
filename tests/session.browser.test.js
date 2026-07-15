@@ -69,6 +69,23 @@ function createVideoTrack(color) {
   return createVideoStream(color).getVideoTracks()[0];
 }
 
+function createAudioTrack() {
+  const context = new AudioContext();
+  const oscillator = context.createOscillator();
+  const destination = context.createMediaStreamDestination();
+  oscillator.connect(destination);
+  oscillator.start();
+
+  const track = destination.stream.getAudioTracks()[0];
+  const stop = track.stop.bind(track);
+  track.stop = () => {
+    oscillator.stop();
+    void context.close();
+    stop();
+  };
+  return track;
+}
+
 function waitForRemoteStream(session) {
   if (session.remoteStream) return Promise.resolve(session.remoteStream);
   return new Promise((resolve) => {
@@ -102,20 +119,26 @@ async function waitForVideoColor(video, expected) {
 }
 
 describe('P2P session helpers', () => {
-  it('delivers nullable slot video in both directions through stable remote receivers', async () => {
+  it('delivers reserved audio and nullable video slots in both directions', async () => {
     const { a, b } = createLoopbackSignaling();
+    const slots = [
+      { id: 'microphone', kind: 'audio', track: null },
+      { id: 'primary-video', kind: 'video', track: null },
+    ];
     const [host, guest] = await Promise.all([
       startP2PSession({
         signaling: a,
-        localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
+        localTrackSlots: slots,
         rtcConfig: loopbackRtcConfig,
       }),
       joinP2PSession({
         signaling: b,
-        localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
+        localTrackSlots: slots,
         rtcConfig: loopbackRtcConfig,
       }),
     ]);
+    const hostAudioTrack = createAudioTrack();
+    const guestAudioTrack = createAudioTrack();
     const redTrack = createVideoTrack('#f00');
     const greenTrack = createVideoTrack('#0f0');
     const blueTrack = createVideoTrack('#00f');
@@ -125,6 +148,18 @@ describe('P2P session helpers', () => {
 
     try {
       const remoteStream = await waitForRemoteStream(guest);
+      const hostRemoteStream = await waitForRemoteStream(host);
+      await Promise.all([
+        host.setLocalTrack('microphone', hostAudioTrack),
+        guest.setLocalTrack('microphone', guestAudioTrack),
+      ]);
+      await waitFor(() =>
+        [remoteStream, hostRemoteStream].every(
+          (stream) =>
+            stream.getAudioTracks()[0]?.readyState === 'live' &&
+            stream.getVideoTracks()[0]?.readyState === 'live',
+        ),
+      );
       const receiverTrack = remoteStream.getVideoTracks()[0];
       expect(receiverTrack).toBeDefined();
       video.srcObject = remoteStream;
@@ -146,7 +181,6 @@ describe('P2P session helpers', () => {
       await waitForVideoColor(video, 'blue');
       expect(remoteStream.getVideoTracks()[0]).toBe(receiverTrack);
 
-      const hostRemoteStream = await waitForRemoteStream(host);
       const hostReceiverTrack = hostRemoteStream.getVideoTracks()[0];
       video.srcObject = hostRemoteStream;
       await guest.setLocalTrack('primary-video', redTrack);
@@ -158,6 +192,8 @@ describe('P2P session helpers', () => {
       video.srcObject = null;
       host.close();
       guest.close();
+      hostAudioTrack.stop();
+      guestAudioTrack.stop();
       redTrack.stop();
       greenTrack.stop();
       blueTrack.stop();
