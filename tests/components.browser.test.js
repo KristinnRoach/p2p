@@ -95,6 +95,36 @@ describe('@kidlib/p2p/components', () => {
     });
   });
 
+  it('leaves presence before closing signaling', async () => {
+    let resolveLeave;
+    const signaling = createTestRoomSignaling();
+    signaling.leave.mockReturnValue(
+      new Promise((resolve) => {
+        resolveLeave = resolve;
+      }),
+    );
+    defineP2PComponents({
+      createSignaling: () => signaling,
+      getLocalStream: () => null,
+    });
+
+    const room = document.createElement('p2p-room');
+    document.body.append(room);
+    await room.join();
+
+    const leavePromise = room.leave();
+    await Promise.resolve();
+
+    expect(signaling.leave).toHaveBeenCalled();
+    expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
+
+    resolveLeave();
+    await leavePromise;
+
+    expect(signaling.cleanupSignaling).toHaveBeenCalled();
+    expect(room.snapshot()).toMatchObject({ room: null, state: 'idle' });
+  });
+
   it('reports missing signaling without throwing from join', async () => {
     defineP2PComponents({
       createSignaling: null,
@@ -117,7 +147,7 @@ function createTestRoomSignaling() {
     join: vi.fn(),
     leave: vi.fn(),
     onPeers: vi.fn((callback) => {
-      callback([]);
+      callback({ members: [] });
       return vi.fn();
     }),
     createPeerSignaling: vi.fn(() => {

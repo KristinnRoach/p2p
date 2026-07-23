@@ -141,9 +141,18 @@ export interface P2PRoomPresenceMember {
   data?: P2PRoomPresenceData;
 }
 
-export type P2PRoomPresenceSnapshot =
-  | string[]
-  | P2PRoomPresenceMember[];
+export type P2PRoomDepartureReason = 'left' | 'dropped';
+
+export interface P2PRoomDeparture {
+  memberId: string;
+  reason: 'left';
+}
+
+export interface P2PRoomPresenceSnapshot {
+  members: P2PRoomPresenceMember[];
+  /** Explicit departures in this membership transition. Missing members default to `dropped`. */
+  departed?: P2PRoomDeparture[];
+}
 
 export type RelaySignalingEnvelope =
   | { kind: 'offer'; offer: RTCSessionDescriptionInit }
@@ -221,11 +230,13 @@ export interface PeerLeftDetail {
   peerId: string;
   memberId?: string;
   stream: MediaStream | null;
+  reason: P2PRoomDepartureReason;
 }
 
 export interface MemberLeftDetail {
   memberId: string;
   stream: MediaStream | null;
+  reason: P2PRoomDepartureReason;
 }
 
 export interface MemberStreamRemovedDetail {
@@ -242,6 +253,8 @@ export interface PeerStreamRemovedDetail {
 export interface AloneDetail {
   members: string[];
   memberCount: number;
+  /** `left` only when every departure that made the room alone was explicit. */
+  reason: P2PRoomDepartureReason;
 }
 
 export interface PeerErrorDetail {

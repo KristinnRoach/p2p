@@ -14,8 +14,11 @@ export function createBroadcastRoomSignaling(roomId) {
       await refreshPresence(roomId, key, peerId, data);
     },
     leave: async (peerId) => {
-      await updatePresence(roomId, key, (peers) =>
-        peers.filter((entry) => entry.peerId !== peerId),
+      await updatePresence(
+        roomId,
+        key,
+        (peers) => peers.filter((entry) => entry.peerId !== peerId),
+        [{ memberId: peerId, reason: 'left' }],
       );
     },
     refreshPresence: async (peerId, data) => {
@@ -25,19 +28,34 @@ export function createBroadcastRoomSignaling(roomId) {
       await updatePresenceData(roomId, key, peerId, data);
     },
     onPeers: (callback) => {
-      const emit = () => callback(readActivePresence(roomId, key));
+      const emitCurrentPresence = () =>
+        callback(readActivePresence(roomId, key));
+      const emitPresenceTransition = (storedState) =>
+        callback(
+          readActivePresence(
+            roomId,
+            key,
+            normalizePresenceState(storedState),
+          ),
+        );
       const onStorage = (event) => {
-        if (event.key === key) emit();
+        if (event.key !== key) return;
+        emitPresenceTransition(parseJson(event.newValue, { members: [] }));
+      };
+      const onBroadcast = (event) => {
+        const message = event.data;
+        if (message?.type !== 'meshChanged' || message.key !== key) return;
+        emitPresenceTransition(message.value);
       };
 
-      window.addEventListener('storage', onStorage);
-      channel?.addEventListener('message', emit);
-      const sweep = setInterval(emit, presenceSweepMs);
-      queueMicrotask(emit);
+      if (channel) channel.addEventListener('message', onBroadcast);
+      else window.addEventListener('storage', onStorage);
+      const sweep = setInterval(emitCurrentPresence, presenceSweepMs);
+      queueMicrotask(emitCurrentPresence);
 
       return () => {
-        window.removeEventListener('storage', onStorage);
-        channel?.removeEventListener('message', emit);
+        if (channel) channel.removeEventListener('message', onBroadcast);
+        else window.removeEventListener('storage', onStorage);
         clearInterval(sweep);
       };
     },
@@ -148,10 +166,23 @@ function readJson(key, fallback) {
   }
 }
 
-function readPresence(key) {
-  const rawPeers = readJson(key, []);
-  if (!Array.isArray(rawPeers)) return [];
-  return rawPeers
+function parseJson(raw, fallback) {
+  if (raw == null) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function readPresenceState(key) {
+  return normalizePresenceState(readJson(key, { members: [] }));
+}
+
+function normalizePresenceState(stored) {
+  const rawPeers = Array.isArray(stored) ? stored : stored?.members;
+  if (!Array.isArray(rawPeers)) return { members: [], departed: [] };
+  const members = rawPeers
     .map((entry) => {
       if (typeof entry === 'string') return { peerId: entry, lastSeen: 0 };
       if (entry && typeof entry.peerId === 'string') {
@@ -165,18 +196,24 @@ function readPresence(key) {
       return null;
     })
     .filter(Boolean);
+  const departed = Array.isArray(stored?.departed) ? stored.departed : [];
+  return { members, departed };
 }
 
-function readActivePresence(roomId, key) {
+function readActivePresence(roomId, key, state = readPresenceState(key)) {
   const now = Date.now();
-  const peers = readPresence(key);
+  const peers = state.members;
   const active = peers.filter((entry) => now - entry.lastSeen < presenceTtlMs);
   if (active.length !== peers.length) {
     void updatePresence(roomId, key, (latestPeers) =>
       latestPeers.filter((entry) => now - entry.lastSeen < presenceTtlMs),
     );
+    return { members: toPresenceMembers(active) };
   }
-  return toPresenceSnapshot(active);
+  return {
+    members: toPresenceMembers(active),
+    ...(state.departed.length > 0 ? { departed: state.departed } : {}),
+  };
 }
 
 function refreshPresence(roomId, key, peerId, data) {
@@ -215,9 +252,13 @@ function updatePresenceData(roomId, key, peerId, data) {
   );
 }
 
-async function updatePresence(roomId, key, updater) {
+async function updatePresence(roomId, key, updater, departed = []) {
   return withPresenceLock(roomId, () => {
-    writeJson(roomId, key, updater(readPresence(key)));
+    const members = updater(readPresenceState(key).members);
+    writeJson(roomId, key, {
+      members,
+      ...(departed.length > 0 ? { departed } : {}),
+    });
   });
 }
 
@@ -233,15 +274,12 @@ function writeJson(roomId, key, value) {
   localStorage.setItem(key, JSON.stringify(value));
   if ('BroadcastChannel' in globalThis) {
     const channel = new BroadcastChannel(roomChannelName(roomId));
-    channel.postMessage({ type: 'meshChanged' });
+    channel.postMessage({ type: 'meshChanged', key, value });
     channel.close();
   }
 }
 
-function toPresenceSnapshot(peers) {
-  if (peers.every((entry) => entry.data === undefined)) {
-    return peers.map((entry) => entry.peerId);
-  }
+function toPresenceMembers(peers) {
   return peers.map((entry) =>
     entry.data === undefined
       ? { memberId: entry.peerId }

@@ -170,7 +170,6 @@ export class P2PRoom extends EventTarget {
     this._joinStarted = false;
     this._joined = false;
     this._presenceHeartbeatTimer = null;
-    this._pagehideCleanup = null;
     this._hadRemoteMembers = false;
 
     // Map each on<Event> option to its event name. Iterated below to register
@@ -256,7 +255,6 @@ export class P2PRoom extends EventTarget {
     this._setState('closed');
 
     this._stopPresenceHeartbeat();
-    this._unbindPagehideLeave();
     for (const cleanup of this._cleanups.splice(0)) cleanup();
     this._closeAllPeers({ emitLeft: false });
     this._hadRemoteMembers = false;
@@ -403,9 +401,22 @@ export class P2PRoom extends EventTarget {
     if (this._state === 'closed' || this.signal?.aborted) {
       throw createAbortError();
     }
-    const cleanup = this.signaling.onPeers((peers) => {
-      const memberPresence = normalizePresenceSnapshot(peers);
+    const cleanup = this.signaling.onPeers((snapshot) => {
+      const { members: memberPresence, explicitlyLeft } =
+        normalizePresenceSnapshot(snapshot);
       const memberIds = memberPresence.map((member) => member.memberId);
+      const previousRemoteMemberIds = this._memberIds.filter(
+        (memberId) => memberId !== this.peerId,
+      );
+      const nextMemberIds = new Set(memberIds);
+      const departureReasons = new Map(
+        previousRemoteMemberIds
+          .filter((memberId) => !nextMemberIds.has(memberId))
+          .map((memberId) => [
+            memberId,
+            explicitlyLeft.has(memberId) ? 'left' : 'dropped',
+          ]),
+      );
       if (!this._presenceSeen) {
         this._presenceSeen = true;
         for (const waiter of this._presenceWaiters) waiter();
@@ -418,7 +429,7 @@ export class P2PRoom extends EventTarget {
       ) {
         this._emitFull(memberIds);
       }
-      this._syncMembers(memberIds);
+      this._syncMembers(memberIds, departureReasons);
     });
     if (typeof cleanup === 'function') this._cleanups.push(cleanup);
 
@@ -533,14 +544,11 @@ export class P2PRoom extends EventTarget {
     }
     this._setState('active');
     this._startPresenceHeartbeat(signaling);
-    this._bindPagehideLeave(signaling);
     this._syncMembers(this._memberIds);
   }
 
   async _leave() {
     this._setState('leaving');
-    this._closeAllPeers({ emitLeft: true });
-    this._hadRemoteMembers = false;
     const shouldLeave = this._joined || this._joinStarted;
     try {
       if (shouldLeave) {
@@ -548,12 +556,13 @@ export class P2PRoom extends EventTarget {
         await Promise.resolve(signaling.leave(this.peerId));
       }
     } finally {
+      this._closeAllPeers({ emitLeft: true });
+      this._hadRemoteMembers = false;
       if (shouldLeave) {
         this._joinStarted = false;
         this._joined = false;
       }
       this._stopPresenceHeartbeat();
-      this._unbindPagehideLeave();
       this._releaseOwnedLocalStream();
       if (this._state !== 'closed') this._setState('watching');
     }
@@ -581,51 +590,34 @@ export class P2PRoom extends EventTarget {
     this._presenceHeartbeatTimer = null;
   }
 
-  _bindPagehideLeave(signaling) {
-    this._unbindPagehideLeave();
-    if (typeof globalThis.addEventListener !== 'function') return;
-
-    const onPagehide = (event) => {
-      if (event?.persisted || !this._joined) return;
-      try {
-        Promise.resolve(signaling.leave(this.peerId)).catch(() => {});
-      } catch (_) {}
-    };
-
-    globalThis.addEventListener('pagehide', onPagehide);
-    this._pagehideCleanup = () => {
-      globalThis.removeEventListener?.('pagehide', onPagehide);
-    };
-  }
-
-  _unbindPagehideLeave() {
-    this._pagehideCleanup?.();
-    this._pagehideCleanup = null;
-  }
-
   async _leaveAfterJoin() {
     this._setState('leaving');
     await this._joinPromise.catch(() => {});
     if (this._state !== 'closed') await this._leave();
   }
 
-  _syncMembers(memberIds) {
+  _syncMembers(memberIds, departureReasons = new Map()) {
     if (this._state !== 'active') return;
     const allowedMemberIds = this._allowedMemberIds(memberIds);
     const remoteMemberIds = new Set(
       allowedMemberIds.filter((id) => id !== this.peerId),
     );
     for (const memberId of remoteMemberIds) this._connectMember(memberId);
-    for (const memberId of this.pairs.keys()) {
-      if (!remoteMemberIds.has(memberId)) this._closeMember(memberId);
+    const managedMemberIds = new Set([
+      ...this.pairs.keys(),
+      ...this._controllers.keys(),
+    ]);
+    for (const memberId of managedMemberIds) {
+      if (!remoteMemberIds.has(memberId)) {
+        this._closeMember(memberId, {
+          reason: departureReasons.get(memberId) ?? 'dropped',
+        });
+      }
     }
-    for (const memberId of this._controllers.keys()) {
-      if (!remoteMemberIds.has(memberId)) this._closeMember(memberId);
-    }
-    this._updateAloneState(remoteMemberIds.size);
+    this._updateAloneState(remoteMemberIds.size, departureReasons);
   }
 
-  _updateAloneState(remoteCount) {
+  _updateAloneState(remoteCount, departureReasons) {
     if (remoteCount > 0) {
       this._hadRemoteMembers = true;
       return;
@@ -634,7 +626,12 @@ export class P2PRoom extends EventTarget {
     // joining an empty room does not immediately emit `alone` / auto-close.
     if (!this._hadRemoteMembers) return;
     this._hadRemoteMembers = false;
-    this._emitAlone();
+    const reasons = [...departureReasons.values()];
+    const reason =
+      reasons.length > 0 && reasons.every((value) => value === 'left')
+        ? 'left'
+        : 'dropped';
+    this._emitAlone(reason);
     if (this.autoCloseWhenAlone) {
       Promise.resolve(this.close()).catch(() => {});
     }
@@ -852,7 +849,7 @@ export class P2PRoom extends EventTarget {
     for (const memberId of memberIds) this._closeMember(memberId, { emitLeft });
   }
 
-  _closeMember(memberId, { emitLeft = true } = {}) {
+  _closeMember(memberId, { emitLeft = true, reason = 'dropped' } = {}) {
     this._controllers.get(memberId)?.abort();
     this._controllers.delete(memberId);
     this.pairs.get(memberId)?.close();
@@ -864,7 +861,7 @@ export class P2PRoom extends EventTarget {
     this.remoteStreams.delete(memberId);
     this._remoteMemberStreamEntries.delete(memberId);
     if (stream) this._emitMemberStreamRemoved(memberId, stream);
-    if (emitLeft) this._emitMemberLeft(memberId, stream);
+    if (emitLeft) this._emitMemberLeft(memberId, stream, reason);
   }
 
   send(memberId, data) {
@@ -979,9 +976,10 @@ export class P2PRoom extends EventTarget {
     this._emit('peerJoined', { peerId: memberId, memberId });
   }
 
-  _emitMemberLeft(memberId, stream) {
-    this._emit('memberLeft', { memberId, stream });
-    this._emit('peerLeft', { peerId: memberId, memberId, stream });
+  _emitMemberLeft(memberId, stream, reason) {
+    log(`[Room] Member "${memberId}" left (${reason})`);
+    this._emit('memberLeft', { memberId, stream, reason });
+    this._emit('peerLeft', { peerId: memberId, memberId, stream, reason });
   }
 
   _emitMemberStream(detail) {
@@ -994,10 +992,11 @@ export class P2PRoom extends EventTarget {
     this._emit('peerStreamRemoved', { peerId: memberId, memberId, stream });
   }
 
-  _emitAlone() {
+  _emitAlone(reason) {
     this._emit('alone', {
       members: this.members,
       memberCount: this.memberCount,
+      reason,
     });
   }
 
@@ -1122,8 +1121,19 @@ function toPublicState(state) {
   return state === 'active' ? 'joined' : state;
 }
 
-function normalizePresenceSnapshot(peers) {
-  if (!Array.isArray(peers)) return [];
+function normalizePresenceSnapshot(snapshot) {
+  const peers = Array.isArray(snapshot?.members) ? snapshot.members : [];
+  const explicitlyLeft = new Set(
+    Array.isArray(snapshot?.departed)
+      ? snapshot.departed
+          .filter(
+            (departure) =>
+              departure?.reason === 'left' &&
+              typeof departure.memberId === 'string',
+          )
+          .map((departure) => departure.memberId)
+      : [],
+  );
   const byMemberId = new Map();
   const duplicates = new Set();
 
@@ -1142,7 +1152,7 @@ function normalizePresenceSnapshot(peers) {
     );
   }
 
-  return [...byMemberId.values()];
+  return { members: [...byMemberId.values()], explicitlyLeft };
 }
 
 function normalizePresenceEntry(entry) {
