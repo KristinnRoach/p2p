@@ -1,7 +1,8 @@
 # TURN, ICE recovery, and room departure semantics: design questions
 
-Status: discovery only. No implementation decisions are final and no feature
-code should be written until the material questions below are answered.
+Status: ICE recovery, TURN credentials, and presence recovery remain discovery
+only; no implementation decisions for those features are final. Section F
+records the resolved departure-reason slice and is no longer provisional.
 
 ## Findings that shape the questions
 
@@ -94,6 +95,10 @@ Current references:
     **Recommendation:** expose async `restartIce()` methods on `Peer` and
     `P2PSession`, using the same serialization, credential refresh, events, and
     error handling as automatic recovery.
+    **Deferred:** do not expose this method until restart authority is decided.
+    Under the current sole-initiator proposal, joiner calls must either reject
+    clearly or signal the initiator to restart; silently doing nothing is not an
+    acceptable API.
 
 13. Should frozen-media detection via `getStats()` remain outside this feature?
     **Recommendation:** yes. It is useful when media stalls while ICE still says
@@ -127,7 +132,7 @@ Current references:
 
     ```js
     iceRecovery: {
-      enabled: true,
+      enabled: false,
       maxAttempts: 3,
       disconnectedGraceMs: 3000,
       attemptTimeoutMs: 10000,

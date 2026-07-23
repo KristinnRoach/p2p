@@ -98,9 +98,7 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
     async leave(peerId) {
       knownPeers.delete(peerId);
       emitPeers([{ memberId: peerId, reason: 'left' }]);
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'leave-room', roomId, peerId }));
-      }
+      await send({ type: 'leave-room', roomId, peerId });
     },
 
     onPeers(callback) {

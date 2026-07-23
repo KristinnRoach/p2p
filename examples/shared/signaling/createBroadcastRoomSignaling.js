@@ -28,19 +28,34 @@ export function createBroadcastRoomSignaling(roomId) {
       await updatePresenceData(roomId, key, peerId, data);
     },
     onPeers: (callback) => {
-      const emit = () => callback(readActivePresence(roomId, key));
+      const emitCurrentPresence = () =>
+        callback(readActivePresence(roomId, key));
+      const emitPresenceTransition = (storedState) =>
+        callback(
+          readActivePresence(
+            roomId,
+            key,
+            normalizePresenceState(storedState),
+          ),
+        );
       const onStorage = (event) => {
-        if (event.key === key) emit();
+        if (event.key !== key) return;
+        emitPresenceTransition(parseJson(event.newValue, { members: [] }));
+      };
+      const onBroadcast = (event) => {
+        const message = event.data;
+        if (message?.type !== 'meshChanged' || message.key !== key) return;
+        emitPresenceTransition(message.value);
       };
 
       window.addEventListener('storage', onStorage);
-      channel?.addEventListener('message', emit);
-      const sweep = setInterval(emit, presenceSweepMs);
-      queueMicrotask(emit);
+      channel?.addEventListener('message', onBroadcast);
+      const sweep = setInterval(emitCurrentPresence, presenceSweepMs);
+      queueMicrotask(emitCurrentPresence);
 
       return () => {
         window.removeEventListener('storage', onStorage);
-        channel?.removeEventListener('message', emit);
+        channel?.removeEventListener('message', onBroadcast);
         clearInterval(sweep);
       };
     },
@@ -151,8 +166,20 @@ function readJson(key, fallback) {
   }
 }
 
+function parseJson(raw, fallback) {
+  if (raw == null) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
 function readPresenceState(key) {
-  const stored = readJson(key, { members: [] });
+  return normalizePresenceState(readJson(key, { members: [] }));
+}
+
+function normalizePresenceState(stored) {
   const rawPeers = Array.isArray(stored) ? stored : stored?.members;
   if (!Array.isArray(rawPeers)) return { members: [], departed: [] };
   const members = rawPeers
@@ -173,9 +200,8 @@ function readPresenceState(key) {
   return { members, departed };
 }
 
-function readActivePresence(roomId, key) {
+function readActivePresence(roomId, key, state = readPresenceState(key)) {
   const now = Date.now();
-  const state = readPresenceState(key);
   const peers = state.members;
   const active = peers.filter((entry) => now - entry.lastSeen < presenceTtlMs);
   if (active.length !== peers.length) {
@@ -248,7 +274,7 @@ function writeJson(roomId, key, value) {
   localStorage.setItem(key, JSON.stringify(value));
   if ('BroadcastChannel' in globalThis) {
     const channel = new BroadcastChannel(roomChannelName(roomId));
-    channel.postMessage({ type: 'meshChanged' });
+    channel.postMessage({ type: 'meshChanged', key, value });
     channel.close();
   }
 }

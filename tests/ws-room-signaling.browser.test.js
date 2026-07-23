@@ -62,6 +62,55 @@ describe('createWebSocketRoomSignaling', () => {
       peerId: 'peer-a',
     });
 
+    await signaling.leave('peer-a');
+    expect(socket.sentMessages).toContainEqual({
+      type: 'leave-room',
+      roomId: 'room-1',
+      peerId: 'peer-a',
+    });
+
+    signaling.cleanupSignaling();
+  });
+
+  it('waits for a connecting socket before sending an explicit leave', async () => {
+    let socket;
+    globalThis.WebSocket = class FakeWebSocket extends EventTarget {
+      static CONNECTING = 0;
+      static OPEN = 1;
+      static CLOSING = 2;
+      static CLOSED = 3;
+
+      readyState = FakeWebSocket.CONNECTING;
+      sentMessages = [];
+
+      constructor() {
+        super();
+        socket = this;
+      }
+
+      send(message) {
+        this.sentMessages.push(JSON.parse(message));
+      }
+
+      close() {
+        this.readyState = FakeWebSocket.CLOSED;
+      }
+    };
+
+    const signaling = createWebSocketRoomSignaling({
+      url: 'ws://example.invalid',
+      roomId: 'room-1',
+    });
+    const leavePromise = signaling.leave('peer-a');
+
+    expect(socket.sentMessages).toEqual([]);
+    socket.readyState = WebSocket.OPEN;
+    socket.dispatchEvent(new Event('open'));
+    await leavePromise;
+
+    expect(socket.sentMessages).toEqual([
+      { type: 'leave-room', roomId: 'room-1', peerId: 'peer-a' },
+    ]);
     signaling.cleanupSignaling();
   });
 });

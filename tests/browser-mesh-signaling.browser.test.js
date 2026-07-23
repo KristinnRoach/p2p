@@ -14,6 +14,17 @@ function nextPeers(signaling) {
   });
 }
 
+function nextPeersMatching(signaling, predicate) {
+  return new Promise((resolve) => {
+    let cleanup = null;
+    cleanup = signaling.onPeers((snapshot) => {
+      if (!predicate(snapshot)) return;
+      cleanup?.();
+      resolve(snapshot);
+    });
+  });
+}
+
 describe('createBroadcastRoomSignaling', () => {
   it('keeps peer order stable when refreshing presence', async () => {
     const roomId = `test-${crypto.randomUUID()}`;
@@ -86,6 +97,31 @@ describe('createBroadcastRoomSignaling', () => {
       await signaling.leave('peer-b');
 
       await expect(nextPeers(signaling)).resolves.toEqual({
+        members: [{ memberId: 'peer-a' }],
+        departed: [{ memberId: 'peer-b', reason: 'left' }],
+      });
+    } finally {
+      signaling.cleanupSignaling();
+      clearBroadcastRoomSignaling(roomId);
+    }
+  });
+
+  it('delivers an exact departure transition across a later heartbeat', async () => {
+    const roomId = `test-${crypto.randomUUID()}`;
+    const signaling = createBroadcastRoomSignaling(roomId);
+
+    try {
+      await signaling.join('peer-a');
+      await signaling.join('peer-b');
+      const departure = nextPeersMatching(
+        signaling,
+        (snapshot) => snapshot.departed?.[0]?.memberId === 'peer-b',
+      );
+
+      await signaling.leave('peer-b');
+      await signaling.refreshPresence('peer-a');
+
+      await expect(departure).resolves.toEqual({
         members: [{ memberId: 'peer-a' }],
         departed: [{ memberId: 'peer-b', reason: 'left' }],
       });
