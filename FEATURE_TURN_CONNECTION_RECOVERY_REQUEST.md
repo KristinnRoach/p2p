@@ -17,12 +17,14 @@ Please consider:
 
    ```js
    iceRecovery: {
-     enabled: true,
      maxAttempts: 3,
      disconnectedGraceMs: 3000,
      attemptTimeoutMs: 10000,
    }
    ```
+
+   Omitting `iceRecovery` or setting it to `false` keeps recovery disabled.
+   Providing the options object enables it.
 
    Emit ICE-specific recovery events so consumers can show “reconnecting…”
    UI. Today a path flap can leave media frozen until manual redial.

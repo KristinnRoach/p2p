@@ -131,14 +131,20 @@ Current references:
 19. Are these acceptable initial defaults?
 
     ```js
+    // Disabled by default: omit iceRecovery or set it to false.
+    // Providing the object opts in.
     iceRecovery: {
-      enabled: false,
       maxAttempts: 3,
       disconnectedGraceMs: 3000,
       attemptTimeoutMs: 10000,
       backoffMs: attempt => Math.min(1000 * 2 ** (attempt - 1), 8000),
     }
     ```
+
+    **Recommendation:** use
+    `iceRecovery?: false | IceRecoveryOptions`, defaulting to `false`.
+    Supplying an options object enables recovery; do not add a redundant
+    `enabled` field.
 
 20. Should configuration use serializable numeric backoff options instead of a
     callback?
