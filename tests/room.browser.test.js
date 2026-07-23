@@ -852,6 +852,8 @@ describe('P2PRoom', () => {
     const signaling = createTestRoomSignaling();
     const memberLeft = [];
     const peerLeft = [];
+    const logs = [];
+    setLogger((...args) => logs.push(args));
     const room = await watchP2PRoom({
       signaling,
       peerId: 'a',
@@ -876,6 +878,10 @@ describe('P2PRoom', () => {
     expect(peerLeft).toEqual([
       { peerId: 'b', memberId: 'b', stream: null, reason: 'left' },
       { peerId: 'c', memberId: 'c', stream: null, reason: 'dropped' },
+    ]);
+    expect(logs).toEqual([
+      ['[Room] Member "b" left (left)'],
+      ['[Room] Member "c" left (dropped)'],
     ]);
 
     room.close();

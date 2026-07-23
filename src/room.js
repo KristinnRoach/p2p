@@ -1006,6 +1006,7 @@ export class P2PRoom extends EventTarget {
   }
 
   _emitMemberLeft(memberId, stream, reason) {
+    log(`[Room] Member "${memberId}" left (${reason})`);
     this._emit('memberLeft', { memberId, stream, reason });
     this._emit('peerLeft', { peerId: memberId, memberId, stream, reason });
   }
