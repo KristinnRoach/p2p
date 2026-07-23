@@ -1243,6 +1243,9 @@ describe('P2PRoom', () => {
     await room.join();
     await flushAsyncWork();
 
+    signaling.leave.mockImplementationOnce(() => {
+      expect(session.close).not.toHaveBeenCalled();
+    });
     await room.leave();
     signaling.emitPeers(['c']);
     await flushAsyncWork();

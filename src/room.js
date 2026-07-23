@@ -549,8 +549,6 @@ export class P2PRoom extends EventTarget {
 
   async _leave() {
     this._setState('leaving');
-    this._closeAllPeers({ emitLeft: true });
-    this._hadRemoteMembers = false;
     const shouldLeave = this._joined || this._joinStarted;
     try {
       if (shouldLeave) {
@@ -558,6 +556,8 @@ export class P2PRoom extends EventTarget {
         await Promise.resolve(signaling.leave(this.peerId));
       }
     } finally {
+      this._closeAllPeers({ emitLeft: true });
+      this._hadRemoteMembers = false;
       if (shouldLeave) {
         this._joinStarted = false;
         this._joined = false;
