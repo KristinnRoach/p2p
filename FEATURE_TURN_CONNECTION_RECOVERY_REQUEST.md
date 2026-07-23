@@ -51,13 +51,9 @@ leaves alongside the membership transition. `src/room.js` derives `left` when
 that transition records the member and `dropped` when a member disappears
 without such metadata.
 
-Requests:
-
-1. Add `reason: 'left' | 'dropped'` to `memberLeft` and `alone`, derived from
-   the atomic snapshot transition.
-2. Separately, consider an optional `presenceRecovery: { graceMs }` room
-   policy: for `dropped` peers, delay `alone`/teardown for the window and emit
-   presence-specific recovery events.
+Remaining follow-up: consider an optional
+`presenceRecovery: { graceMs }` room policy. For `dropped` peers, it could delay
+`alone`/teardown for the window and emit presence-specific recovery events.
 
 This would let us delete an app-side data-channel `bye` workaround we built for
 exactly this — and it's more reliable, since a signaling `leave` survives even
