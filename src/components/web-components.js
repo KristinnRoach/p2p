@@ -244,10 +244,19 @@ export class P2PRoomElement extends HTMLElement {
     }
   }
 
-  leave() {
+  async leave() {
     this.#joinController?.abort();
     this.#joinController = null;
-    this.room?.close();
+    const room = this.room;
+    if (room) {
+      try {
+        await room.leave();
+      } catch (error) {
+        this.#error = error?.message || String(error);
+      } finally {
+        room.close();
+      }
+    }
     this.#room = null;
     this.#localStream = null;
     this.#remoteStreams = [];
