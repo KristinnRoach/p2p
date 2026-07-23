@@ -39,9 +39,15 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
     socket.send(JSON.stringify(message));
   };
 
-  const emitPeers = () => {
-    const peerIds = [...knownPeers].sort();
-    for (const cb of peerListeners) cb(peerIds);
+  const emitPeers = (departed = []) => {
+    const members = [...knownPeers]
+      .sort()
+      .map((memberId) => ({ memberId }));
+    const snapshot = {
+      members,
+      ...(departed.length > 0 ? { departed } : {}),
+    };
+    for (const cb of peerListeners) cb(snapshot);
   };
 
   socket.addEventListener('open', () => {
@@ -70,7 +76,7 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
     if (msg.type === 'peers') {
       knownPeers.clear();
       for (const peerId of msg.peerIds || []) knownPeers.add(peerId);
-      emitPeers();
+      emitPeers(msg.departed);
       return;
     }
 
@@ -91,7 +97,7 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
 
     async leave(peerId) {
       knownPeers.delete(peerId);
-      emitPeers();
+      emitPeers([{ memberId: peerId, reason: 'left' }]);
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'leave-room', roomId, peerId }));
       }

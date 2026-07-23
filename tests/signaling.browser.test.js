@@ -372,13 +372,15 @@ describe('createRoomSignaling', () => {
     const onPeers = vi.fn();
 
     signaling.onPeers(onPeers);
-    peersCallback(['peer-a']);
+    peersCallback({ members: [{ memberId: 'peer-a' }] });
     signaling.close();
     signaling.close();
-    peersCallback(['peer-b']);
+    peersCallback({ members: [{ memberId: 'peer-b' }] });
 
     expect(onPeers).toHaveBeenCalledTimes(1);
-    expect(onPeers).toHaveBeenCalledWith(['peer-a']);
+    expect(onPeers).toHaveBeenCalledWith({
+      members: [{ memberId: 'peer-a' }],
+    });
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 

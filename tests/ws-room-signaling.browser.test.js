@@ -47,11 +47,15 @@ describe('createWebSocketRoomSignaling', () => {
           type: 'peers',
           roomId: 'room-1',
           peerIds: ['peer-b', 'peer-a'],
+          departed: [{ memberId: 'peer-c', reason: 'left' }],
         }),
       }),
     );
 
-    expect(snapshots.at(-1)).toEqual(['peer-a', 'peer-b']);
+    expect(snapshots.at(-1)).toEqual({
+      members: [{ memberId: 'peer-a' }, { memberId: 'peer-b' }],
+      departed: [{ memberId: 'peer-c', reason: 'left' }],
+    });
     expect(socket.sentMessages).toContainEqual({
       type: 'join-room',
       roomId: 'room-1',

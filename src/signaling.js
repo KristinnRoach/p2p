@@ -239,9 +239,10 @@ export function createRelayPeerSignaling(options) {
  *     peerId: string,
  *     data: Record<string, unknown>,
  *   ) => void|Promise<void>,
- *   onPeers: (callback: (
- *     peers: Array<string|{memberId: string, data?: Record<string, unknown>}>,
- *   ) => void) => (() => void),
+ *   onPeers: (callback: (snapshot: {
+ *     members: Array<{memberId: string, data?: Record<string, unknown>}>,
+ *     departed?: Array<{memberId: string, reason: 'left'}>,
+ *   }) => void) => (() => void),
  *   createPeerSignaling: (options: {
  *     localPeerId: string,
  *     remotePeerId: string,

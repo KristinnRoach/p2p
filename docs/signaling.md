@@ -36,11 +36,13 @@ interface P2PRoomSignaling {
     data: Record<string, unknown>,
   ): void | Promise<void>;
   onPeers(
-    callback: (
-      peers:
-        | string[]
-        | Array<{ memberId: string; data?: Record<string, unknown> }>,
-    ) => void,
+    callback: (snapshot: {
+      members: Array<{
+        memberId: string;
+        data?: Record<string, unknown>;
+      }>;
+      departed?: Array<{ memberId: string; reason: 'left' }>;
+    }) => void,
   ): void | (() => void);
   createPeerSignaling(options: {
     localPeerId: string;
@@ -66,13 +68,20 @@ presence, or a combination of these mechanisms.
 
 Presence may carry app-defined data for each member. Keep it object-shaped and
 generic: `{ displayName: 'Ada', muted: true }`, for example. Existing adapters
-can keep emitting `string[]`; presence-data-aware adapters emit structured members:
-`{ memberId, data }`. `P2PRoom.members` remains the `string[]` ID projection,
-while `P2PRoom.memberPresence` exposes the structured snapshot. For mid-call
-changes like mute state or ringing-to-joined transitions, implement
+emit structured members as `{ memberId, data }` inside the snapshot envelope.
+`P2PRoom.members` remains the `string[]` ID projection, while
+`P2PRoom.memberPresence` exposes the structured snapshot. For mid-call changes
+like mute state or ringing-to-joined transitions, implement
 `updatePresenceData(peerId, data)`. If an adapter does not provide that method,
 `P2PRoom.setPresenceData(data)` falls back to `refreshPresence(peerId, data)`
 when available.
+
+When a member explicitly leaves, include
+`{ memberId, reason: 'left' }` in `departed` on the same snapshot where that
+member first disappears. Missing departure metadata is intentionally treated as
+`dropped`. The room exposes this on `memberLeft` and `peerLeft`. If a transition
+makes the room alone, `alone.reason` is `left` only when every member removed in
+that transition was explicit; otherwise it is `dropped`.
 
 `cleanupSignaling()` is an optional permanent teardown hook for adapter-owned
 resources. Use it to release provider listeners, sockets, timers, pending

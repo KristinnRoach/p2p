@@ -6,6 +6,11 @@ so the decision can be made later without re-deriving it. See the locked plan in
 
 ## Problem
 
+Departure reasons do not solve this replacement problem. The room can now know
+whether a member disappeared through explicit leave or an unclean drop, but a
+same-ID socket replacement may never remove the member from a snapshot. It
+still requires adapter-provided identity or generation semantics.
+
 The room de-dupes presence by `memberId` and drives connections from membership:
 a `memberId` leaving the snapshot tears down its session, and the same `memberId`
 reappearing builds a fresh one. From de-duped presence alone, the room cannot

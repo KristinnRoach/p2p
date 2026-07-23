@@ -117,7 +117,7 @@ function createTestRoomSignaling() {
     join: vi.fn(),
     leave: vi.fn(),
     onPeers: vi.fn((callback) => {
-      callback([]);
+      callback({ members: [] });
       return vi.fn();
     }),
     createPeerSignaling: vi.fn(() => {

@@ -23,11 +23,15 @@ describe('createBroadcastRoomSignaling', () => {
       await signaling.join('peer-a');
       await signaling.join('peer-b');
 
-      await expect(nextPeers(signaling)).resolves.toEqual(['peer-a', 'peer-b']);
+      await expect(nextPeers(signaling)).resolves.toEqual({
+        members: [{ memberId: 'peer-a' }, { memberId: 'peer-b' }],
+      });
 
       await signaling.refreshPresence('peer-a');
 
-      await expect(nextPeers(signaling)).resolves.toEqual(['peer-a', 'peer-b']);
+      await expect(nextPeers(signaling)).resolves.toEqual({
+        members: [{ memberId: 'peer-a' }, { memberId: 'peer-b' }],
+      });
     } finally {
       signaling.cleanupSignaling();
       clearBroadcastRoomSignaling(roomId);
@@ -42,26 +46,49 @@ describe('createBroadcastRoomSignaling', () => {
       await signaling.join('peer-a', { displayName: 'Ada', muted: false });
       await signaling.join('peer-b');
 
-      await expect(nextPeers(signaling)).resolves.toEqual([
-        {
-          memberId: 'peer-a',
-          data: { displayName: 'Ada', muted: false },
-        },
-        { memberId: 'peer-b' },
-      ]);
+      await expect(nextPeers(signaling)).resolves.toEqual({
+        members: [
+          {
+            memberId: 'peer-a',
+            data: { displayName: 'Ada', muted: false },
+          },
+          { memberId: 'peer-b' },
+        ],
+      });
 
       await signaling.updatePresenceData('peer-a', {
         displayName: 'Ada',
         muted: true,
       });
 
-      await expect(nextPeers(signaling)).resolves.toEqual([
-        {
-          memberId: 'peer-a',
-          data: { displayName: 'Ada', muted: true },
-        },
-        { memberId: 'peer-b' },
-      ]);
+      await expect(nextPeers(signaling)).resolves.toEqual({
+        members: [
+          {
+            memberId: 'peer-a',
+            data: { displayName: 'Ada', muted: true },
+          },
+          { memberId: 'peer-b' },
+        ],
+      });
+    } finally {
+      signaling.cleanupSignaling();
+      clearBroadcastRoomSignaling(roomId);
+    }
+  });
+
+  it('marks explicit leaves on the removal snapshot', async () => {
+    const roomId = `test-${crypto.randomUUID()}`;
+    const signaling = createBroadcastRoomSignaling(roomId);
+
+    try {
+      await signaling.join('peer-a');
+      await signaling.join('peer-b');
+      await signaling.leave('peer-b');
+
+      await expect(nextPeers(signaling)).resolves.toEqual({
+        members: [{ memberId: 'peer-a' }],
+        departed: [{ memberId: 'peer-b', reason: 'left' }],
+      });
     } finally {
       signaling.cleanupSignaling();
       clearBroadcastRoomSignaling(roomId);

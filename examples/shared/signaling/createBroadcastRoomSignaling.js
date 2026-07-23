@@ -14,8 +14,11 @@ export function createBroadcastRoomSignaling(roomId) {
       await refreshPresence(roomId, key, peerId, data);
     },
     leave: async (peerId) => {
-      await updatePresence(roomId, key, (peers) =>
-        peers.filter((entry) => entry.peerId !== peerId),
+      await updatePresence(
+        roomId,
+        key,
+        (peers) => peers.filter((entry) => entry.peerId !== peerId),
+        [{ memberId: peerId, reason: 'left' }],
       );
     },
     refreshPresence: async (peerId, data) => {
@@ -148,10 +151,11 @@ function readJson(key, fallback) {
   }
 }
 
-function readPresence(key) {
-  const rawPeers = readJson(key, []);
-  if (!Array.isArray(rawPeers)) return [];
-  return rawPeers
+function readPresenceState(key) {
+  const stored = readJson(key, { members: [] });
+  const rawPeers = Array.isArray(stored) ? stored : stored?.members;
+  if (!Array.isArray(rawPeers)) return { members: [], departed: [] };
+  const members = rawPeers
     .map((entry) => {
       if (typeof entry === 'string') return { peerId: entry, lastSeen: 0 };
       if (entry && typeof entry.peerId === 'string') {
@@ -165,18 +169,25 @@ function readPresence(key) {
       return null;
     })
     .filter(Boolean);
+  const departed = Array.isArray(stored?.departed) ? stored.departed : [];
+  return { members, departed };
 }
 
 function readActivePresence(roomId, key) {
   const now = Date.now();
-  const peers = readPresence(key);
+  const state = readPresenceState(key);
+  const peers = state.members;
   const active = peers.filter((entry) => now - entry.lastSeen < presenceTtlMs);
   if (active.length !== peers.length) {
     void updatePresence(roomId, key, (latestPeers) =>
       latestPeers.filter((entry) => now - entry.lastSeen < presenceTtlMs),
     );
+    return { members: toPresenceMembers(active) };
   }
-  return toPresenceSnapshot(active);
+  return {
+    members: toPresenceMembers(active),
+    ...(state.departed.length > 0 ? { departed: state.departed } : {}),
+  };
 }
 
 function refreshPresence(roomId, key, peerId, data) {
@@ -215,9 +226,13 @@ function updatePresenceData(roomId, key, peerId, data) {
   );
 }
 
-async function updatePresence(roomId, key, updater) {
+async function updatePresence(roomId, key, updater, departed = []) {
   return withPresenceLock(roomId, () => {
-    writeJson(roomId, key, updater(readPresence(key)));
+    const members = updater(readPresenceState(key).members);
+    writeJson(roomId, key, {
+      members,
+      ...(departed.length > 0 ? { departed } : {}),
+    });
   });
 }
 
@@ -238,10 +253,7 @@ function writeJson(roomId, key, value) {
   }
 }
 
-function toPresenceSnapshot(peers) {
-  if (peers.every((entry) => entry.data === undefined)) {
-    return peers.map((entry) => entry.peerId);
-  }
+function toPresenceMembers(peers) {
   return peers.map((entry) =>
     entry.data === undefined
       ? { memberId: entry.peerId }

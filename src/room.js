@@ -403,9 +403,22 @@ export class P2PRoom extends EventTarget {
     if (this._state === 'closed' || this.signal?.aborted) {
       throw createAbortError();
     }
-    const cleanup = this.signaling.onPeers((peers) => {
-      const memberPresence = normalizePresenceSnapshot(peers);
+    const cleanup = this.signaling.onPeers((snapshot) => {
+      const { members: memberPresence, explicitlyLeft } =
+        normalizePresenceSnapshot(snapshot);
       const memberIds = memberPresence.map((member) => member.memberId);
+      const previousRemoteMemberIds = this._memberIds.filter(
+        (memberId) => memberId !== this.peerId,
+      );
+      const nextMemberIds = new Set(memberIds);
+      const departureReasons = new Map(
+        previousRemoteMemberIds
+          .filter((memberId) => !nextMemberIds.has(memberId))
+          .map((memberId) => [
+            memberId,
+            explicitlyLeft.has(memberId) ? 'left' : 'dropped',
+          ]),
+      );
       if (!this._presenceSeen) {
         this._presenceSeen = true;
         for (const waiter of this._presenceWaiters) waiter();
@@ -418,7 +431,7 @@ export class P2PRoom extends EventTarget {
       ) {
         this._emitFull(memberIds);
       }
-      this._syncMembers(memberIds);
+      this._syncMembers(memberIds, departureReasons);
     });
     if (typeof cleanup === 'function') this._cleanups.push(cleanup);
 
@@ -609,7 +622,7 @@ export class P2PRoom extends EventTarget {
     if (this._state !== 'closed') await this._leave();
   }
 
-  _syncMembers(memberIds) {
+  _syncMembers(memberIds, departureReasons = new Map()) {
     if (this._state !== 'active') return;
     const allowedMemberIds = this._allowedMemberIds(memberIds);
     const remoteMemberIds = new Set(
@@ -617,15 +630,23 @@ export class P2PRoom extends EventTarget {
     );
     for (const memberId of remoteMemberIds) this._connectMember(memberId);
     for (const memberId of this.pairs.keys()) {
-      if (!remoteMemberIds.has(memberId)) this._closeMember(memberId);
+      if (!remoteMemberIds.has(memberId)) {
+        this._closeMember(memberId, {
+          reason: departureReasons.get(memberId) ?? 'dropped',
+        });
+      }
     }
     for (const memberId of this._controllers.keys()) {
-      if (!remoteMemberIds.has(memberId)) this._closeMember(memberId);
+      if (!remoteMemberIds.has(memberId)) {
+        this._closeMember(memberId, {
+          reason: departureReasons.get(memberId) ?? 'dropped',
+        });
+      }
     }
-    this._updateAloneState(remoteMemberIds.size);
+    this._updateAloneState(remoteMemberIds.size, departureReasons);
   }
 
-  _updateAloneState(remoteCount) {
+  _updateAloneState(remoteCount, departureReasons) {
     if (remoteCount > 0) {
       this._hadRemoteMembers = true;
       return;
@@ -634,7 +655,12 @@ export class P2PRoom extends EventTarget {
     // joining an empty room does not immediately emit `alone` / auto-close.
     if (!this._hadRemoteMembers) return;
     this._hadRemoteMembers = false;
-    this._emitAlone();
+    const reasons = [...departureReasons.values()];
+    const reason =
+      reasons.length > 0 && reasons.every((value) => value === 'left')
+        ? 'left'
+        : 'dropped';
+    this._emitAlone(reason);
     if (this.autoCloseWhenAlone) {
       Promise.resolve(this.close()).catch(() => {});
     }
@@ -852,7 +878,7 @@ export class P2PRoom extends EventTarget {
     for (const memberId of memberIds) this._closeMember(memberId, { emitLeft });
   }
 
-  _closeMember(memberId, { emitLeft = true } = {}) {
+  _closeMember(memberId, { emitLeft = true, reason = 'dropped' } = {}) {
     this._controllers.get(memberId)?.abort();
     this._controllers.delete(memberId);
     this.pairs.get(memberId)?.close();
@@ -864,7 +890,7 @@ export class P2PRoom extends EventTarget {
     this.remoteStreams.delete(memberId);
     this._remoteMemberStreamEntries.delete(memberId);
     if (stream) this._emitMemberStreamRemoved(memberId, stream);
-    if (emitLeft) this._emitMemberLeft(memberId, stream);
+    if (emitLeft) this._emitMemberLeft(memberId, stream, reason);
   }
 
   send(memberId, data) {
@@ -979,9 +1005,9 @@ export class P2PRoom extends EventTarget {
     this._emit('peerJoined', { peerId: memberId, memberId });
   }
 
-  _emitMemberLeft(memberId, stream) {
-    this._emit('memberLeft', { memberId, stream });
-    this._emit('peerLeft', { peerId: memberId, memberId, stream });
+  _emitMemberLeft(memberId, stream, reason) {
+    this._emit('memberLeft', { memberId, stream, reason });
+    this._emit('peerLeft', { peerId: memberId, memberId, stream, reason });
   }
 
   _emitMemberStream(detail) {
@@ -994,10 +1020,11 @@ export class P2PRoom extends EventTarget {
     this._emit('peerStreamRemoved', { peerId: memberId, memberId, stream });
   }
 
-  _emitAlone() {
+  _emitAlone(reason) {
     this._emit('alone', {
       members: this.members,
       memberCount: this.memberCount,
+      reason,
     });
   }
 
@@ -1122,8 +1149,19 @@ function toPublicState(state) {
   return state === 'active' ? 'joined' : state;
 }
 
-function normalizePresenceSnapshot(peers) {
-  if (!Array.isArray(peers)) return [];
+function normalizePresenceSnapshot(snapshot) {
+  const peers = Array.isArray(snapshot?.members) ? snapshot.members : [];
+  const explicitlyLeft = new Set(
+    Array.isArray(snapshot?.departed)
+      ? snapshot.departed
+          .filter(
+            (departure) =>
+              departure?.reason === 'left' &&
+              typeof departure.memberId === 'string',
+          )
+          .map((departure) => departure.memberId)
+      : [],
+  );
   const byMemberId = new Map();
   const duplicates = new Set();
 
@@ -1142,7 +1180,7 @@ function normalizePresenceSnapshot(peers) {
     );
   }
 
-  return [...byMemberId.values()];
+  return { members: [...byMemberId.values()], explicitlyLeft };
 }
 
 function normalizePresenceEntry(entry) {

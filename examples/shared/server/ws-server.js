@@ -16,7 +16,7 @@ function send(ws, payload) {
   }
 }
 
-function broadcastPeers(roomId) {
+function broadcastPeers(roomId, departed = []) {
   const peerIds = [...sockets.values()]
     .filter((x) => x.roomId === roomId)
     .map((x) => x.peerId)
@@ -24,12 +24,17 @@ function broadcastPeers(roomId) {
 
   for (const [ws, info] of sockets.entries()) {
     if (info.roomId === roomId) {
-      send(ws, { type: 'peers', roomId, peerIds });
+      send(ws, {
+        type: 'peers',
+        roomId,
+        peerIds,
+        ...(departed.length > 0 ? { departed } : {}),
+      });
     }
   }
 }
 
-function removeSocket(ws) {
+function removeSocket(ws, reason = 'dropped') {
   const info = sockets.get(ws);
   if (!info) return;
   sockets.delete(ws);
@@ -37,7 +42,12 @@ function removeSocket(ws) {
   if (socketsByRoomPeer.get(key) === ws) {
     socketsByRoomPeer.delete(key);
   }
-  broadcastPeers(info.roomId);
+  broadcastPeers(
+    info.roomId,
+    reason === 'left'
+      ? [{ memberId: info.peerId, reason: 'left' }]
+      : [],
+  );
 }
 
 wss.on('connection', (ws) => {
@@ -57,7 +67,7 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'leave-room') {
-      removeSocket(ws);
+      removeSocket(ws, 'left');
       return;
     }
 

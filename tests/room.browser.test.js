@@ -44,8 +44,16 @@ function createTestRoomSignaling(overrides = {}) {
       };
     }),
     createPeerSignaling: vi.fn(() => createPairSignaling()),
-    emitPeers(peerIds) {
-      onPeers?.(peerIds);
+    emitPeers(membersOrSnapshot) {
+      onPeers?.(
+        Array.isArray(membersOrSnapshot)
+          ? {
+              members: membersOrSnapshot.map((entry) =>
+                typeof entry === 'string' ? { memberId: entry } : entry,
+              ),
+            }
+          : membersOrSnapshot,
+      );
     },
     ...overrides,
   };
@@ -832,7 +840,100 @@ describe('P2PRoom', () => {
     signaling.emitPeers([]);
     await flushAsyncWork();
 
-    expect(alone).toEqual([{ members: [], memberCount: 0 }]);
+    expect(alone).toEqual([
+      { members: [], memberCount: 0, reason: 'dropped' },
+    ]);
+
+    room.close();
+  });
+
+  it('reports explicit and dropped member departures', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const memberLeft = [];
+    const peerLeft = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onMemberLeft: (detail) => memberLeft.push(detail),
+      onPeerLeft: (detail) => peerLeft.push(detail),
+    });
+
+    signaling.emitPeers(['b', 'c']);
+    await room.join();
+    await flushAsyncWork();
+
+    signaling.emitPeers({
+      members: [],
+      departed: [{ memberId: 'b', reason: 'left' }],
+    });
+    await flushAsyncWork();
+
+    expect(memberLeft).toEqual([
+      { memberId: 'b', stream: null, reason: 'left' },
+      { memberId: 'c', stream: null, reason: 'dropped' },
+    ]);
+    expect(peerLeft).toEqual([
+      { peerId: 'b', memberId: 'b', stream: null, reason: 'left' },
+      { peerId: 'c', memberId: 'c', stream: null, reason: 'dropped' },
+    ]);
+
+    room.close();
+  });
+
+  it('reports alone as dropped when any departure is not explicit', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const alone = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onAlone: (detail) => alone.push(detail),
+    });
+
+    signaling.emitPeers(['b', 'c']);
+    await room.join();
+    await flushAsyncWork();
+
+    signaling.emitPeers({
+      members: [],
+      departed: [{ memberId: 'b', reason: 'left' }],
+    });
+    await flushAsyncWork();
+
+    expect(alone).toEqual([
+      { members: [], memberCount: 0, reason: 'dropped' },
+    ]);
+
+    room.close();
+  });
+
+  it('reports alone as left when every departure is explicit', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const alone = [];
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onAlone: (detail) => alone.push(detail),
+    });
+
+    signaling.emitPeers(['b', 'c']);
+    await room.join();
+    await flushAsyncWork();
+
+    signaling.emitPeers({
+      members: [],
+      departed: [
+        { memberId: 'b', reason: 'left' },
+        { memberId: 'c', reason: 'left' },
+      ],
+    });
+    await flushAsyncWork();
+
+    expect(alone).toEqual([
+      { members: [], memberCount: 0, reason: 'left' },
+    ]);
 
     room.close();
   });
