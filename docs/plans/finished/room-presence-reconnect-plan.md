@@ -104,9 +104,13 @@ question).
 - Document that stale sockets should stop receiving relayed messages.
 - Expand `refreshPresence` / TTL examples for peers that disappear without a
   clean `leave()`.
-- Clarify the distinct roles of `pagehide` leave, `cleanupSignaling()`, and
-  heartbeat expiry.
+- At the time, clarify the distinct roles of `pagehide` leave,
+  `cleanupSignaling()`, and heartbeat expiry (later revised below).
 - Add same-`peerId` reload/reconnect tests or adapter examples.
+
+> **Later departure-semantics update:** core no longer calls `leave()` on
+> `pagehide`. Refresh, navigation, and tab loss now use adapter socket/TTL
+> cleanup and surface as dropped; only explicit room teardown surfaces as left.
 
 Open design question:
 

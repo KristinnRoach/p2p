@@ -316,14 +316,18 @@ Current references:
 `FEATURE_SLICE_LEFT_VS_DROPPED_SIGNAL.md`. The envelope carries only explicit
 `left` departures; every unmarked disappearance is `dropped`. Generation IDs,
 durable retention, moderation reasons, and presence grace remain out of scope.
+Page lifecycle events are unmarked drops; core does not call `leave()` on
+`pagehide`.
 
 53. Which backend events definitively mean `left`?
-    Should these include explicit UI hangup, `room.leave()`, `room.close()`,
-    successful `pagehide` leave, server kick, and room shutdown?
+    **Resolved for this slice:** explicit UI hangup, `room.leave()`, and
+    `room.close()`. Page lifecycle events are not explicit leaves. Server kick
+    and room shutdown remain future decisions.
 
 54. Which backend events definitively mean `dropped`?
-    Should these include heartbeat TTL expiry, unclean socket close, Durable
-    Object restart, and stale-session replacement?
+    **Resolved for this slice:** page lifecycle loss, heartbeat TTL expiry, and
+    unclean socket close. Durable Object restart and stale-session replacement
+    remain backend-specific.
 
 55. Do administrative removal and rejection need a third reason such as
     `removed`, or must the public API remain exactly `'left' | 'dropped'`?

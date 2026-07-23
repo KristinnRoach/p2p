@@ -170,7 +170,6 @@ export class P2PRoom extends EventTarget {
     this._joinStarted = false;
     this._joined = false;
     this._presenceHeartbeatTimer = null;
-    this._pagehideCleanup = null;
     this._hadRemoteMembers = false;
 
     // Map each on<Event> option to its event name. Iterated below to register
@@ -256,7 +255,6 @@ export class P2PRoom extends EventTarget {
     this._setState('closed');
 
     this._stopPresenceHeartbeat();
-    this._unbindPagehideLeave();
     for (const cleanup of this._cleanups.splice(0)) cleanup();
     this._closeAllPeers({ emitLeft: false });
     this._hadRemoteMembers = false;
@@ -546,7 +544,6 @@ export class P2PRoom extends EventTarget {
     }
     this._setState('active');
     this._startPresenceHeartbeat(signaling);
-    this._bindPagehideLeave(signaling);
     this._syncMembers(this._memberIds);
   }
 
@@ -566,7 +563,6 @@ export class P2PRoom extends EventTarget {
         this._joined = false;
       }
       this._stopPresenceHeartbeat();
-      this._unbindPagehideLeave();
       this._releaseOwnedLocalStream();
       if (this._state !== 'closed') this._setState('watching');
     }
@@ -592,28 +588,6 @@ export class P2PRoom extends EventTarget {
     if (this._presenceHeartbeatTimer == null) return;
     clearInterval(this._presenceHeartbeatTimer);
     this._presenceHeartbeatTimer = null;
-  }
-
-  _bindPagehideLeave(signaling) {
-    this._unbindPagehideLeave();
-    if (typeof globalThis.addEventListener !== 'function') return;
-
-    const onPagehide = (event) => {
-      if (event?.persisted || !this._joined) return;
-      try {
-        Promise.resolve(signaling.leave(this.peerId)).catch(() => {});
-      } catch (_) {}
-    };
-
-    globalThis.addEventListener('pagehide', onPagehide);
-    this._pagehideCleanup = () => {
-      globalThis.removeEventListener?.('pagehide', onPagehide);
-    };
-  }
-
-  _unbindPagehideLeave() {
-    this._pagehideCleanup?.();
-    this._pagehideCleanup = null;
   }
 
   async _leaveAfterJoin() {

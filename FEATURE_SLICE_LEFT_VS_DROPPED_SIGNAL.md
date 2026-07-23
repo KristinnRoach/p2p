@@ -30,6 +30,10 @@ absence of an explicit leave is exactly what a drop looks like.
 
 Mirror onto the deprecated peerLeft for consistency.
 
+Browser lifecycle events such as refresh, navigation, and tab close do not call
+`leave`; adapters remove those members through socket disconnect or TTL expiry,
+so they consistently surface as `dropped`.
+
 For a transition that makes a mesh room alone, the aggregate reason is `left`
 only when every removed member is listed as explicitly left. If any removal has
 no explicit marker, the reason is `dropped`.

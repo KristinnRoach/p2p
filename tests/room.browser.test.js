@@ -1031,7 +1031,7 @@ describe('P2PRoom', () => {
     room.close();
   });
 
-  it('best-effort leaves active presence on pagehide', async () => {
+  it('does not treat pagehide as an explicit leave', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();
     const room = await watchP2PRoom({
@@ -1041,25 +1041,6 @@ describe('P2PRoom', () => {
 
     await room.join();
     window.dispatchEvent(new Event('pagehide'));
-    await flushAsyncWork();
-
-    expect(signaling.leave).toHaveBeenCalledWith('a');
-
-    room.close();
-  });
-
-  it('does not leave presence when pagehide stores the page in bfcache', async () => {
-    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
-    const signaling = createTestRoomSignaling();
-    const room = await watchP2PRoom({
-      signaling,
-      peerId: 'a',
-    });
-    const event = new Event('pagehide');
-    Object.defineProperty(event, 'persisted', { value: true });
-
-    await room.join();
-    window.dispatchEvent(event);
     await flushAsyncWork();
 
     expect(signaling.leave).not.toHaveBeenCalled();
