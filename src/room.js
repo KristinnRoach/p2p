@@ -603,14 +603,11 @@ export class P2PRoom extends EventTarget {
       allowedMemberIds.filter((id) => id !== this.peerId),
     );
     for (const memberId of remoteMemberIds) this._connectMember(memberId);
-    for (const memberId of this.pairs.keys()) {
-      if (!remoteMemberIds.has(memberId)) {
-        this._closeMember(memberId, {
-          reason: departureReasons.get(memberId) ?? 'dropped',
-        });
-      }
-    }
-    for (const memberId of this._controllers.keys()) {
+    const managedMemberIds = new Set([
+      ...this.pairs.keys(),
+      ...this._controllers.keys(),
+    ]);
+    for (const memberId of managedMemberIds) {
       if (!remoteMemberIds.has(memberId)) {
         this._closeMember(memberId, {
           reason: departureReasons.get(memberId) ?? 'dropped',

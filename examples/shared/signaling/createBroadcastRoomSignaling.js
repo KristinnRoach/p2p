@@ -48,14 +48,14 @@ export function createBroadcastRoomSignaling(roomId) {
         emitPresenceTransition(message.value);
       };
 
-      window.addEventListener('storage', onStorage);
-      channel?.addEventListener('message', onBroadcast);
+      if (channel) channel.addEventListener('message', onBroadcast);
+      else window.addEventListener('storage', onStorage);
       const sweep = setInterval(emitCurrentPresence, presenceSweepMs);
       queueMicrotask(emitCurrentPresence);
 
       return () => {
-        window.removeEventListener('storage', onStorage);
-        channel?.removeEventListener('message', onBroadcast);
+        if (channel) channel.removeEventListener('message', onBroadcast);
+        else window.removeEventListener('storage', onStorage);
         clearInterval(sweep);
       };
     },
