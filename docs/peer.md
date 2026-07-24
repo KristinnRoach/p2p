@@ -53,12 +53,64 @@ uses the optional signaling extension documented in
 [signaling.md](./signaling.md) to request a restart. `failed` starts recovery
 immediately; `disconnected` waits for the configured grace period. Recovery
 reuses the existing `RTCPeerConnection`, and exhaustion leaves teardown or
-redial to the consumer. The `connected` event remains initial-only.
+redial to the consumer. When an `iceServersProvider` is configured, recovery
+ensures its credentials are fresh before restarting ICE. The `connected` event
+remains initial-only.
 
 Defaults are 3 attempts, a 3-second disconnected grace period, a 10-second
 attempt timeout, and exponential retry delays of 1, 2, then at most 8 seconds.
 The numeric backoff controls are `initialBackoffMs`, `backoffFactor`, and
 `maxBackoffMs`.
+
+### Ephemeral TURN credentials
+
+`Peer`, `startP2PSession`, and `joinP2PSession` accept
+`iceServersProvider` and `iceServersRefreshMarginMs`:
+
+```js
+const session = await startP2PSession({
+  signaling,
+  iceServersProvider: async ({ reason, signal }) => {
+    const response = await fetch('/api/turn-credentials', { signal });
+    if (!response.ok) throw new Error(`TURN fetch failed (${reason})`);
+    return response.json();
+  },
+});
+```
+
+The provider must resolve to a non-empty `iceServers` array and may include
+`expiresAt` as epoch milliseconds. Without expiry it runs once. Otherwise the
+package refreshes before expiry (by default, the smaller of 60 seconds or 10%
+of the credential lifetime), applies the new configuration to the live
+connection, and does not restart ICE. An explicit non-negative
+`iceServersRefreshMarginMs` overrides that margin.
+Overrides at or above the observed credential lifetime are clamped to 90% of
+the lifetime to prevent an immediate refresh loop.
+
+Initial failure prevents connection construction. Refresh failure keeps
+unexpired credentials and retries briefly; expired credentials are never
+silently replaced with the default STUN server. Disposal aborts the provider
+request and clears refresh work. When both `rtcConfig.iceServers` and a
+provider are present, a successful provider result replaces only `iceServers`.
+
+Your browser callback should call an authenticated application backend.
+Cloudflare API tokens, Twilio auth tokens, and similar provider secrets must
+never be shipped to the browser. Normalize provider responses on the backend
+or in the callback without adding a provider SDK:
+
+```js
+// Cloudflare-style response
+return {
+  iceServers: response.iceServers,
+  expiresAt: Date.now() + response.ttl * 1000,
+};
+
+// Twilio-style response
+return {
+  iceServers: response.ice_servers,
+  expiresAt: Date.now() + response.ttl * 1000,
+};
+```
 
 To reserve a sender before negotiation, pass stable local track slots. This is
 the lower-level equivalent of the room API described in the README:

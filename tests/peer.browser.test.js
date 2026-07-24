@@ -592,6 +592,41 @@ describe('Peer', () => {
       vi.useRealTimers();
     });
 
+    it('refreshes TURN credentials before restarting ICE', async () => {
+      const refreshError = new Error('credentials expired');
+      const manager = {
+        ensureFresh: vi.fn(() => Promise.reject(refreshError)),
+        removePeerConnection: vi.fn(),
+        dispose: vi.fn(),
+      };
+      const { a } = createLoopbackSignaling();
+      const peer = new Peer({
+        role: 'initiator',
+        signaling: a,
+        iceRecovery: { maxAttempts: 1 },
+        _iceServersManager: manager,
+      });
+      const restartIce = vi.fn();
+      peer._pc = { iceConnectionState: 'failed', restartIce };
+      peer._iceRecovery.initiallyConnected = true;
+      const onError = vi.fn();
+      peer.on('error', onError);
+      const failed = new Promise((resolve) => {
+        peer.once('iceReconnectFailed', resolve);
+      });
+
+      peer._startIceRecovery('failed');
+      await failed;
+
+      expect(manager.ensureFresh).toHaveBeenCalledWith('ice-restart');
+      expect(restartIce).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledWith(
+        { error: refreshError, phase: 'ice-restart' },
+        expect.any(CustomEvent),
+      );
+      peer.dispose();
+    });
+
     it('cancels disconnected grace without consuming an attempt', async () => {
       vi.useFakeTimers();
       const { a } = createLoopbackSignaling();

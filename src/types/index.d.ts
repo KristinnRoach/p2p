@@ -77,6 +77,23 @@ export interface DisconnectedDetail {
   iceRecoveryScheduled: boolean;
 }
 
+export type IceServersProviderReason =
+  | 'initial'
+  | 'scheduled-refresh'
+  | 'ice-restart'
+  | 'manual';
+
+export interface IceServersProviderResult {
+  iceServers: RTCIceServer[];
+  /** Epoch milliseconds. Omit for credentials that do not expire. */
+  expiresAt?: number;
+}
+
+export type IceServersProvider = (options: {
+  reason: IceServersProviderReason;
+  signal: AbortSignal;
+}) => Promise<IceServersProviderResult>;
+
 export interface RemoteStreamDetail {
   stream: MediaStream;
   track: MediaStreamTrack;
@@ -164,6 +181,8 @@ export interface P2PSessionOptions {
   dataChannelLabel?: string;
   rtcConfig?: RTCConfiguration;
   iceRecovery?: IceRecoveryConfig;
+  iceServersProvider?: IceServersProvider;
+  iceServersRefreshMarginMs?: number;
   startTimeoutMs?: number;
   connectedTimeoutMs?: number;
   dataChannelOpenTimeoutMs?: number;
@@ -314,6 +333,7 @@ export interface PeerErrorDetail {
   peerId: string;
   memberId?: string;
   error: Error;
+  phase?: string;
 }
 
 export interface MemberErrorDetail {
@@ -430,6 +450,8 @@ export interface P2PRoomOptions {
   maxPeers?: number;
   rtcConfig?: RTCConfiguration;
   iceRecovery?: IceRecoveryConfig;
+  iceServersProvider?: IceServersProvider;
+  iceServersRefreshMarginMs?: number;
   startTimeoutMs?: number;
   signal?: AbortSignal | null;
   onMemberStream?: (detail: MemberStreamDetail, event: CustomEvent) => void;
@@ -624,6 +646,8 @@ export declare class Peer extends EventTarget {
     dataChannelLabel?: string;
     rtcConfig?: RTCConfiguration;
     iceRecovery?: IceRecoveryConfig;
+    iceServersProvider?: IceServersProvider;
+    iceServersRefreshMarginMs?: number;
   });
 
   readonly role: 'initiator' | 'joiner';

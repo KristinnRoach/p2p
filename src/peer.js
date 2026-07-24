@@ -17,6 +17,7 @@ import {
   normalizeLocalTrackSlots,
 } from './local-track-slots.js';
 import { log } from './logger.js';
+import { createIceServersManager } from './ice-servers.js';
 
 /** @typedef {import('./signaling.js').RtcSignalingSource} RtcSignalingSource */
 
@@ -71,6 +72,8 @@ export class Peer extends EventTarget {
    * @param {string}       [options.dataChannelLabel='data']
    * @param {RTCConfiguration} [options.rtcConfig]
    * @param {false|Object} [options.iceRecovery=false]
+   * @param {Function} [options.iceServersProvider]
+   * @param {number} [options.iceServersRefreshMarginMs]
    */
   constructor(options) {
     super();
@@ -84,6 +87,9 @@ export class Peer extends EventTarget {
       dataChannelLabel = 'data',
       rtcConfig = defaultRtcConfig,
       iceRecovery = false,
+      iceServersProvider,
+      iceServersRefreshMarginMs,
+      _iceServersManager,
     } = options ?? {};
 
     if (role !== 'initiator' && role !== 'joiner') {
@@ -104,8 +110,18 @@ export class Peer extends EventTarget {
     this._audioOnly = audioOnly;
     this._wantsDataChannel = dataChannel;
     this._dataChannelLabel = dataChannelLabel;
-    this._rtcConfig = rtcConfig;
     const recoveryOptions = normalizeIceRecoveryOptions(iceRecovery);
+    this._ownsIceServersManager = !_iceServersManager;
+    this._iceServersManager =
+      _iceServersManager ??
+      createIceServersManager({
+        rtcConfig,
+        provider: iceServersProvider,
+        refreshMarginMs: iceServersRefreshMarginMs,
+        onError: (error) =>
+          this._emit('error', { error, phase: 'ice-servers-refresh' }),
+      });
+    this._startingIceServers = false;
 
     this._pc = null;
     this._dataChannel = null;
@@ -239,6 +255,12 @@ export class Peer extends EventTarget {
       (async () => {
         this._setState(PEER_STATES.CONNECTING);
         this._throwIfClosedDuringStart();
+        if (this._iceServersManager.hasProvider) {
+          this._startingIceServers = true;
+          await this._iceServersManager.ensureFresh('initial');
+          this._startingIceServers = false;
+          this._throwIfClosedDuringStart();
+        }
         if (this._role === 'initiator') {
           await this._startInitiator();
         } else {
@@ -264,7 +286,10 @@ export class Peer extends EventTarget {
 
     // Don't leak rejections — caller can still await start() to see them.
     this._startPromise.catch((error) => {
-      this._emit('error', { error, phase: 'start' });
+      this._emit('error', {
+        error,
+        phase: this._startingIceServers ? 'ice-servers-initial' : 'start',
+      });
       if (this._state !== PEER_STATES.CLOSED) {
         this._cleanupSignaling();
         this._setState(PEER_STATES.FAILED);
@@ -314,6 +339,8 @@ export class Peer extends EventTarget {
 
     this._cancelIceRecovery();
     this._cleanupSignaling();
+    this._iceServersManager.removePeerConnection(this._pc);
+    if (this._ownsIceServersManager) this._iceServersManager.dispose();
 
     try {
       this._dataChannel?.close();
@@ -557,8 +584,9 @@ export class Peer extends EventTarget {
   // ─── Private: PC setup + event wiring ─────────────────────────────────
 
   _initPc() {
-    const pc = new RTCPeerConnection(this._rtcConfig);
+    const pc = new RTCPeerConnection(this._iceServersManager.getRtcConfig());
     this._pc = pc;
+    this._iceServersManager.addPeerConnection(pc);
 
     if (this._localTrackSlots.size > 0) {
       if (this._role === 'initiator') {
@@ -800,6 +828,7 @@ export class Peer extends EventTarget {
     const wait = this._waitForRecoveryAttempt();
     try {
       if (this._role === 'initiator') {
+        await this._iceServersManager.ensureFresh('ice-restart');
         this._pc.restartIce();
         const offer = await createOffer(this._pc);
         if (this._closed || !this._iceRecovery.running) {

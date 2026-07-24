@@ -50,6 +50,9 @@ class P2PSession extends EventTarget {
       dataChannelLabel = 'data',
       rtcConfig,
       iceRecovery = false,
+      iceServersProvider,
+      iceServersRefreshMarginMs,
+      _iceServersManager,
       startTimeoutMs = 0,
       connectedTimeoutMs = 0,
       dataChannelOpenTimeoutMs = dataChannel ? 10000 : 0,
@@ -69,6 +72,9 @@ class P2PSession extends EventTarget {
       dataChannelLabel,
       rtcConfig,
       iceRecovery,
+      iceServersProvider,
+      iceServersRefreshMarginMs,
+      _iceServersManager,
     });
     this._remoteStream = null;
     this._cleanups = [];
