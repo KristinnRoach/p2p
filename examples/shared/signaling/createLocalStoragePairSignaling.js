@@ -19,6 +19,8 @@ export function createLocalStoragePairSignaling({ roomId, role }) {
     answer: `${key}:answer`,
     hostCandidates: `${key}:host-candidates`,
     guestCandidates: `${key}:guest-candidates`,
+    hostRestartRequest: `${key}:host-restart-request`,
+    guestRestartRequest: `${key}:guest-restart-request`,
   };
   const broadcast =
     'BroadcastChannel' in globalThis ? new BroadcastChannel(channelName) : null;
@@ -26,6 +28,10 @@ export function createLocalStoragePairSignaling({ roomId, role }) {
     role === 'host' ? 'hostCandidates' : 'guestCandidates';
   const remoteCandidates =
     role === 'host' ? 'guestCandidates' : 'hostCandidates';
+  const localRestartRequest =
+    role === 'host' ? 'hostRestartRequest' : 'guestRestartRequest';
+  const remoteRestartRequest =
+    role === 'host' ? 'guestRestartRequest' : 'hostRestartRequest';
 
   const readJson = (storageKey, fallback) => {
     const raw = localStorage.getItem(storageKey);
@@ -49,6 +55,8 @@ export function createLocalStoragePairSignaling({ roomId, role }) {
     answer: readJson(keys.answer, undefined),
     hostCandidates: readJson(keys.hostCandidates, undefined),
     guestCandidates: readJson(keys.guestCandidates, undefined),
+    hostRestartRequest: readJson(keys.hostRestartRequest, undefined),
+    guestRestartRequest: readJson(keys.guestRestartRequest, undefined),
   });
 
   const writeRoom = (nextRoom) => {
@@ -56,6 +64,8 @@ export function createLocalStoragePairSignaling({ roomId, role }) {
     writeJson(keys.answer, nextRoom.answer);
     writeJson(keys.hostCandidates, nextRoom.hostCandidates);
     writeJson(keys.guestCandidates, nextRoom.guestCandidates);
+    writeJson(keys.hostRestartRequest, nextRoom.hostRestartRequest);
+    writeJson(keys.guestRestartRequest, nextRoom.guestRestartRequest);
   };
 
   const appendCandidate = (storageKey, candidate) => {
@@ -148,6 +158,11 @@ export function createLocalStoragePairSignaling({ roomId, role }) {
         },
       );
     },
+    sendIceRestartRequest: async (request) => {
+      writeJson(keys[localRestartRequest], request);
+    },
+    onIceRestartRequest: (callback) =>
+      subscribe((room) => room[remoteRestartRequest], callback),
   };
 
   const signaling = createPairSignaling(source);
@@ -169,6 +184,8 @@ export function clearBrowserTabSignalingRoom(roomId) {
   localStorage.removeItem(`${key}:answer`);
   localStorage.removeItem(`${key}:host-candidates`);
   localStorage.removeItem(`${key}:guest-candidates`);
+  localStorage.removeItem(`${key}:host-restart-request`);
+  localStorage.removeItem(`${key}:guest-restart-request`);
 }
 
 function createEmptyRoom() {
@@ -177,6 +194,8 @@ function createEmptyRoom() {
     answer: null,
     hostCandidates: [],
     guestCandidates: [],
+    hostRestartRequest: null,
+    guestRestartRequest: null,
   };
 }
 

@@ -85,6 +85,8 @@ function createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }) {
     answer: `${prefix}${roomId}:pair:${pair}:answer`,
     localCandidates: `${prefix}${roomId}:pair:${pair}:candidates:${localPeerId}`,
     remoteCandidates: `${prefix}${roomId}:pair:${pair}:candidates:${remotePeerId}`,
+    localRestartRequest: `${prefix}${roomId}:pair:${pair}:restart:${localPeerId}`,
+    remoteRestartRequest: `${prefix}${roomId}:pair:${pair}:restart:${remotePeerId}`,
   };
   const subscribe = (key, callback) => {
     let latestJson = JSON.stringify(readJson(key, undefined));
@@ -140,6 +142,10 @@ function createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }) {
         remoteCandidateIndex = candidates.length;
       });
     },
+    sendIceRestartRequest: async (request) =>
+      writeJson(roomId, keys.localRestartRequest, request),
+    onIceRestartRequest: (callback) =>
+      subscribe(keys.remoteRestartRequest, callback),
   };
 }
 

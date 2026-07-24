@@ -119,6 +119,36 @@ async function waitForVideoColor(video, expected) {
 }
 
 describe('P2P session helpers', () => {
+  it('forwards ICE recovery events unchanged', async () => {
+    const { a, b } = createLoopbackSignaling();
+    const [host, guest] = await Promise.all([
+      startP2PSession({
+        signaling: a,
+        rtcConfig: loopbackRtcConfig,
+        iceRecovery: {},
+      }),
+      joinP2PSession({
+        signaling: b,
+        rtcConfig: loopbackRtcConfig,
+        iceRecovery: {},
+      }),
+    ]);
+    const detail = {
+      attempt: 1,
+      maxAttempts: 3,
+      reason: 'failed',
+      nextDelayMs: 0,
+    };
+    const received = vi.fn();
+    host.on('iceReconnecting', received);
+
+    host.peer._emit('iceReconnecting', detail);
+
+    expect(received).toHaveBeenCalledWith(detail, expect.any(CustomEvent));
+    host.dispose();
+    guest.dispose();
+  });
+
   it('delivers reserved audio and nullable video slots in both directions', async () => {
     const { a, b } = createLoopbackSignaling();
     const slots = [

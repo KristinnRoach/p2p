@@ -2,6 +2,7 @@ export function createLoopbackPairSignaling() {
   const offers = {};
   const answers = {};
   const candidates = { host: [], guest: [] };
+  const restartRequests = {};
 
   const side = (self, other) => ({
     sendOffer: async (offer) => {
@@ -33,6 +34,12 @@ export function createLoopbackPairSignaling() {
     },
     onRemoteCandidate: (cb) => {
       candidates[self].push(cb);
+    },
+    sendIceRestartRequest: async (request) => {
+      restartRequests[other]?.(request);
+    },
+    onIceRestartRequest: (cb) => {
+      restartRequests[self] = cb;
     },
   });
 

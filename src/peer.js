@@ -30,12 +30,24 @@ const PEER_STATES = Object.freeze({
   CLOSED: 'closed',
 });
 const START_CLOSED_ERROR = 'Peer: closed before start completed';
+const RECOVERY_CANCELLED = Symbol('ice recovery cancelled');
+const ICE_RECOVERY_DEFAULTS = Object.freeze({
+  maxAttempts: 3,
+  disconnectedGraceMs: 3000,
+  attemptTimeoutMs: 10000,
+  initialBackoffMs: 1000,
+  backoffFactor: 2,
+  maxBackoffMs: 8000,
+});
 
 /**
  * Events dispatched on Peer (via EventTarget):
  *   - 'statechange'   → detail: { state: PeerState, previous: PeerState }
  *   - 'connected'     → fired once when pc.connectionState becomes 'connected'
  *   - 'disconnected'  → fired when connection drops ('disconnected' | 'failed')
+ *   - 'iceReconnecting' → detail: { attempt, maxAttempts, reason, nextDelayMs }
+ *   - 'iceReconnected' → detail: { attempt, durationMs }
+ *   - 'iceReconnectFailed' → detail: { attempts, reason, error }
  *   - 'track'         → detail: { track, streams } (native RTCTrackEvent fields)
  *   - 'datachannel'   → detail: { channel } (initiator: on create; joiner: on ondatachannel)
  *   - 'open'          → data channel opened
@@ -59,6 +71,7 @@ export class Peer extends EventTarget {
    *   channel when it arrives.
    * @param {string}       [options.dataChannelLabel='data']
    * @param {RTCConfiguration} [options.rtcConfig]
+   * @param {false|Object} [options.iceRecovery=false]
    * @param {Function} [options.iceServersProvider]
    * @param {number} [options.iceServersRefreshMarginMs]
    */
@@ -73,6 +86,7 @@ export class Peer extends EventTarget {
       dataChannel = false,
       dataChannelLabel = 'data',
       rtcConfig = defaultRtcConfig,
+      iceRecovery = false,
       iceServersProvider,
       iceServersRefreshMarginMs,
       _iceServersManager,
@@ -96,6 +110,7 @@ export class Peer extends EventTarget {
     this._audioOnly = audioOnly;
     this._wantsDataChannel = dataChannel;
     this._dataChannelLabel = dataChannelLabel;
+    const recoveryOptions = normalizeIceRecoveryOptions(iceRecovery);
     this._ownsIceServersManager = !_iceServersManager;
     this._iceServersManager =
       _iceServersManager ??
@@ -118,6 +133,27 @@ export class Peer extends EventTarget {
     this._listenerMap = new Map();
     this._signalingCleanups = new Set();
     this._remoteTrackInfo = new WeakMap();
+    this._offerChain = Promise.resolve();
+    this._initialOfferApplied = false;
+    this._connectedEmitted = false;
+    this._handledRestartRequestIds = new Set();
+    this._iceRecovery = {
+      options: recoveryOptions,
+      initiallyConnected: false,
+      episodeStartedAt: 0,
+      attempt: 0,
+      reason: null,
+      graceTimer: null,
+      backoffTimer: null,
+      attemptTimer: null,
+      waitResolve: null,
+      waitReject: null,
+      answerApplied: false,
+      iceConnected: false,
+      running: false,
+      exhausted: false,
+      reportedError: null,
+    };
   }
 
   // ─── Public API ───────────────────────────────────────────────────────
@@ -301,6 +337,7 @@ export class Peer extends EventTarget {
     if (this._closed) return;
     this._closed = true;
 
+    this._cancelIceRecovery();
     this._cleanupSignaling();
     this._iceServersManager.removePeerConnection(this._pc);
     if (this._ownsIceServersManager) this._iceServersManager.dispose();
@@ -427,12 +464,23 @@ export class Peer extends EventTarget {
           );
           if (!applied) return;
           this._emitReceiverTracks();
+          if (this._iceRecovery.running) {
+            this._iceRecovery.answerApplied = true;
+            this._iceRecovery.iceConnected = isIceConnected(this._pc);
+            this._resolveRecoveryAttemptIfReady();
+          }
           log('[Peer] Remote answer applied');
         } catch (err) {
-          this._emit('error', { error: err, phase: 'answer' });
+          const phase = this._iceRecovery.running ? 'ice-restart' : 'answer';
+          this._emit('error', { error: err, phase });
+          if (this._iceRecovery.running) {
+            this._iceRecovery.reportedError = err;
+          }
+          this._rejectRecoveryWait(err);
         }
       }),
     );
+    this._subscribeToIceRestartRequests();
 
     const offer = await createOffer(this._pc);
     this._throwIfClosedDuringStart();
@@ -446,57 +494,85 @@ export class Peer extends EventTarget {
 
     this._throwIfClosedDuringStart();
 
-    let offerHandled = false;
     await new Promise((resolve, reject) => {
-      const settle = (fn, value) => {
-        fn(value);
-      };
+      let initialSettled = false;
       this._rememberSignalingCleanup(
-        this._signaling.onOffer(async (offer) => {
-          if (offerHandled || !offer || this._closed) return;
-          offerHandled = true;
-          try {
-            const applied = await setRemoteDescription(
-              this._pc,
-              offer,
-              drainIceCandidateQueue,
-            );
-            if (!applied) return;
-            this._emitReceiverTracks();
-
-            if (this._localTrackSlots.size > 0) {
-              const transceivers = this._pc.getTransceivers();
-              let index = 0;
-              for (const slot of this._localTrackSlots.values()) {
-                const transceiver = transceivers[index++];
-                if (transceiver?.receiver.track.kind !== slot.kind) {
-                  throw new Error(
-                    `Peer: local track slot "${slot.id}" has no matching remote ${slot.kind} transceiver`,
-                  );
-                }
-                transceiver.direction = 'sendrecv';
-                if (this._localStream) {
-                  transceiver.sender.setStreams(this._localStream);
-                }
-                await transceiver.sender.replaceTrack(slot.track);
-                this._localTrackSenders.set(slot.id, transceiver.sender);
+        this._signaling.onOffer((offer) => {
+          this._offerChain = this._offerChain
+            .then(() => this._handleOffer(offer))
+            .then((applied) => {
+              if (!applied || initialSettled) return;
+              initialSettled = true;
+              resolve();
+            })
+            .catch((err) => {
+              const recovering = this._iceRecovery.running;
+              this._emit('error', {
+                error: err,
+                phase: recovering ? 'ice-restart' : 'offer',
+              });
+              if (recovering) this._iceRecovery.reportedError = err;
+              this._rejectRecoveryWait(err);
+              if (!initialSettled) {
+                initialSettled = true;
+                reject(err);
               }
-            }
-
-            const answer = await createAnswer(this._pc);
-            await this._signaling.sendAnswer({
-              type: answer.type,
-              sdp: answer.sdp,
             });
-            log('[Peer] Answer sent (joiner)');
-            settle(resolve);
-          } catch (err) {
-            this._emit('error', { error: err, phase: 'offer' });
-            settle(reject, err);
-          }
         }),
       );
     });
+  }
+
+  async _handleOffer(offer) {
+    if (!offer || this._closed || this._pc.signalingState !== 'stable') {
+      return false;
+    }
+    const applied = await setRemoteDescription(
+      this._pc,
+      offer,
+      drainIceCandidateQueue,
+    );
+    if (!applied || this._closed) return false;
+    this._emitReceiverTracks();
+
+    if (!this._initialOfferApplied) {
+      await this._setupJoinerTrackSlots();
+      if (this._closed) return false;
+      this._initialOfferApplied = true;
+    }
+
+    const answer = await createAnswer(this._pc);
+    if (this._closed) return false;
+    await this._signaling.sendAnswer({
+      type: answer.type,
+      sdp: answer.sdp,
+    });
+    if (this._closed) return false;
+    if (this._iceRecovery.running) {
+      this._iceRecovery.answerApplied = true;
+      this._iceRecovery.iceConnected = isIceConnected(this._pc);
+      this._resolveRecoveryAttemptIfReady();
+    }
+    log('[Peer] Answer sent (joiner)');
+    return true;
+  }
+
+  async _setupJoinerTrackSlots() {
+    if (this._localTrackSlots.size === 0) return;
+    const transceivers = this._pc.getTransceivers();
+    let index = 0;
+    for (const slot of this._localTrackSlots.values()) {
+      const transceiver = transceivers[index++];
+      if (transceiver?.receiver.track.kind !== slot.kind) {
+        throw new Error(
+          `Peer: local track slot "${slot.id}" has no matching remote ${slot.kind} transceiver`,
+        );
+      }
+      transceiver.direction = 'sendrecv';
+      if (this._localStream) transceiver.sender.setStreams(this._localStream);
+      await transceiver.sender.replaceTrack(slot.track);
+      this._localTrackSenders.set(slot.id, transceiver.sender);
+    }
   }
 
   _throwIfClosedDuringStart() {
@@ -551,16 +627,29 @@ export class Peer extends EventTarget {
       if (connState === 'connected') {
         this._emitReceiverTracks();
         this._setState(PEER_STATES.CONNECTED);
-        this._emit('connected', {});
+        this._iceRecovery.initiallyConnected = true;
+        if (!this._connectedEmitted) {
+          this._connectedEmitted = true;
+          this._emit('connected', {});
+        }
       } else if (connState === 'disconnected') {
         this._setState(PEER_STATES.DISCONNECTED);
-        this._emit('disconnected', { reason: 'disconnected' });
+        this._emit('disconnected', {
+          reason: 'disconnected',
+          iceRecoveryScheduled: this._willScheduleIceRecovery(),
+        });
       } else if (connState === 'failed') {
         this._setState(PEER_STATES.FAILED);
-        this._emit('disconnected', { reason: 'failed' });
+        this._emit('disconnected', {
+          reason: 'failed',
+          iceRecoveryScheduled: this._willScheduleIceRecovery(),
+        });
       } else if (connState === 'closed') {
         this._setState(PEER_STATES.CLOSED);
       }
+    });
+    pc.addEventListener('iceconnectionstatechange', () => {
+      this._handleIceConnectionStateChange();
     });
 
     pc.addEventListener('datachannel', (event) => {
@@ -569,6 +658,299 @@ export class Peer extends EventTarget {
         this._bindDataChannel(event.channel);
       }
     });
+  }
+
+  _handleIceConnectionStateChange() {
+    if (!this._iceRecovery.options || this._closed) return;
+    const iceState = this._pc.iceConnectionState;
+    log(`[Peer] iceConnectionState → ${iceState}`);
+
+    if (iceState === 'connected' || iceState === 'completed') {
+      this._clearRecoveryTimer('graceTimer');
+      if (this._iceRecovery.running) {
+        this._iceRecovery.iceConnected = true;
+        if (this._iceRecovery.backoffTimer) {
+          this._finishIceRecovery();
+        } else {
+          this._resolveRecoveryAttemptIfReady();
+        }
+      }
+      return;
+    }
+    if (!this._iceRecovery.initiallyConnected) return;
+    if (iceState === 'failed') {
+      this._clearRecoveryTimer('graceTimer');
+      this._startIceRecovery('failed');
+      return;
+    }
+    if (
+      iceState === 'disconnected' &&
+      !this._iceRecovery.running &&
+      !this._iceRecovery.graceTimer
+    ) {
+      this._iceRecovery.graceTimer = setTimeout(() => {
+        this._iceRecovery.graceTimer = null;
+        if (
+          !this._closed &&
+          this._pc?.iceConnectionState === 'disconnected'
+        ) {
+          this._startIceRecovery('disconnected');
+        }
+      }, this._iceRecovery.options.disconnectedGraceMs);
+    }
+  }
+
+  _willScheduleIceRecovery() {
+    if (!this._iceRecovery.options || !this._iceRecovery.initiallyConnected) {
+      return false;
+    }
+    return (
+      this._iceRecovery.running ||
+      this._pc?.iceConnectionState === 'disconnected' ||
+      this._pc?.iceConnectionState === 'failed'
+    );
+  }
+
+  _subscribeToIceRestartRequests() {
+    if (typeof this._signaling.onIceRestartRequest !== 'function') return;
+    this._rememberSignalingCleanup(
+      this._signaling.onIceRestartRequest((request) => {
+        const requestId = request?.requestId;
+        if (
+          this._closed ||
+          this._role !== 'initiator' ||
+          typeof requestId !== 'string' ||
+          !requestId ||
+          this._handledRestartRequestIds.has(requestId)
+        ) {
+          return;
+        }
+        this._handledRestartRequestIds.add(requestId);
+        if (this._handledRestartRequestIds.size > 32) {
+          this._handledRestartRequestIds.delete(
+            this._handledRestartRequestIds.values().next().value,
+          );
+        }
+        if (this._iceRecovery.options && this._iceRecovery.initiallyConnected) {
+          this._startIceRecovery('remote-request');
+        }
+      }),
+    );
+  }
+
+  _startIceRecovery(reason) {
+    const recovery = this._iceRecovery;
+    if (
+      !recovery.options ||
+      !recovery.initiallyConnected ||
+      recovery.running ||
+      this._closed
+    ) {
+      return;
+    }
+    recovery.running = true;
+    recovery.exhausted = false;
+    recovery.episodeStartedAt = Date.now();
+    recovery.attempt = 0;
+    recovery.reason = reason;
+    recovery.answerApplied = false;
+    recovery.iceConnected = false;
+    recovery.reportedError = null;
+
+    if (
+      this._role === 'joiner' &&
+      typeof this._signaling.sendIceRestartRequest !== 'function'
+    ) {
+      const error = new Error(
+        'Peer: signaling does not support ICE restart requests',
+      );
+      this._emit('error', { error, phase: 'ice-restart-request' });
+      this._failIceRecovery(error);
+      return;
+    }
+    void this._runIceRecovery();
+  }
+
+  async _runIceRecovery() {
+    const recovery = this._iceRecovery;
+    while (
+      recovery.running &&
+      recovery.attempt < recovery.options.maxAttempts
+    ) {
+      const attempt = recovery.attempt + 1;
+      const nextDelayMs =
+        attempt === 1
+          ? 0
+          : Math.min(
+              recovery.options.initialBackoffMs *
+                recovery.options.backoffFactor ** (attempt - 2),
+              recovery.options.maxBackoffMs,
+            );
+      recovery.attempt = attempt;
+      this._emit('iceReconnecting', {
+        attempt,
+        maxAttempts: recovery.options.maxAttempts,
+        reason: recovery.reason,
+        nextDelayMs,
+      });
+
+      try {
+        await this._waitForRecoveryBackoff(nextDelayMs);
+        if (!recovery.running || this._closed) return;
+        recovery.answerApplied = false;
+        recovery.iceConnected = false;
+        recovery.reportedError = null;
+        await this._performIceRecoveryAttempt();
+        if (recovery.running) this._finishIceRecovery();
+        return;
+      } catch (error) {
+        if (error === RECOVERY_CANCELLED || !recovery.running || this._closed) {
+          return;
+        }
+        if (recovery.reportedError !== error) {
+          this._emit('error', {
+            error,
+            phase:
+              this._role === 'initiator'
+                ? 'ice-restart'
+                : 'ice-restart-request',
+          });
+        }
+        if (recovery.attempt >= recovery.options.maxAttempts) {
+          this._failIceRecovery(error);
+          return;
+        }
+      }
+    }
+  }
+
+  async _performIceRecoveryAttempt() {
+    const wait = this._waitForRecoveryAttempt();
+    try {
+      if (this._role === 'initiator') {
+        await this._iceServersManager.ensureFresh('ice-restart');
+        this._pc.restartIce();
+        const offer = await createOffer(this._pc);
+        if (this._closed || !this._iceRecovery.running) {
+          throw RECOVERY_CANCELLED;
+        }
+        await this._signaling.sendOffer({
+          type: offer.type,
+          sdp: offer.sdp,
+        });
+      } else {
+        await this._requestIceRestart();
+      }
+    } catch (error) {
+      this._rejectRecoveryWait(error);
+    }
+    await wait;
+  }
+
+  _requestIceRestart() {
+    return this._signaling.sendIceRestartRequest({
+      requestId: createRequestId(),
+    });
+  }
+
+  _waitForRecoveryBackoff(delayMs) {
+    if (delayMs === 0) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      this._iceRecovery.waitReject = reject;
+      this._iceRecovery.backoffTimer = setTimeout(() => {
+        this._iceRecovery.backoffTimer = null;
+        this._iceRecovery.waitReject = null;
+        resolve();
+      }, delayMs);
+    });
+  }
+
+  _waitForRecoveryAttempt() {
+    return new Promise((resolve, reject) => {
+      this._iceRecovery.waitResolve = resolve;
+      this._iceRecovery.waitReject = reject;
+      this._iceRecovery.attemptTimer = setTimeout(() => {
+        this._iceRecovery.attemptTimer = null;
+        this._iceRecovery.waitResolve = null;
+        this._iceRecovery.waitReject = null;
+        reject(
+          new Error(
+            `Peer: ICE recovery attempt timed out after ${this._iceRecovery.options.attemptTimeoutMs}ms`,
+          ),
+        );
+      }, this._iceRecovery.options.attemptTimeoutMs);
+    });
+  }
+
+  _resolveRecoveryAttemptIfReady() {
+    const recovery = this._iceRecovery;
+    if (
+      !recovery.running ||
+      !recovery.answerApplied ||
+      !recovery.iceConnected ||
+      !recovery.waitResolve
+    ) {
+      return;
+    }
+    const resolve = recovery.waitResolve;
+    this._clearRecoveryTimer('attemptTimer');
+    recovery.waitResolve = null;
+    recovery.waitReject = null;
+    resolve();
+  }
+
+  _rejectRecoveryWait(error) {
+    const reject = this._iceRecovery.waitReject;
+    if (!reject) return;
+    this._clearRecoveryTimer('attemptTimer');
+    this._clearRecoveryTimer('backoffTimer');
+    this._iceRecovery.waitResolve = null;
+    this._iceRecovery.waitReject = null;
+    reject(error);
+  }
+
+  _finishIceRecovery() {
+    const recovery = this._iceRecovery;
+    if (!recovery.running || this._closed) return;
+    const detail = {
+      attempt: recovery.attempt,
+      durationMs: Date.now() - recovery.episodeStartedAt,
+    };
+    recovery.running = false;
+    this._rejectRecoveryWait(RECOVERY_CANCELLED);
+    recovery.attempt = 0;
+    recovery.reason = null;
+    recovery.exhausted = false;
+    this._setState(PEER_STATES.CONNECTED);
+    this._emit('iceReconnected', detail);
+  }
+
+  _failIceRecovery(error) {
+    const recovery = this._iceRecovery;
+    if (!recovery.running || this._closed) return;
+    const detail = {
+      attempts: recovery.attempt,
+      reason: recovery.reason,
+      error,
+    };
+    recovery.running = false;
+    recovery.exhausted = true;
+    this._rejectRecoveryWait(RECOVERY_CANCELLED);
+    this._setState(PEER_STATES.FAILED);
+    this._emit('iceReconnectFailed', detail);
+  }
+
+  _cancelIceRecovery() {
+    const recovery = this._iceRecovery;
+    recovery.running = false;
+    this._clearRecoveryTimer('graceTimer');
+    this._rejectRecoveryWait(RECOVERY_CANCELLED);
+  }
+
+  _clearRecoveryTimer(name) {
+    const timer = this._iceRecovery[name];
+    if (timer) clearTimeout(timer);
+    this._iceRecovery[name] = null;
   }
 
   _bindDataChannel(channel) {
@@ -710,6 +1092,13 @@ function sameStreams(left, right) {
   return left.every((stream, index) => stream === right[index]);
 }
 
+function isIceConnected(pc) {
+  return (
+    pc?.iceConnectionState === 'connected' ||
+    pc?.iceConnectionState === 'completed'
+  );
+}
+
 export { PEER_STATES };
 
 function createAbortError() {
@@ -739,4 +1128,54 @@ function assertSignaling(signaling) {
       throw new Error(`Peer: signaling channel missing method "${name}"`);
     }
   }
+}
+
+function normalizeIceRecoveryOptions(value) {
+  if (value == null || value === false) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('Peer: iceRecovery must be false or an options object');
+  }
+  const options = { ...ICE_RECOVERY_DEFAULTS, ...value };
+  for (const name of [
+    'maxAttempts',
+    'disconnectedGraceMs',
+    'attemptTimeoutMs',
+    'initialBackoffMs',
+    'backoffFactor',
+    'maxBackoffMs',
+  ]) {
+    if (typeof options[name] !== 'number' || !Number.isFinite(options[name])) {
+      throw new TypeError(`Peer: iceRecovery.${name} must be a finite number`);
+    }
+  }
+  if (!Number.isInteger(options.maxAttempts) || options.maxAttempts <= 0) {
+    throw new TypeError(
+      'Peer: iceRecovery.maxAttempts must be a positive integer',
+    );
+  }
+  for (const name of [
+    'disconnectedGraceMs',
+    'initialBackoffMs',
+    'maxBackoffMs',
+  ]) {
+    if (options[name] < 0) {
+      throw new TypeError(`Peer: iceRecovery.${name} must be non-negative`);
+    }
+  }
+  if (options.attemptTimeoutMs <= 0) {
+    throw new TypeError(
+      'Peer: iceRecovery.attemptTimeoutMs must be a positive number',
+    );
+  }
+  if (options.backoffFactor < 1) {
+    throw new TypeError('Peer: iceRecovery.backoffFactor must be at least 1');
+  }
+  return Object.freeze(options);
+}
+
+function createRequestId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }

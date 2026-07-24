@@ -72,6 +72,25 @@ describe('Peer', () => {
       peer.dispose();
     });
 
+    it.each([
+      [{ maxAttempts: 0 }, 'maxAttempts'],
+      [{ maxAttempts: 1.5 }, 'maxAttempts'],
+      [{ disconnectedGraceMs: -1 }, 'disconnectedGraceMs'],
+      [{ attemptTimeoutMs: 0 }, 'attemptTimeoutMs'],
+      [{ attemptTimeoutMs: Infinity }, 'attemptTimeoutMs'],
+      [{ backoffFactor: 0.5 }, 'backoffFactor'],
+    ])('rejects invalid ICE recovery option %o', (iceRecovery, name) => {
+      const { a } = createLoopbackSignaling();
+      expect(
+        () =>
+          new Peer({
+            role: 'initiator',
+            signaling: a,
+            iceRecovery,
+          }),
+      ).toThrow(new RegExp(name));
+    });
+
     it('re-emits a native track event that upgrades fallback streams', () => {
       const { a } = createLoopbackSignaling();
       const peer = new Peer({ role: 'initiator', signaling: a });
@@ -98,6 +117,100 @@ describe('Peer', () => {
   });
 
   describe('data-only peer negotiation', () => {
+    itNeedsDataChannelLoopback(
+      'lets a joiner request a real ICE restart on the existing connection',
+      async () => {
+        const { a, b } = createLoopbackSignaling();
+        const sendOffer = a.sendOffer;
+        const sendAnswer = b.sendAnswer;
+        a.sendOffer = vi.fn((offer) => sendOffer(offer));
+        b.sendAnswer = vi.fn((answer) => sendAnswer(answer));
+        const initiator = new Peer({
+          role: 'initiator',
+          signaling: a,
+          dataChannel: true,
+          rtcConfig: loopbackRtcConfig,
+          iceRecovery: { maxAttempts: 1, attemptTimeoutMs: 3000 },
+        });
+        const joiner = new Peer({
+          role: 'joiner',
+          signaling: b,
+          rtcConfig: loopbackRtcConfig,
+          iceRecovery: { maxAttempts: 1, attemptTimeoutMs: 3000 },
+        });
+        peers = [initiator, joiner];
+        const connected = vi.fn();
+        initiator.on('connected', connected);
+
+        await withTimeout(
+          Promise.all([initiator.start(), joiner.start()]),
+          5000,
+          'initial SDP',
+        );
+        await Promise.all([
+          waitForIceConnected(initiator.pc),
+          waitForIceConnected(joiner.pc),
+        ]);
+        if (initiator.state !== PEER_STATES.CONNECTED) {
+          await withTimeout(
+            new Promise((resolve) => initiator.once('connected', resolve)),
+            5000,
+            'initial connected event',
+          );
+        }
+        if (joiner.state !== PEER_STATES.CONNECTED) {
+          await withTimeout(
+            new Promise((resolve) => joiner.once('connected', resolve)),
+            5000,
+            'joiner connected event',
+          );
+        }
+        const pc = initiator.pc;
+        const initialUfrag = getIceUfrag(pc.localDescription?.sdp);
+        const recoveryResult = new Promise((resolve) => {
+          initiator.once('iceReconnected', (detail) =>
+            resolve({ type: 'reconnected', detail }),
+          );
+          initiator.once('iceReconnectFailed', (detail) =>
+            resolve({ type: 'failed', detail }),
+          );
+        });
+        const joinerRecovery = new Promise((resolve) => {
+          joiner.once('iceReconnected', resolve);
+        });
+
+        joiner._startIceRecovery('failed');
+        const [result] = await withTimeout(
+          Promise.all([recoveryResult, joinerRecovery]),
+          5000,
+          'ICE recovery events',
+        );
+        expect(result.type, result.detail.error?.message).toBe('reconnected');
+
+        expect(initiator.pc).toBe(pc);
+        expect(a.sendOffer).toHaveBeenCalledTimes(2);
+        expect(b.sendAnswer).toHaveBeenCalledTimes(2);
+        expect(connected).toHaveBeenCalledTimes(1);
+        expect(['connected', 'completed']).toContain(pc.iceConnectionState);
+        expect(['connected', 'completed']).toContain(
+          joiner.pc.iceConnectionState,
+        );
+        const restartedUfrag = getIceUfrag(pc.localDescription?.sdp);
+        if (initialUfrag && restartedUfrag) {
+          expect(restartedUfrag).not.toBe(initialUfrag);
+        }
+        expect(initiator._iceRecovery.attempt).toBe(0);
+
+        const secondRecovery = new Promise((resolve) => {
+          initiator.once('iceReconnected', resolve);
+        });
+        initiator._startIceRecovery('failed');
+        await withTimeout(secondRecovery, 5000, 'second ICE recovery');
+        expect(a.sendOffer).toHaveBeenCalledTimes(3);
+        expect(initiator._iceRecovery.attempt).toBe(0);
+      },
+    );
+
     itNeedsDataChannelLoopback(
       'exchanges offer/answer and opens a data channel',
       async () => {
@@ -402,6 +515,225 @@ describe('Peer', () => {
     });
   });
 
+  describe('ICE recovery policy', () => {
+    it('keeps recovery disabled when the option is omitted or false', () => {
+      for (const iceRecovery of [undefined, false]) {
+        const { a } = createLoopbackSignaling();
+        const peer = new Peer({
+          role: 'initiator',
+          signaling: a,
+          iceRecovery,
+        });
+        peer._pc = { iceConnectionState: 'failed' };
+        peer._iceRecovery.initiallyConnected = true;
+        peer._startIceRecovery = vi.fn();
+
+        peer._handleIceConnectionStateChange();
+
+        expect(peer._startIceRecovery).not.toHaveBeenCalled();
+        peer.dispose();
+      }
+    });
+
+    it('ignores ICE failures before the initial connection', () => {
+      const { a } = createLoopbackSignaling();
+      const peer = new Peer({
+        role: 'initiator',
+        signaling: a,
+        iceRecovery: {},
+      });
+      peer._pc = { iceConnectionState: 'failed' };
+      peer._startIceRecovery = vi.fn();
+
+      peer._handleIceConnectionStateChange();
+
+      expect(peer._startIceRecovery).not.toHaveBeenCalled();
+      peer.dispose();
+    });
+
+    it('retries with backoff, caps attempts, and emits one terminal event', async () => {
+      vi.useFakeTimers();
+      const { a } = createLoopbackSignaling();
+      const peer = new Peer({
+        role: 'initiator',
+        signaling: a,
+        iceRecovery: {
+          maxAttempts: 2,
+          attemptTimeoutMs: 10,
+          initialBackoffMs: 5,
+        },
+      });
+      const restartIce = vi.fn();
+      peer._pc = {
+        iceConnectionState: 'failed',
+        restartIce,
+        createOffer: vi.fn(async () => ({ type: 'offer', sdp: 'offer' })),
+        setLocalDescription: vi.fn(),
+      };
+      peer._iceRecovery.initiallyConnected = true;
+      const reconnecting = vi.fn();
+      const failed = vi.fn();
+      peer.on('iceReconnecting', reconnecting);
+      peer.on('iceReconnectFailed', failed);
+
+      peer._startIceRecovery('failed');
+      await vi.runAllTimersAsync();
+
+      expect(restartIce).toHaveBeenCalledTimes(2);
+      expect(reconnecting.mock.calls.map(([detail]) => detail.nextDelayMs)).toEqual([
+        0,
+        5,
+      ]);
+      expect(failed).toHaveBeenCalledTimes(1);
+      expect(failed.mock.calls[0][0]).toMatchObject({
+        attempts: 2,
+        reason: 'failed',
+      });
+      peer.dispose();
+      vi.useRealTimers();
+    });
+
+    it('refreshes TURN credentials before restarting ICE', async () => {
+      const refreshError = new Error('credentials expired');
+      const manager = {
+        ensureFresh: vi.fn(() => Promise.reject(refreshError)),
+        removePeerConnection: vi.fn(),
+        dispose: vi.fn(),
+      };
+      const { a } = createLoopbackSignaling();
+      const peer = new Peer({
+        role: 'initiator',
+        signaling: a,
+        iceRecovery: { maxAttempts: 1 },
+        _iceServersManager: manager,
+      });
+      const restartIce = vi.fn();
+      peer._pc = { iceConnectionState: 'failed', restartIce };
+      peer._iceRecovery.initiallyConnected = true;
+      const onError = vi.fn();
+      peer.on('error', onError);
+      const failed = new Promise((resolve) => {
+        peer.once('iceReconnectFailed', resolve);
+      });
+
+      peer._startIceRecovery('failed');
+      await failed;
+
+      expect(manager.ensureFresh).toHaveBeenCalledWith('ice-restart');
+      expect(restartIce).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledWith(
+        { error: refreshError, phase: 'ice-restart' },
+        expect.any(CustomEvent),
+      );
+      peer.dispose();
+    });
+
+    it('cancels disconnected grace without consuming an attempt', async () => {
+      vi.useFakeTimers();
+      const { a } = createLoopbackSignaling();
+      const peer = new Peer({
+        role: 'initiator',
+        signaling: a,
+        iceRecovery: { disconnectedGraceMs: 50 },
+      });
+      peer._pc = { iceConnectionState: 'disconnected' };
+      peer._iceRecovery.initiallyConnected = true;
+      const reconnecting = vi.fn();
+      peer.on('iceReconnecting', reconnecting);
+
+      peer._handleIceConnectionStateChange();
+      peer._pc.iceConnectionState = 'connected';
+      peer._handleIceConnectionStateChange();
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(reconnecting).not.toHaveBeenCalled();
+      expect(peer._iceRecovery.attempt).toBe(0);
+      peer.dispose();
+      vi.useRealTimers();
+    });
+
+    it('coalesces repeated failures and disposal cancels pending work', async () => {
+      vi.useFakeTimers();
+      const { a } = createLoopbackSignaling();
+      const peer = new Peer({
+        role: 'initiator',
+        signaling: a,
+        iceRecovery: { attemptTimeoutMs: 100 },
+      });
+      peer._pc = {
+        iceConnectionState: 'failed',
+        restartIce: vi.fn(),
+        createOffer: vi.fn(async () => ({ type: 'offer', sdp: 'offer' })),
+        setLocalDescription: vi.fn(),
+      };
+      peer._iceRecovery.initiallyConnected = true;
+      const reconnecting = vi.fn();
+      const failed = vi.fn();
+      peer.on('iceReconnecting', reconnecting);
+      peer.on('iceReconnectFailed', failed);
+
+      peer._handleIceConnectionStateChange();
+      peer._handleIceConnectionStateChange();
+      await Promise.resolve();
+      expect(reconnecting).toHaveBeenCalledOnce();
+
+      peer.dispose();
+      await vi.runAllTimersAsync();
+
+      expect(failed).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('fails visibly when a recovering joiner cannot request a restart', () => {
+      const { b } = createLoopbackSignaling();
+      delete b.sendIceRestartRequest;
+      delete b.onIceRestartRequest;
+      const peer = new Peer({
+        role: 'joiner',
+        signaling: b,
+        iceRecovery: {},
+      });
+      peer._pc = { iceConnectionState: 'failed' };
+      peer._iceRecovery.initiallyConnected = true;
+      const onError = vi.fn();
+      const failed = vi.fn();
+      peer.on('error', onError);
+      peer.on('iceReconnectFailed', failed);
+
+      peer._startIceRecovery('failed');
+
+      expect(onError).toHaveBeenCalledWith(
+        { error: expect.any(Error), phase: 'ice-restart-request' },
+        expect.any(CustomEvent),
+      );
+      expect(failed).toHaveBeenCalledOnce();
+      peer.dispose();
+    });
+
+    it('ignores replayed ICE restart request IDs', () => {
+      let onRequest;
+      const { a } = createLoopbackSignaling();
+      a.onIceRestartRequest = (callback) => {
+        onRequest = callback;
+      };
+      const peer = new Peer({
+        role: 'initiator',
+        signaling: a,
+        iceRecovery: {},
+      });
+      peer._iceRecovery.initiallyConnected = true;
+      peer._startIceRecovery = vi.fn();
+      peer._subscribeToIceRestartRequests();
+
+      onRequest({ requestId: 'same-request' });
+      onRequest({ requestId: 'same-request' });
+
+      expect(peer._startIceRecovery).toHaveBeenCalledOnce();
+      expect(peer._startIceRecovery).toHaveBeenCalledWith('remote-request');
+      peer.dispose();
+    });
+  });
+
   describe('on/once sugar', () => {
     it('on() returns an unsubscribe function', () => {
       const { a } = createLoopbackSignaling();
@@ -562,3 +894,38 @@ describe('Peer', () => {
     });
   });
 });
+
+function getIceUfrag(sdp = '') {
+  return /^a=ice-ufrag:(.+)$/m.exec(sdp)?.[1]?.trim() ?? null;
+}
+
+function waitForIceConnected(pc, timeoutMs = 5000) {
+  if (['connected', 'completed'].includes(pc.iceConnectionState)) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pc.removeEventListener('iceconnectionstatechange', onChange);
+      reject(new Error('Timed out waiting for ICE connection'));
+    }, timeoutMs);
+    const onChange = () => {
+      if (!['connected', 'completed'].includes(pc.iceConnectionState)) return;
+      clearTimeout(timer);
+      pc.removeEventListener('iceconnectionstatechange', onChange);
+      resolve();
+    };
+    pc.addEventListener('iceconnectionstatechange', onChange);
+  });
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(
+        () => reject(new Error(`Timed out waiting for ${label}`)),
+        timeoutMs,
+      );
+    }),
+  ]);
+}

@@ -75,10 +75,19 @@ function createDeferred() {
 }
 
 function createResolvedSession() {
+  const listeners = new Map();
   return {
     dispose: vi.fn(),
     dataChannel: null,
     setLocalTrack: vi.fn(),
+    on: vi.fn((type, callback) => {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(callback);
+      return () => listeners.get(type)?.delete(callback);
+    }),
+    emit(type, detail) {
+      for (const callback of listeners.get(type) ?? []) callback(detail);
+    },
   };
 }
 
@@ -106,6 +115,47 @@ describe('P2PRoom', () => {
   afterEach(() => {
     vi.useRealTimers();
     setLogger(() => {});
+  });
+
+  it('passes ICE recovery to pairs and scopes forwarded events', async () => {
+    const session = createResolvedSession();
+    sessionMocks.startP2PSession.mockResolvedValue(session);
+    const signaling = createTestRoomSignaling();
+    const callback = vi.fn();
+    const room = await joinP2PRoom({
+      signaling,
+      peerId: 'a',
+      iceRecovery: { maxAttempts: 2 },
+      onIceReconnecting: callback,
+    });
+
+    signaling.emitPeers(['b']);
+    await flushAsyncWork();
+    session.emit('iceReconnecting', {
+      attempt: 1,
+      maxAttempts: 2,
+      reason: 'failed',
+      nextDelayMs: 0,
+    });
+
+    expect(sessionMocks.startP2PSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        iceRecovery: { maxAttempts: 2 },
+      }),
+    );
+    expect(callback).toHaveBeenCalledWith(
+      {
+        attempt: 1,
+        maxAttempts: 2,
+        reason: 'failed',
+        nextDelayMs: 0,
+        memberId: 'b',
+        peerId: 'b',
+      },
+      expect.any(CustomEvent),
+    );
+
+    await room.dispose();
   });
 
   it('shares one ICE server lifecycle across room pairs and keeps it on leave', async () => {

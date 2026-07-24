@@ -1,6 +1,12 @@
 export type {
   DataChannelDetail,
+  DisconnectedDetail,
   ErrorDetail,
+  IceReconnectFailedDetail,
+  IceReconnectedDetail,
+  IceReconnectingDetail,
+  IceRecoveryConfig,
+  IceRecoveryOptions,
   IceServersProvider,
   IceServersProviderReason,
   IceServersProviderResult,
