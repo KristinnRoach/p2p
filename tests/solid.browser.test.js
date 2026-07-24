@@ -34,7 +34,7 @@ function createFakeRoom(overrides = {}) {
       room.emit('statechange', { previous: 'watching', state: 'joined' });
     }),
     leave: vi.fn(),
-    close: vi.fn(),
+    dispose: vi.fn(() => Promise.resolve()),
     send: vi.fn(),
     broadcast: vi.fn(() => 1),
     on(type, callback) {
@@ -48,6 +48,10 @@ function createFakeRoom(overrides = {}) {
     ...overrides,
   };
   return room;
+}
+
+async function flushMicrotasks(times = 8) {
+  for (let i = 0; i < times; i += 1) await Promise.resolve();
 }
 
 function createFakeVideo({ play } = {}) {
@@ -202,7 +206,244 @@ describe('useP2PRoom', () => {
     dispose();
   });
 
-  it('stores local stream errors and closes the room', async () => {
+  it('waits for the previous room to dispose before creating a replacement', async () => {
+    let resolveDispose;
+    const firstRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveDispose = resolve;
+          }),
+      ),
+    });
+    const secondRoom = createFakeRoom();
+    roomMocks.watchP2PRoom
+      .mockResolvedValueOnce(firstRoom)
+      .mockResolvedValueOnce(secondRoom);
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+    const replacement = solidRoom.join({
+      signaling: {},
+      peerId: 'peer-a',
+    });
+    await Promise.resolve();
+
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledOnce();
+
+    resolveDispose();
+    await replacement;
+
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+    expect(secondRoom.join).toHaveBeenCalledOnce();
+
+    cleanup();
+  });
+
+  it('serializes a rejoin against an in-flight dispose', async () => {
+    let resolveDispose;
+    const firstRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveDispose = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom
+      .mockResolvedValueOnce(firstRoom)
+      .mockResolvedValueOnce(createFakeRoom());
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+
+    const firstDispose = solidRoom.dispose();
+    let secondSettled = false;
+    const secondDispose = solidRoom.dispose().then(() => {
+      secondSettled = true;
+    });
+    const replacement = solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+    await Promise.resolve();
+
+    expect(secondSettled).toBe(false);
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledOnce();
+
+    resolveDispose();
+    await Promise.all([firstDispose, secondDispose, replacement]);
+
+    expect(secondSettled).toBe(true);
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+
+    cleanup();
+  });
+
+  it('awaits teardown of a room superseded before it is published', async () => {
+    let resolveCreate;
+    let resolveDispose;
+    const staleRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveDispose = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreate = resolve;
+      }),
+    );
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+
+    let disposed = false;
+    const disposal = solidRoom.dispose().then(() => {
+      disposed = true;
+    });
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    resolveCreate(staleRoom);
+    await vi.waitFor(() => expect(staleRoom.dispose).toHaveBeenCalledOnce());
+
+    expect(disposed).toBe(false);
+
+    resolveDispose();
+    await disposal;
+
+    expect(disposed).toBe(true);
+    expect(solidRoom.room()).toBeUndefined();
+
+    cleanup();
+  });
+
+  it('holds the barrier when one tracked disposal rejects and another is pending', async () => {
+    let resolveCreate;
+    let resolveSlowDispose;
+    const firstRoom = createFakeRoom({
+      dispose: vi.fn(() => Promise.reject(new Error('leave failed'))),
+    });
+    const staleRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveSlowDispose = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom
+      .mockResolvedValueOnce(firstRoom)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(createFakeRoom());
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+
+    // supersedes firstRoom (rejecting teardown) and leaves a creation in flight
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+    solidRoom.dispose().catch(() => {});
+
+    resolveCreate(staleRoom);
+    await vi.waitFor(() => expect(staleRoom.dispose).toHaveBeenCalledOnce());
+
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+
+    resolveSlowDispose();
+    await vi.waitFor(() =>
+      expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(3),
+    );
+
+    cleanup();
+  });
+
+  it('keeps teardown registered by a stale watch after a newer watch publishes', async () => {
+    let resolveStaleCreate;
+    let resolveNewCreate;
+    let resolveStaleDispose;
+    const staleRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveStaleDispose = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveStaleCreate = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveNewCreate = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(createFakeRoom());
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+
+    // stale creation settles first and registers its teardown
+    resolveStaleCreate(staleRoom);
+    await vi.waitFor(() => expect(staleRoom.dispose).toHaveBeenCalledOnce());
+
+    const newRoom = createFakeRoom();
+    resolveNewCreate(newRoom);
+    await vi.waitFor(() => expect(solidRoom.room()).toBe(newRoom));
+
+    // publishing must not drop the stale teardown the next watch has to wait on
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+
+    resolveStaleDispose();
+    await vi.waitFor(() =>
+      expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(3),
+    );
+
+    cleanup();
+  });
+
+  it('stores local stream errors and disposes the room', async () => {
     const error = new Error('local stream failed');
     error.name = 'LocalStreamError';
     const fakeRoom = createFakeRoom({
@@ -225,7 +466,7 @@ describe('useP2PRoom', () => {
       }),
     ).rejects.toBe(error);
 
-    expect(fakeRoom.close).toHaveBeenCalledOnce();
+    expect(fakeRoom.dispose).toHaveBeenCalledOnce();
     expect(solidRoom.room()).toBeUndefined();
     expect(solidRoom.state()).toBe('error');
     expect(solidRoom.error()).toBe(error);
@@ -454,7 +695,7 @@ describe('useP2PRoom', () => {
     });
   });
 
-  it('ignores stale join completions after the room is closed', async () => {
+  it('ignores stale join completions after the room is disposed', async () => {
     let resolveJoin;
     const fakeRoom = createFakeRoom({
       join: vi.fn(
@@ -479,7 +720,7 @@ describe('useP2PRoom', () => {
 
     await vi.waitFor(() => expect(fakeRoom.join).toHaveBeenCalledOnce());
 
-    solidRoom.close();
+    await solidRoom.dispose();
 
     fakeRoom.state = 'joined';
     fakeRoom.memberCount = 1;

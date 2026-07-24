@@ -1,4 +1,4 @@
-import { createSignal, onCleanup } from 'solid-js';
+import { createSignal, onCleanup, untrack } from 'solid-js';
 import { isLocalStreamError, isRoomFullError, watchP2PRoom } from '../room.js';
 import { setLogger } from '../logger.js';
 
@@ -119,6 +119,9 @@ export function useP2PRoom() {
   const [dataChannels, setDataChannels] = createSignal(new Map());
   let listenerCleanup = null;
   let currentRunId = 0;
+  // the room signal is cleared before teardown settles, so keep the in-flight
+  // dispose here to serialize later transitions against it
+  let pendingDispose = null;
 
   function setRoomError(cause) {
     const roomFull = isRoomFullError(cause);
@@ -160,12 +163,33 @@ export function useP2PRoom() {
     setDataChannels(new Map());
   }
 
-  function closeCurrentRoom(nextState = 'idle') {
+  // a room superseded before it is published is torn down by watchRoom, so
+  // teardown has to accumulate here rather than replace what is already tracked
+  function trackDispose(disposePromise) {
+    // allSettled, not all: the barrier has to outlast a teardown that rejects
+    // while another is still running
+    const tracked = Promise.allSettled([pendingDispose, disposePromise]).then(
+      (results) => {
+        const failed = results.find((result) => result.status === 'rejected');
+        if (failed) throw failed.reason;
+      },
+    );
+    pendingDispose = tracked;
+    // tracked teardown may never be awaited; keep failures off the unhandled path
+    tracked.catch(() => {});
+    return tracked;
+  }
+
+  function disposeCurrentRoom(nextState = 'idle') {
     currentRunId += 1;
     clearListenerCleanup();
-    room()?.close();
+    // a watch still in flight registers its teardown only once it settles
+    const pendingWatch = untrack(ready);
+    const currentRoom = room();
+    if (currentRoom) trackDispose(currentRoom.dispose());
     setReady(Promise.resolve(undefined));
     resetRoomSignals(nextState);
+    return pendingWatch.then(() => pendingDispose ?? undefined);
   }
 
   function syncRoomSignals(nextRoom) {
@@ -232,18 +256,25 @@ export function useP2PRoom() {
     const runId = currentRunId;
 
     clearListenerCleanup();
-    room()?.close();
+    const currentRoom = room();
+    if (currentRoom) trackDispose(currentRoom.dispose());
+    const trackedDispose = pendingDispose;
+    const previousDispose = trackedDispose?.catch(() => {}) ?? Promise.resolve();
     resetRoomSignals('creating');
     setError(undefined);
     setErrorKind(undefined);
 
-    const roomPromise = watchP2PRoom(roomOptions)
+    const roomPromise = previousDispose
+      .then(() => watchP2PRoom(roomOptions))
       .then((createdRoom) => {
         if (runId !== currentRunId) {
-          createdRoom.close();
+          trackDispose(createdRoom.dispose());
           return undefined;
         }
 
+        // an older watch may have registered teardown while this one was
+        // creating; only clear the barrier this run already waited on
+        if (pendingDispose === trackedDispose) pendingDispose = null;
         setRoom(createdRoom);
         setState(createdRoom.state);
         syncRoomSignals(createdRoom);
@@ -261,7 +292,9 @@ export function useP2PRoom() {
     return roomPromise;
   }
 
-  onCleanup(closeCurrentRoom);
+  onCleanup(() => {
+    void disposeCurrentRoom().catch(() => {});
+  });
 
   async function join(options) {
     const currentRoom = await watchRoom(options);
@@ -278,7 +311,9 @@ export function useP2PRoom() {
     } catch (cause) {
       if (runId !== currentRunId || room() !== currentRoom) return undefined;
       setRoomError(cause);
-      if (isLocalStreamError(cause)) closeCurrentRoom('error');
+      if (isLocalStreamError(cause)) {
+        void disposeCurrentRoom('error').catch(() => {});
+      }
       throw cause;
     }
   }
@@ -290,8 +325,8 @@ export function useP2PRoom() {
     syncRoomSignals(currentRoom);
   }
 
-  function close() {
-    closeCurrentRoom();
+  function dispose() {
+    return disposeCurrentRoom();
   }
 
   return {
@@ -309,7 +344,7 @@ export function useP2PRoom() {
     isFull,
     join,
     leave,
-    close,
+    dispose,
     dataChannels,
     watch: (options) => watchRoom(options),
     send: (memberId, data) => room()?.send(memberId, data),

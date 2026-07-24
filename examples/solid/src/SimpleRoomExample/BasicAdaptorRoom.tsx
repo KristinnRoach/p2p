@@ -26,7 +26,9 @@ export default function Room() {
     });
   }
 
-  onCleanup(p2p.close);
+  onCleanup(() => {
+    void p2p.dispose().catch(console.error);
+  });
 
   return (
     <main class='room'>
@@ -52,7 +54,11 @@ export default function Room() {
         >
           {isJoining() ? 'Joining...' : 'Join room'}
         </button>
-        <button type='button' onClick={p2p.close} disabled={!isJoined()}>
+        <button
+          type='button'
+          onClick={() => void p2p.dispose().catch(console.error)}
+          disabled={!isJoined()}
+        >
           Leave
         </button>
       </form>

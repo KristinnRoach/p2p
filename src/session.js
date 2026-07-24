@@ -29,7 +29,7 @@ async function createP2PSession(role, options) {
     await session.ready;
     return session;
   } catch (error) {
-    session.close();
+    session.dispose();
     throw error;
   }
 }
@@ -122,8 +122,8 @@ class P2PSession extends EventTarget {
     return this.peer.setLocalTrack(slotId, track);
   }
 
-  close() {
-    this.peer.close();
+  dispose() {
+    this.peer.dispose();
     for (const cleanup of this._cleanups.splice(0)) {
       cleanup();
     }

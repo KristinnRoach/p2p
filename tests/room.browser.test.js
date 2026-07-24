@@ -76,7 +76,7 @@ function createDeferred() {
 
 function createResolvedSession() {
   return {
-    close: vi.fn(),
+    dispose: vi.fn(),
     dataChannel: null,
     setLocalTrack: vi.fn(),
   };
@@ -158,7 +158,7 @@ describe('P2PRoom', () => {
       expect(first.readyState).toBe('live');
       expect(second.readyState).toBe('live');
     } finally {
-      room.close();
+      await room.dispose();
       first.stop();
       second.stop();
     }
@@ -186,7 +186,7 @@ describe('P2PRoom', () => {
         }),
       );
     } finally {
-      room.close();
+      await room.dispose();
       track.stop();
     }
   });
@@ -232,7 +232,7 @@ describe('P2PRoom', () => {
       expect(session.setLocalTrack).toHaveBeenCalledTimes(2);
       expect(room.pairs.get('b')).toBe(session);
     } finally {
-      room.close();
+      await room.dispose();
       first.stop();
       second.stop();
     }
@@ -255,7 +255,7 @@ describe('P2PRoom', () => {
         'must be audio, got video',
       );
     } finally {
-      room.close();
+      await room.dispose();
       video.stop();
     }
   });
@@ -271,7 +271,7 @@ describe('P2PRoom', () => {
       localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
     });
 
-    room.close();
+    await room.dispose();
     await expect(room.setLocalTrack('primary-video', track)).rejects.toThrow(
       'P2PRoom.setLocalTrack: room is closed',
     );
@@ -323,7 +323,7 @@ describe('P2PRoom', () => {
         }),
       );
     } finally {
-      room.close();
+      await room.dispose();
       track.stop();
     }
   });
@@ -350,7 +350,7 @@ describe('P2PRoom', () => {
       expect(ownedTrack.readyState).toBe('ended');
       expect(replacement.readyState).toBe('live');
     } finally {
-      room.close();
+      await room.dispose();
       replacement.stop();
     }
   });
@@ -372,7 +372,7 @@ describe('P2PRoom', () => {
 
     expect(initialTrack.readyState).toBe('ended');
     expect(laterTrack.readyState).toBe('ended');
-    room.close();
+    await room.dispose();
   });
 
   it('watches peers without joining presence or connecting to peers', async () => {
@@ -392,8 +392,8 @@ describe('P2PRoom', () => {
     expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
     expect(sessionMocks.startP2PSession).not.toHaveBeenCalled();
 
-    room.close();
-    room.close();
+    await room.dispose();
+    await room.dispose();
 
     expect(signaling.leave).not.toHaveBeenCalled();
     expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
@@ -436,7 +436,7 @@ describe('P2PRoom', () => {
       { previous: 'leaving', state: 'watching' },
     ]);
 
-    room.close();
+    await room.dispose();
 
     expect(room.state).toBe('closed');
     expect(stateChanges).toEqual([
@@ -471,7 +471,7 @@ describe('P2PRoom', () => {
     expect(signaling.join).not.toHaveBeenCalled();
     expect(room.state).toBe('watching');
 
-    room.close();
+    await room.dispose();
   });
 
   it('exposes room members and emits membersChanged', async () => {
@@ -524,7 +524,7 @@ describe('P2PRoom', () => {
       },
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('exposes structured member presence data without changing members', async () => {
@@ -565,7 +565,7 @@ describe('P2PRoom', () => {
       { memberId: 'b', data: { displayName: 'Ben', ringing: true } },
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('de-dupes duplicate presence snapshots by memberId', async () => {
@@ -597,7 +597,7 @@ describe('P2PRoom', () => {
       ['[Room] Duplicate memberId(s) in presence snapshot ignored: b, c'],
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('rebuilds the connection when the same peerId leaves and rejoins', async () => {
@@ -619,7 +619,7 @@ describe('P2PRoom', () => {
     // 'b' drops out of presence (reload, disconnect, or TTL expiry).
     signaling.emitPeers([]);
     await flushAsyncWork();
-    expect(sessions[0].close).toHaveBeenCalledOnce();
+    expect(sessions[0].dispose).toHaveBeenCalledOnce();
     expect(room.pairs.has('b')).toBe(false);
 
     // The same peerId returns: a fresh session is built, not the stale one.
@@ -628,7 +628,7 @@ describe('P2PRoom', () => {
     expect(sessionMocks.startP2PSession).toHaveBeenCalledTimes(2);
     expect(room.pairs.has('b')).toBe(true);
 
-    room.close();
+    await room.dispose();
   });
 
   it('emits membersChanged on a data-only change with unchanged membership', async () => {
@@ -669,7 +669,7 @@ describe('P2PRoom', () => {
     await flushAsyncWork();
     expect(membersChanged).toHaveLength(2);
 
-    room.close();
+    await room.dispose();
   });
 
   it('passes initial and updated presence data to signaling', async () => {
@@ -694,7 +694,7 @@ describe('P2PRoom', () => {
       callState: 'joined',
     });
 
-    room.close();
+    await room.dispose();
   });
 
   it('exposes remote member streams in room member order', async () => {
@@ -720,7 +720,7 @@ describe('P2PRoom', () => {
       { memberId: 'b', stream: secondStream },
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('defensively de-dupes remote member streams by memberId', async () => {
@@ -736,7 +736,7 @@ describe('P2PRoom', () => {
 
     expect(room.remoteMemberStreams).toEqual([{ memberId: 'b', stream }]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('keeps remote member stream entries stable when member order changes', async () => {
@@ -768,7 +768,7 @@ describe('P2PRoom', () => {
     expect(room.remoteMemberStreams[0]).toBe(previousStreams[1]);
     expect(room.remoteMemberStreams[1]).toBe(previousStreams[0]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('emits memberStreamRemoved (and peerStreamRemoved) when a member with a stream leaves', async () => {
@@ -797,7 +797,7 @@ describe('P2PRoom', () => {
     expect(removed).toEqual([{ memberId: 'b', stream }]);
     expect(peerRemoved).toEqual([{ peerId: 'b', memberId: 'b', stream }]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('does not emit memberStreamRemoved for a member that never had a stream', async () => {
@@ -819,7 +819,7 @@ describe('P2PRoom', () => {
 
     expect(removed).toEqual([]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('emits alone when the last remote member leaves', async () => {
@@ -844,7 +844,7 @@ describe('P2PRoom', () => {
       { members: [], memberCount: 0, reason: 'dropped' },
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('reports explicit and dropped member departures', async () => {
@@ -884,7 +884,7 @@ describe('P2PRoom', () => {
       ['[Room] Member "c" left (dropped)'],
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('reports alone as dropped when any departure is not explicit', async () => {
@@ -911,7 +911,7 @@ describe('P2PRoom', () => {
       { members: [], memberCount: 0, reason: 'dropped' },
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('reports alone as left when every departure is explicit', async () => {
@@ -941,7 +941,7 @@ describe('P2PRoom', () => {
       { members: [], memberCount: 0, reason: 'left' },
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('does not emit alone when joining an empty room', async () => {
@@ -960,16 +960,16 @@ describe('P2PRoom', () => {
 
     expect(alone).toEqual([]);
 
-    room.close();
+    await room.dispose();
   });
 
-  it('auto-closes the room when the last remote member leaves with autoCloseWhenAlone', async () => {
+  it('auto-disposes the room when the last remote member leaves with autoDisposeWhenAlone', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();
     const room = await watchP2PRoom({
       signaling,
       peerId: 'a',
-      autoCloseWhenAlone: true,
+      autoDisposeWhenAlone: true,
     });
 
     signaling.emitPeers(['b']);
@@ -1004,7 +1004,7 @@ describe('P2PRoom', () => {
 
     expect(refreshPresence).toHaveBeenCalledTimes(1);
 
-    room.close();
+    await room.dispose();
   });
 
   it('emits synchronous presence refresh failures through the room error event', async () => {
@@ -1028,7 +1028,7 @@ describe('P2PRoom', () => {
 
     expect(errors).toEqual([{ peerId: 'a', error: refreshError }]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('does not treat pagehide as an explicit leave', async () => {
@@ -1045,7 +1045,7 @@ describe('P2PRoom', () => {
 
     expect(signaling.leave).not.toHaveBeenCalled();
 
-    room.close();
+    await room.dispose();
   });
 
   it('supports signaling and media factories with room-owned media cleanup', async () => {
@@ -1086,7 +1086,7 @@ describe('P2PRoom', () => {
 
     expect(getLocalStream).toHaveBeenCalledTimes(2);
 
-    room.close();
+    await room.dispose();
   });
 
   it('waits for factory signaling when joining before ready resolves', async () => {
@@ -1106,7 +1106,31 @@ describe('P2PRoom', () => {
     expect(createSignaling).toHaveBeenCalledOnce();
     expect(signaling.join).toHaveBeenCalledWith('a');
 
-    room.close();
+    await room.dispose();
+  });
+
+  it('waits for an in-flight join before closing signaling', async () => {
+    const signaling = createTestRoomSignaling();
+    const join = createDeferred();
+    signaling.join.mockReturnValue(join.promise);
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    const joinPromise = room.join();
+    await flushAsyncWork();
+    const disposePromise = room.dispose();
+
+    expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
+
+    join.resolve();
+
+    await expect(joinPromise).rejects.toMatchObject({ name: 'AbortError' });
+    await disposePromise;
+
+    expect(signaling.leave).toHaveBeenCalledWith('a');
+    expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
   });
 
   it('suppresses async signaling cleanup failures when closed during factory setup', async () => {
@@ -1121,7 +1145,7 @@ describe('P2PRoom', () => {
       autoJoin: false,
     });
 
-    room.close();
+    await room.dispose();
     deferred.resolve(signaling);
 
     await expect(room.ready).rejects.toMatchObject({ name: 'AbortError' });
@@ -1149,7 +1173,7 @@ describe('P2PRoom', () => {
     expect(createSignaling).toHaveBeenCalledTimes(2);
     expect(signaling.join).toHaveBeenCalledWith('a');
 
-    room.close();
+    await room.dispose();
   });
 
   it('does not request factory media when the room is full while watching', async () => {
@@ -1174,7 +1198,7 @@ describe('P2PRoom', () => {
 
     expect(getLocalStream).not.toHaveBeenCalled();
 
-    room.close();
+    await room.dispose();
   });
 
   it('stops factory-created media when room join fails', async () => {
@@ -1193,7 +1217,7 @@ describe('P2PRoom', () => {
 
     expect(stream.track.stop).toHaveBeenCalledOnce();
 
-    room.close();
+    await room.dispose();
   });
 
   it('rejects ambiguous room resource inputs', () => {
@@ -1244,14 +1268,14 @@ describe('P2PRoom', () => {
     await flushAsyncWork();
 
     signaling.leave.mockImplementationOnce(() => {
-      expect(session.close).not.toHaveBeenCalled();
+      expect(session.dispose).not.toHaveBeenCalled();
     });
     await room.leave();
     signaling.emitPeers(['c']);
     await flushAsyncWork();
 
     expect(signaling.leave).toHaveBeenCalledWith('a');
-    expect(session.close).toHaveBeenCalled();
+    expect(session.dispose).toHaveBeenCalled();
     expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
 
@@ -1261,7 +1285,54 @@ describe('P2PRoom', () => {
     expect(signaling.join).toHaveBeenCalledTimes(2);
     expect(signaling.createPeerSignaling).toHaveBeenCalledTimes(2);
 
-    room.close();
+    await room.dispose();
+  });
+
+  it('disposes once and closes signaling after departure settles', async () => {
+    const session = createResolvedSession();
+    sessionMocks.startP2PSession.mockResolvedValue(session);
+    const signaling = createTestRoomSignaling();
+    const leave = createDeferred();
+    signaling.leave.mockReturnValue(leave.promise);
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await flushAsyncWork();
+
+    const firstDispose = room.dispose();
+    const secondDispose = room.dispose();
+    await Promise.resolve();
+
+    expect(secondDispose).toBe(firstDispose);
+    expect(session.dispose).toHaveBeenCalledOnce();
+    expect(signaling.leave).toHaveBeenCalledWith('a');
+    expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
+
+    leave.resolve();
+    await firstDispose;
+
+    expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
+  });
+
+  it('still closes signaling when departure fails during disposal', async () => {
+    const signaling = createTestRoomSignaling();
+    const leaveError = new Error('leave failed');
+    signaling.leave.mockRejectedValue(leaveError);
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    await room.join();
+
+    await expect(room.dispose()).rejects.toBe(leaveError);
+
+    expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
+    expect(room.state).toBe('closed');
   });
 
   it('rolls back local leave state when signaling leave rejects', async () => {
@@ -1284,9 +1355,9 @@ describe('P2PRoom', () => {
     expect(room._state).toBe('watching');
     expect(room._joinStarted).toBe(false);
     expect(room._joined).toBe(false);
-    expect(session.close).toHaveBeenCalled();
+    expect(session.dispose).toHaveBeenCalled();
 
-    room.close();
+    await room.dispose();
   });
 
   it('emits full while watching and rejects join when memberCapacity is reached', async () => {
@@ -1333,7 +1404,7 @@ describe('P2PRoom', () => {
     expect(signaling.join).not.toHaveBeenCalled();
     expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
 
-    room.close();
+    await room.dispose();
   });
 
   it('waits for the first presence snapshot before joining when capacity is finite', async () => {
@@ -1353,7 +1424,7 @@ describe('P2PRoom', () => {
     expect(signaling.join).not.toHaveBeenCalled();
     expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
 
-    room.close();
+    await room.dispose();
   });
 
   it('allows joining when memberCapacity is reached but local member is present', async () => {
@@ -1375,7 +1446,7 @@ describe('P2PRoom', () => {
     expect(signaling.join).toHaveBeenCalledWith('a');
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
 
-    room.close();
+    await room.dispose();
   });
 
   it('leaves and rejects join when the room fills during join', async () => {
@@ -1427,7 +1498,7 @@ describe('P2PRoom', () => {
       },
     ]);
 
-    room.close();
+    await room.dispose();
   });
 
   it('still rejects with room full when cleanup leave fails during join', async () => {
@@ -1457,7 +1528,7 @@ describe('P2PRoom', () => {
     expect(room._joinStarted).toBe(false);
     expect(room._joined).toBe(false);
 
-    room.close();
+    await room.dispose();
   });
 
   it('reports startup failures without emitting peerLeft', async () => {
@@ -1484,7 +1555,7 @@ describe('P2PRoom', () => {
     ]);
     expect(peerLeft).toHaveLength(0);
 
-    room.close();
+    await room.dispose();
   });
 
   it('rejects joinP2PRoom when the signal aborts during room join', async () => {
@@ -1503,10 +1574,12 @@ describe('P2PRoom', () => {
     controller.abort();
 
     await expect(roomPromise).rejects.toMatchObject({ name: 'AbortError' });
-    expect(signaling.leave).toHaveBeenCalledWith('a');
+    expect(signaling.leave).not.toHaveBeenCalled();
 
     join.resolve();
     await flushAsyncWork();
+
+    expect(signaling.leave).toHaveBeenCalledWith('a');
   });
 
   it('rolls back room presence when the signal aborts after room join', async () => {
@@ -1530,7 +1603,7 @@ describe('P2PRoom', () => {
     expect(room._joined).toBe(false);
     expect(room._state).toBe('closed');
 
-    room.close();
+    await expect(room.dispose()).resolves.toBeUndefined();
   });
 
   it('cleans up owned media when aborted after local stream resolves', async () => {
@@ -1552,6 +1625,6 @@ describe('P2PRoom', () => {
     expect(room._joinStarted).toBe(false);
     expect(signaling.join).not.toHaveBeenCalled();
 
-    room.close();
+    await room.dispose();
   });
 });

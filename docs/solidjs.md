@@ -22,8 +22,8 @@ export function Room({ createSignaling }) {
     });
   }
 
-  function exit() {
-    room.close();
+  async function exit() {
+    await room.dispose();
   }
 
   onCleanup(exit);
@@ -80,8 +80,10 @@ function Video(props: { stream: MediaStream; muted?: boolean }) {
 }
 ```
 
-`join()` watches presence, enters the room, and connects to peers. `close()`
-tears down the room, subscriptions, connections, and owned media.
+`join()` watches presence, enters the room, and connects to peers. `leave()`
+exits presence while keeping the room reusable. `dispose()` awaits intentional
+departure and permanently tears down the room, subscriptions, connections, and
+owned media.
 Use `room.memberPresence()` for the metadata-aware roster. It is the Solid
 accessor form of `P2PRoom.memberPresence`, while `room.members()` remains the
 ID-only compatibility list.

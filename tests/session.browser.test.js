@@ -190,8 +190,8 @@ describe('P2P session helpers', () => {
     } finally {
       video.pause();
       video.srcObject = null;
-      host.close();
-      guest.close();
+      host.dispose();
+      guest.dispose();
       hostAudioTrack.stop();
       guestAudioTrack.stop();
       redTrack.stop();
@@ -250,8 +250,8 @@ describe('P2P session helpers', () => {
       expect(primarySender.track).toBe(first);
       expect(secondarySender.track).toBe(second);
     } finally {
-      host.close();
-      guest.close();
+      host.dispose();
+      guest.dispose();
       first.stop();
       replacement.stop();
       second.stop();
@@ -287,8 +287,8 @@ describe('P2P session helpers', () => {
         expect(host.role).toBe('initiator');
         expect(guest.role).toBe('joiner');
       } finally {
-        host.close();
-        guest.close();
+        host.dispose();
+        guest.dispose();
       }
     },
   );
@@ -324,8 +324,8 @@ describe('P2P session helpers', () => {
           expect.any(CustomEvent),
         );
       } finally {
-        host.close();
-        guest.close();
+        host.dispose();
+        guest.dispose();
         for (const track of initiatorStream.getTracks()) track.stop();
         for (const track of joinerStream.getTracks()) track.stop();
       }
@@ -367,8 +367,8 @@ describe('P2P session helpers', () => {
         expect(guestRemoteStream.getVideoTracks()).toHaveLength(1);
         expect(guestRemoteStream.getVideoTracks()[0].readyState).toBe('live');
       } finally {
-        host.close();
-        guest.close();
+        host.dispose();
+        guest.dispose();
         hostSignaling.close();
         guestSignaling.close();
         clearBrowserTabSignalingRoom(roomId);
@@ -411,8 +411,8 @@ describe('P2P session helpers', () => {
           onRemoteStream.mock.calls[0][0].stream.getVideoTracks(),
         ).toHaveLength(1);
       } finally {
-        host.close();
-        guest.close();
+        host.dispose();
+        guest.dispose();
         for (const track of initiatorStream.getTracks()) track.stop();
         for (const track of joinerStream.getTracks()) track.stop();
       }
@@ -449,8 +449,8 @@ describe('P2P session helpers', () => {
           expect.any(CustomEvent),
         );
       } finally {
-        host.close();
-        guest.close();
+        host.dispose();
+        guest.dispose();
         for (const track of initiatorStream.getTracks()) track.stop();
         for (const track of joinerStream.getTracks()) track.stop();
       }
@@ -535,7 +535,7 @@ describe('P2P session helpers', () => {
         );
         expect(session.remoteStream.getTracks()).toContain(remoteTrack);
       } finally {
-        session.close();
+        session.dispose();
       }
     } finally {
       globalThis.RTCPeerConnection = OriginalRTCPeerConnection;
@@ -570,8 +570,8 @@ describe('P2P session helpers', () => {
         );
         expect(onDataChannel.mock.calls[0][0].channel.label).toBe('data');
       } finally {
-        host.close();
-        guest.close();
+        host.dispose();
+        guest.dispose();
       }
     },
   );
@@ -609,8 +609,8 @@ describe('P2P session helpers', () => {
         );
         expect(channel.label).toBe('data');
       } finally {
-        host.close();
-        guest.close();
+        host.dispose();
+        guest.dispose();
       }
     },
   );

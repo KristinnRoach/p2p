@@ -22,7 +22,7 @@ export async function joinP2PRoom(options = {}) {
     await room.ready;
     return room;
   } catch (error) {
-    room.close();
+    void room.dispose().catch(() => {});
     throw error;
   }
 }
@@ -40,7 +40,7 @@ export async function watchP2PRoom(options = {}) {
     await room.ready;
     return room;
   } catch (error) {
-    room.close();
+    void room.dispose().catch(() => {});
     throw error;
   }
 }
@@ -65,7 +65,7 @@ export class P2PRoom extends EventTarget {
       memberCapacity = options.maxPeers ?? Infinity,
       presenceData = undefined,
       autoJoin = true,
-      autoCloseWhenAlone = false,
+      autoDisposeWhenAlone = false,
       signal = null,
       onMemberStream = null,
       onMemberTrack = null,
@@ -147,7 +147,7 @@ export class P2PRoom extends EventTarget {
     this.maxPeers = memberCapacity;
     this._presenceData = presenceData;
     this.autoJoin = autoJoin;
-    this.autoCloseWhenAlone = autoCloseWhenAlone;
+    this.autoDisposeWhenAlone = autoDisposeWhenAlone;
     this.signal = signal;
 
     /** @type {Map<string, import('./session.js').P2PSession>} one entry per connected remote peer */
@@ -167,6 +167,7 @@ export class P2PRoom extends EventTarget {
     this._state = 'watching';
     this._joinPromise = null;
     this._leavePromise = null;
+    this._disposePromise = null;
     this._joinStarted = false;
     this._joined = false;
     this._presenceHeartbeatTimer = null;
@@ -250,24 +251,35 @@ export class P2PRoom extends EventTarget {
     return toPublicState(this._state);
   }
 
-  close() {
-    if (this._state === 'closed') return;
+  dispose() {
+    if (this._disposePromise) return this._disposePromise;
+    if (this._state === 'closed') return Promise.resolve();
+
+    const pendingJoin = this._joinPromise;
+    const pendingLeave = this._leavePromise;
     this._setState('closed');
 
     this._stopPresenceHeartbeat();
     for (const cleanup of this._cleanups.splice(0)) cleanup();
     this._closeAllPeers({ emitLeft: false });
     this._hadRemoteMembers = false;
-
-    if (this._joinStarted || this._joined) {
-      try {
-        Promise.resolve(this.signaling?.leave(this.peerId)).catch(() => {});
-      } catch (_) {}
-    }
-    try {
-      Promise.resolve(this.signaling?.close?.()).catch(() => {});
-    } catch (_) {}
     this._releaseOwnedLocalStream();
+
+    this._disposePromise = (async () => {
+      await Promise.allSettled([pendingJoin, pendingLeave].filter(Boolean));
+      const signaling = this.signaling;
+      const shouldLeave = this._joinStarted || this._joined;
+      try {
+        if (shouldLeave && signaling) {
+          await Promise.resolve(signaling.leave(this.peerId));
+        }
+      } finally {
+        this._joinStarted = false;
+        this._joined = false;
+        await Promise.resolve(signaling?.close?.());
+      }
+    })();
+    return this._disposePromise;
   }
 
   on(type, callback) {
@@ -437,7 +449,7 @@ export class P2PRoom extends EventTarget {
     if (this.signal) {
       abortPromise = new Promise((_, reject) => {
         const abortHandler = () => {
-          this.close();
+          void this.dispose().catch(() => {});
           reject(createAbortError());
         };
         this.signal.addEventListener('abort', abortHandler, { once: true });
@@ -632,8 +644,8 @@ export class P2PRoom extends EventTarget {
         ? 'left'
         : 'dropped';
     this._emitAlone(reason);
-    if (this.autoCloseWhenAlone) {
-      Promise.resolve(this.close()).catch(() => {});
+    if (this.autoDisposeWhenAlone) {
+      void this.dispose().catch(() => {});
     }
   }
 
@@ -694,7 +706,7 @@ export class P2PRoom extends EventTarget {
     })
       .then(async (pair) => {
         if (this._state !== 'active' || controller.signal.aborted) {
-          pair.close();
+          pair.dispose();
           pairSignaling.close?.();
           return;
         }
@@ -708,7 +720,7 @@ export class P2PRoom extends EventTarget {
             appliedVersion = targetVersion;
           }
         } catch (error) {
-          pair.close();
+          pair.dispose();
           pairSignaling.close?.();
           throw error;
         }
@@ -852,7 +864,7 @@ export class P2PRoom extends EventTarget {
   _closeMember(memberId, { emitLeft = true, reason = 'dropped' } = {}) {
     this._controllers.get(memberId)?.abort();
     this._controllers.delete(memberId);
-    this.pairs.get(memberId)?.close();
+    this.pairs.get(memberId)?.dispose();
     this.pairs.delete(memberId);
     this._pairSignalings.get(memberId)?.close?.();
     this._pairSignalings.delete(memberId);

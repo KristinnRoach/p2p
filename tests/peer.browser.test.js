@@ -34,7 +34,7 @@ describe('Peer', () => {
   afterEach(() => {
     peers?.forEach((p) => {
       try {
-        p.close();
+        p.dispose();
       } catch (_) {}
     });
     peers = null;
@@ -69,7 +69,7 @@ describe('Peer', () => {
       const peer = new Peer({ role: 'initiator', signaling: a });
       expect(peer.state).toBe(PEER_STATES.IDLE);
       expect(peer.role).toBe('initiator');
-      peer.close();
+      peer.dispose();
     });
 
     it('re-emits a native track event that upgrades fallback streams', () => {
@@ -91,7 +91,7 @@ describe('Peer', () => {
         expect(onTrack.mock.calls[0][0].detail.streams).toEqual([]);
         expect(onTrack.mock.calls[1][0].detail.streams).toEqual([stream]);
       } finally {
-        peer.close();
+        peer.dispose();
         track.stop();
       }
     });
@@ -217,7 +217,7 @@ describe('Peer', () => {
       expect(p1).toBe(p2);
     });
 
-    it('start() resolves without starting after close()', async () => {
+    it('start() resolves without starting after dispose()', async () => {
       const { a } = createLoopbackSignaling();
       const peer = new Peer({
         role: 'initiator',
@@ -227,14 +227,14 @@ describe('Peer', () => {
       peers = [peer];
       peer._startInitiator = vi.fn();
 
-      peer.close();
+      peer.dispose();
       await expect(peer.start()).resolves.toBeUndefined();
 
       expect(peer._startInitiator).not.toHaveBeenCalled();
       expect(peer.state).toBe(PEER_STATES.CLOSED);
     });
 
-    it('keeps closed state when start() fails after close()', async () => {
+    it('keeps closed state when start() fails after dispose()', async () => {
       const { a } = createLoopbackSignaling();
       const peer = new Peer({
         role: 'initiator',
@@ -253,7 +253,7 @@ describe('Peer', () => {
       peer.on('error', onError);
 
       const startPromise = peer.start();
-      peer.close();
+      peer.dispose();
       await expect(startPromise).rejects.toThrow(/closed before start/);
 
       expect(onError).toHaveBeenCalledWith(
@@ -266,7 +266,7 @@ describe('Peer', () => {
       expect(peer.state).toBe(PEER_STATES.CLOSED);
     });
 
-    it('rejects and skips startup when close() runs during connecting statechange', async () => {
+    it('rejects and skips startup when dispose() runs during connecting statechange', async () => {
       const { a } = createLoopbackSignaling();
       const peer = new Peer({
         role: 'initiator',
@@ -277,7 +277,7 @@ describe('Peer', () => {
       peer._startInitiator = vi.fn();
       peer.on('statechange', ({ state }) => {
         if (state === PEER_STATES.CONNECTING) {
-          peer.close();
+          peer.dispose();
         }
       });
 
@@ -362,16 +362,16 @@ describe('Peer', () => {
     });
   });
 
-  describe('close()', () => {
+  describe('dispose()', () => {
     it('transitions to closed state and is safe to call twice', () => {
       const { a } = createLoopbackSignaling();
       const peer = new Peer({ role: 'initiator', signaling: a });
 
-      peer.close();
+      peer.dispose();
       expect(peer.state).toBe(PEER_STATES.CLOSED);
 
       // Second call is a no-op
-      peer.close();
+      peer.dispose();
       expect(peer.state).toBe(PEER_STATES.CLOSED);
     });
 
@@ -394,8 +394,8 @@ describe('Peer', () => {
       });
 
       await peer.start();
-      peer.close();
-      peer.close();
+      peer.dispose();
+      peer.dispose();
 
       expect(answerUnsubscribe).toHaveBeenCalledTimes(1);
       expect(candidateUnsubscribe).toHaveBeenCalledTimes(1);
@@ -411,7 +411,7 @@ describe('Peer', () => {
       const handler = vi.fn();
       const off = peer.on('statechange', handler);
 
-      peer.close();
+      peer.dispose();
       expect(handler).toHaveBeenCalled();
 
       handler.mockClear();
@@ -462,7 +462,7 @@ describe('Peer', () => {
   });
 
   describe('joiner lifecycle', () => {
-    it('rejects start() when close() happens before the offer arrives', async () => {
+    it('rejects start() when dispose() happens before the offer arrives', async () => {
       const { b } = createLoopbackSignaling();
       const joiner = new Peer({ role: 'joiner', signaling: b });
       peers = [joiner];
@@ -470,7 +470,7 @@ describe('Peer', () => {
       const startPromise = joiner.start();
       // Let _startJoiner install the onOffer listener + _pendingStartReject.
       await Promise.resolve();
-      joiner.close();
+      joiner.dispose();
 
       await expect(startPromise).rejects.toThrow(/closed before start/);
       expect(joiner.state).toBe(PEER_STATES.CLOSED);

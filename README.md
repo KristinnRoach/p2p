@@ -36,10 +36,10 @@ room.on('membersChanged', ({ memberCount, memberCapacity, memberPresence }) => {
 
 await room.setPresenceData({ displayName: 'Ada', muted: true });
 
-room.close();
+await room.dispose();
 ```
 
-Factory-created media is owned by the room: `leave()` and `close()` stop the
+Factory-created media is owned by the room: `leave()` and `dispose()` stop the
 local tracks. You can still pass `signaling` and `localStream` directly when an
 app needs to own setup, preview, device switching, or teardown itself.
 
@@ -63,7 +63,7 @@ room.on('full', ({ members, memberCapacity }) => {
 });
 
 // `alone` fires when the last remote member leaves. For 1:1 call flows,
-// pass `autoCloseWhenAlone: true` to close the room automatically instead.
+// pass `autoDisposeWhenAlone: true` to dispose the room automatically instead.
 room.on('alone', () => endCall());
 
 // `memberStreamRemoved` fires whenever a remote stream is dropped (peer left,
@@ -71,13 +71,21 @@ room.on('alone', () => endCall());
 room.on('memberStreamRemoved', ({ memberId }) => removeRemoteTile(memberId));
 
 await room.join();  // enter presence and connect
-await room.leave(); // leave presence, close sessions, keep watching
-room.close();       // permanent teardown
+await room.leave();   // leave presence, close sessions, keep watching
+await room.dispose(); // leave presence and permanently tear down the room
 ```
 
 Use `leave()` when the app wants to keep observing the same room after the
-local member exits. Use `close()` when the user is done with the room; it tears
-down subscriptions, peer connections, owned media, and signaling.
+local member exits. Use `dispose()` when the user is done with the room; it
+awaits explicit departure before tearing down subscriptions, peer connections,
+owned media, and signaling.
+
+### Lifecycle naming
+
+Package-owned objects use `dispose()` for permanent, non-reusable teardown:
+`P2PRoom`, `P2PSession`, and `Peer`. Only rooms also expose `leave()`, which
+exits presence while keeping the room reusable. Low-level signaling transports
+and native WebRTC objects retain their conventional `close()` methods.
 
 ### Reserved local media slots
 
@@ -173,7 +181,7 @@ const session = await startP2PSession({ signaling, localStream });
 const session = await joinP2PSession({ signaling, localStream });
 
 session.on('remoteStream', ({ stream }) => renderStream(stream));
-session.close();
+session.dispose();
 ```
 
 `signaling` must implement `RtcSignalingSource` — see [docs/signaling.md](docs/signaling.md).

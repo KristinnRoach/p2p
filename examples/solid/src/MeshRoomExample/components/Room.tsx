@@ -25,8 +25,8 @@ export default function Room() {
     });
   }
 
-  function closeRoom() {
-    p2p.close();
+  function disposeRoom() {
+    void p2p.dispose().catch(console.error);
   }
 
   function errorMessage() {
@@ -51,7 +51,7 @@ export default function Room() {
     if (roomId) await enterRoom(roomId).catch(console.error);
   });
 
-  onCleanup(closeRoom);
+  onCleanup(disposeRoom);
 
   return (
     <main class='room'>
@@ -60,7 +60,7 @@ export default function Room() {
         isInRoom={p2p.state() === 'joined'}
         isExiting={p2p.state() === 'leaving'}
         onEnterRoom={enterRoom}
-        onExitRoom={closeRoom}
+        onExitRoom={disposeRoom}
       />
       <RoomStatus
         roomId={p2p.room()?.roomId}

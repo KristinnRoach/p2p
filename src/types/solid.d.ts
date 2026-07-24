@@ -39,7 +39,7 @@ export interface SolidP2PRoom {
   watch(options: P2PRoomOptions): Promise<P2PRoom | undefined>;
   join(options: P2PRoomOptions): Promise<P2PRoom | undefined>;
   leave(): Promise<void>;
-  close(): void;
+  dispose(): Promise<void>;
   send(memberId: string, data: unknown): void;
   broadcast(data: unknown): number;
 }

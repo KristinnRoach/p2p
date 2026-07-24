@@ -102,8 +102,8 @@ session is built — a stale connection is never reused.
 
 Two independent mechanisms remove a peer that goes away:
 
-- **`leave(peerId)`** — explicit, immediate departure. Called by `room.leave()`
-  and `room.close()`.
+- **`leave(peerId)`** — explicit, immediate departure. Called and awaited by
+  `room.leave()` and `room.dispose()`.
 - **`refreshPresence(peerId)` + TTL** — for peers that vanish without a clean
   `leave()`. While joined, the room calls `refreshPresence` on a short interval;
   the adapter or backend expires any peer whose presence record is older than a
@@ -210,10 +210,11 @@ const roomSignaling = createRoomSignaling({
 `watchP2PRoom` subscribes to `onPeers()` without calling `join()`, then
 `room.join()` enters presence and starts pair connections. `room.leave()` calls
 `leave()` and closes active pair connections while keeping the peer-list
-subscription alive so the app can rejoin the same room later. `room.close()` is
-the permanent teardown path: it closes peer connections, unsubscribes from room
-presence, closes signaling, releases room-owned media, and makes a best-effort
-`leave()` call if the room had joined presence.
+subscription alive so the app can rejoin the same room later.
+`room.dispose()` is the permanent teardown path: it closes local peer
+connections and owned media immediately, then awaits `leave()` before closing
+room signaling. This guarantees that an intentional departure reaches
+network-backed signaling before its transport is torn down.
 
 For `startP2PSession`, `joinP2PSession`, `Peer`, and data-only helpers, pass a raw
 `RtcSignalingSource` or wrap it with `createPairSignaling` yourself when you

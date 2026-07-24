@@ -175,7 +175,7 @@ export class Peer extends EventTarget {
         if (this._pendingStartReject === rejectStart) {
           this._pendingStartReject = null;
         }
-        this.close();
+        this.dispose();
         settled = true;
         reject(error);
       };
@@ -269,10 +269,10 @@ export class Peer extends EventTarget {
   }
 
   /**
-   * Close the peer connection and any associated data channel.
+   * Permanently dispose of the peer connection and associated data channel.
    * Safe to call multiple times.
    */
-  close() {
+  dispose() {
     if (this._closed) return;
     this._closed = true;
 
@@ -631,7 +631,7 @@ export class Peer extends EventTarget {
   _closeWithoutRejectingStart() {
     const pendingStartReject = this._pendingStartReject;
     this._pendingStartReject = null;
-    this.close();
+    this.dispose();
     this._pendingStartReject = pendingStartReject;
   }
 
