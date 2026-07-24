@@ -1,6 +1,8 @@
 import { startP2PSession, joinP2PSession } from './session.js';
 import { createRoomSignaling } from './signaling.js';
 import { log } from './logger.js';
+import { createIceServersManager } from './ice-servers.js';
+import { rtcConfig as defaultRtcConfig } from './config.js';
 import {
   assertLocalTrackKind,
   normalizeLocalTrackSlots,
@@ -57,6 +59,8 @@ export class P2PRoom extends EventTarget {
       getLocalStream = null,
       localTrackSlots = [],
       rtcConfig,
+      iceServersProvider,
+      iceServersRefreshMarginMs,
       audioOnly = false,
       dataChannel = false,
       dataChannelLabel = 'data',
@@ -138,6 +142,18 @@ export class P2PRoom extends EventTarget {
     }
     this._syncAllSlotTracksToLocalStream();
     this.rtcConfig = rtcConfig;
+    this._iceServersManager = createIceServersManager({
+      rtcConfig: rtcConfig ?? defaultRtcConfig,
+      provider: iceServersProvider,
+      refreshMarginMs: iceServersRefreshMarginMs,
+      onError: (error) =>
+        this._emit('error', {
+          peerId: this.peerId,
+          memberId: this.peerId,
+          error,
+          phase: 'ice-servers-refresh',
+        }),
+    });
     this.audioOnly = audioOnly;
     this.dataChannel = dataChannel;
     this.dataChannelLabel = dataChannelLabel;
@@ -262,6 +278,7 @@ export class P2PRoom extends EventTarget {
     this._stopPresenceHeartbeat();
     for (const cleanup of this._cleanups.splice(0)) cleanup();
     this._closeAllPeers({ emitLeft: false });
+    this._iceServersManager?.dispose();
     this._hadRemoteMembers = false;
     this._releaseOwnedLocalStream();
 
@@ -677,6 +694,7 @@ export class P2PRoom extends EventTarget {
       localStream: this.localStream,
       localTrackSlots: this._snapshotLocalTrackSlots(),
       rtcConfig: this.rtcConfig,
+      _iceServersManager: this._iceServersManager,
       audioOnly: this.audioOnly,
       dataChannel: this.dataChannel,
       dataChannelLabel: this.dataChannelLabel,

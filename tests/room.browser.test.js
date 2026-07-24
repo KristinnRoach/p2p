@@ -108,6 +108,30 @@ describe('P2PRoom', () => {
     setLogger(() => {});
   });
 
+  it('shares one ICE server lifecycle across room pairs and keeps it on leave', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const provider = vi.fn();
+    const room = await joinP2PRoom({
+      signaling,
+      peerId: 'a',
+      iceServersProvider: provider,
+    });
+
+    signaling.emitPeers(['b', 'c']);
+    await flushAsyncWork();
+
+    const firstManager =
+      sessionMocks.startP2PSession.mock.calls[0][0]._iceServersManager;
+    expect(
+      sessionMocks.startP2PSession.mock.calls[1][0]._iceServersManager,
+    ).toBe(firstManager);
+
+    await room.leave();
+    expect(room._iceServersManager).toBe(firstManager);
+    await room.dispose();
+  });
+
   it('replaces a reserved slot across every active pair and local stream', async () => {
     const sessions = [createResolvedSession(), createResolvedSession()];
     sessionMocks.startP2PSession
