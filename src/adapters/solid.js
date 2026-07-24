@@ -1,11 +1,15 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { isLocalStreamError, isRoomFullError, watchP2PRoom } from '../room.js';
-import { setLogger } from '../logger.js';
+import { log, setLogger } from '../logger.js';
 
 export { setLogger };
 
 function noopBroadcast() {
   return 0;
+}
+
+function logTeardown(cause) {
+  log('useP2PRoom: superseded room teardown failed', cause);
 }
 
 export function attachMediaStream(video, stream, options = {}) {
@@ -257,10 +261,10 @@ export function useP2PRoom() {
     resetRoomSignals('creating');
 
     const roomPromise = enqueue(async () => {
-      // a room replaced by watch() was never explicitly disposed by anyone, so
-      // its teardown failure has no caller to reject; swallow it rather than
-      // fail this watch
-      if (supersededRoom) await supersededRoom.dispose().catch(() => {});
+      // a room torn down by supersession was never explicitly disposed by
+      // anyone, so its failure has no caller to reject and must not fail this
+      // watch; log it so a stuck teardown stays diagnosable
+      if (supersededRoom) await supersededRoom.dispose().catch(logTeardown);
       if (runId !== currentRunId) return undefined;
 
       let createdRoom;
@@ -274,7 +278,7 @@ export function useP2PRoom() {
       // superseded while creating: never publish it, and finish its teardown
       // before the next transition starts
       if (runId !== currentRunId) {
-        await createdRoom.dispose().catch(() => {});
+        await createdRoom.dispose().catch(logTeardown);
         return undefined;
       }
 
