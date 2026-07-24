@@ -119,6 +119,9 @@ export function useP2PRoom() {
   const [dataChannels, setDataChannels] = createSignal(new Map());
   let listenerCleanup = null;
   let currentRunId = 0;
+  // the room signal is cleared before teardown settles, so keep the in-flight
+  // dispose here to serialize later transitions against it
+  let pendingDispose = null;
 
   function setRoomError(cause) {
     const roomFull = isRoomFullError(cause);
@@ -163,10 +166,11 @@ export function useP2PRoom() {
   function disposeCurrentRoom(nextState = 'idle') {
     currentRunId += 1;
     clearListenerCleanup();
-    const disposePromise = room()?.dispose() ?? Promise.resolve();
+    const currentRoom = room();
+    if (currentRoom) pendingDispose = currentRoom.dispose();
     setReady(Promise.resolve(undefined));
     resetRoomSignals(nextState);
-    return disposePromise;
+    return pendingDispose ?? Promise.resolve();
   }
 
   function syncRoomSignals(nextRoom) {
@@ -233,8 +237,9 @@ export function useP2PRoom() {
     const runId = currentRunId;
 
     clearListenerCleanup();
-    const previousDispose =
-      room()?.dispose().catch(() => {}) ?? Promise.resolve();
+    const currentRoom = room();
+    if (currentRoom) pendingDispose = currentRoom.dispose();
+    const previousDispose = pendingDispose?.catch(() => {}) ?? Promise.resolve();
     resetRoomSignals('creating');
     setError(undefined);
     setErrorKind(undefined);
@@ -247,6 +252,7 @@ export function useP2PRoom() {
           return undefined;
         }
 
+        pendingDispose = null;
         setRoom(createdRoom);
         setState(createdRoom.state);
         syncRoomSignals(createdRoom);

@@ -241,6 +241,48 @@ describe('useP2PRoom', () => {
     cleanup();
   });
 
+  it('serializes a rejoin against an in-flight dispose', async () => {
+    let resolveDispose;
+    const firstRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveDispose = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom
+      .mockResolvedValueOnce(firstRoom)
+      .mockResolvedValueOnce(createFakeRoom());
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+
+    const firstDispose = solidRoom.dispose();
+    let secondSettled = false;
+    const secondDispose = solidRoom.dispose().then(() => {
+      secondSettled = true;
+    });
+    const replacement = solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+    await Promise.resolve();
+
+    expect(secondSettled).toBe(false);
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledOnce();
+
+    resolveDispose();
+    await Promise.all([firstDispose, secondDispose, replacement]);
+
+    expect(secondSettled).toBe(true);
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+
+    cleanup();
+  });
+
   it('stores local stream errors and disposes the room', async () => {
     const error = new Error('local stream failed');
     error.name = 'LocalStreamError';
