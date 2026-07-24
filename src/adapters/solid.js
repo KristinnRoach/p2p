@@ -160,12 +160,13 @@ export function useP2PRoom() {
     setDataChannels(new Map());
   }
 
-  function closeCurrentRoom(nextState = 'idle') {
+  function disposeCurrentRoom(nextState = 'idle') {
     currentRunId += 1;
     clearListenerCleanup();
-    room()?.close();
+    const disposePromise = room()?.dispose() ?? Promise.resolve();
     setReady(Promise.resolve(undefined));
     resetRoomSignals(nextState);
+    return disposePromise;
   }
 
   function syncRoomSignals(nextRoom) {
@@ -232,7 +233,7 @@ export function useP2PRoom() {
     const runId = currentRunId;
 
     clearListenerCleanup();
-    room()?.close();
+    void room()?.dispose().catch(() => {});
     resetRoomSignals('creating');
     setError(undefined);
     setErrorKind(undefined);
@@ -240,7 +241,7 @@ export function useP2PRoom() {
     const roomPromise = watchP2PRoom(roomOptions)
       .then((createdRoom) => {
         if (runId !== currentRunId) {
-          createdRoom.close();
+          void createdRoom.dispose().catch(() => {});
           return undefined;
         }
 
@@ -261,7 +262,9 @@ export function useP2PRoom() {
     return roomPromise;
   }
 
-  onCleanup(closeCurrentRoom);
+  onCleanup(() => {
+    void disposeCurrentRoom().catch(() => {});
+  });
 
   async function join(options) {
     const currentRoom = await watchRoom(options);
@@ -278,7 +281,9 @@ export function useP2PRoom() {
     } catch (cause) {
       if (runId !== currentRunId || room() !== currentRoom) return undefined;
       setRoomError(cause);
-      if (isLocalStreamError(cause)) closeCurrentRoom('error');
+      if (isLocalStreamError(cause)) {
+        void disposeCurrentRoom('error').catch(() => {});
+      }
       throw cause;
     }
   }
@@ -290,8 +295,8 @@ export function useP2PRoom() {
     syncRoomSignals(currentRoom);
   }
 
-  function close() {
-    closeCurrentRoom();
+  function dispose() {
+    return disposeCurrentRoom();
   }
 
   return {
@@ -309,7 +314,7 @@ export function useP2PRoom() {
     isFull,
     join,
     leave,
-    close,
+    dispose,
     dataChannels,
     watch: (options) => watchRoom(options),
     send: (memberId, data) => room()?.send(memberId, data),

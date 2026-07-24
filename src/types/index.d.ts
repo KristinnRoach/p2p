@@ -342,7 +342,7 @@ export interface P2PRoomOptions {
   peerId: string;
   /** Caller-owned stream. The room uses it but does not stop its tracks. */
   localStream?: MediaStream | null;
-  /** Room-owned stream factory. Tracks are stopped by leave(), close(), and failed joins. */
+  /** Room-owned stream factory. Tracks are stopped by leave(), dispose(), and failed joins. */
   getLocalStream?: () => MediaStream | Promise<MediaStream | null> | null;
   /** Opt-in stable publication slots. Slot tracks remain caller-owned. */
   localTrackSlots?: LocalTrackSlot[];
@@ -353,7 +353,7 @@ export interface P2PRoomOptions {
   memberCapacity?: number;
   presenceData?: P2PRoomPresenceData;
   /** Close the room automatically when the last remote member leaves. Default false. */
-  autoCloseWhenAlone?: boolean;
+  autoDisposeWhenAlone?: boolean;
   /** @deprecated Use memberCapacity. */
   maxPeers?: number;
   rtcConfig?: RTCConfiguration;
@@ -440,7 +440,7 @@ export declare class P2PRoom extends EventTarget {
   leave(): Promise<void>;
   send(memberId: string, data: unknown): void;
   broadcast(data: unknown): number;
-  close(): void;
+  dispose(): Promise<void>;
 }
 
 /** Create and immediately join a mesh room. */

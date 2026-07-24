@@ -228,7 +228,7 @@ export class P2PRoomElement extends HTMLElement {
       });
 
       if (this.#joinController !== controller || controller.signal.aborted) {
-        room.close();
+        void room.dispose().catch(() => {});
         return;
       }
       this.#joinController = null;
@@ -250,11 +250,9 @@ export class P2PRoomElement extends HTMLElement {
     const room = this.room;
     if (room) {
       try {
-        await room.leave();
+        await room.dispose();
       } catch (error) {
         this.#error = error?.message || String(error);
-      } finally {
-        room.close();
       }
     }
     this.#room = null;

@@ -34,7 +34,7 @@ function createFakeRoom(overrides = {}) {
       room.emit('statechange', { previous: 'watching', state: 'joined' });
     }),
     leave: vi.fn(),
-    close: vi.fn(),
+    dispose: vi.fn(),
     send: vi.fn(),
     broadcast: vi.fn(() => 1),
     on(type, callback) {
@@ -225,7 +225,7 @@ describe('useP2PRoom', () => {
       }),
     ).rejects.toBe(error);
 
-    expect(fakeRoom.close).toHaveBeenCalledOnce();
+    expect(fakeRoom.dispose).toHaveBeenCalledOnce();
     expect(solidRoom.room()).toBeUndefined();
     expect(solidRoom.state()).toBe('error');
     expect(solidRoom.error()).toBe(error);
@@ -479,7 +479,7 @@ describe('useP2PRoom', () => {
 
     await vi.waitFor(() => expect(fakeRoom.join).toHaveBeenCalledOnce());
 
-    solidRoom.close();
+    await solidRoom.dispose();
 
     fakeRoom.state = 'joined';
     fakeRoom.memberCount = 1;

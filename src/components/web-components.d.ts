@@ -63,7 +63,7 @@ export declare class P2PRoomElement extends HTMLElement {
   enableChatParsing(): void;
   disableChatParsing(): void;
   join(): Promise<void>;
-  leave(): void;
+  leave(): Promise<void>;
   sendChat(text: string): number;
   syncFromRoom(): void;
   snapshot(): P2PRoomSnapshot;
