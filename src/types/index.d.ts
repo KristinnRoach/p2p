@@ -98,7 +98,7 @@ export interface P2PSession {
   off(type: string, callback: (...args: unknown[]) => void): void;
   send(data: unknown): void;
   setLocalTrack(slotId: string, track: MediaStreamTrack | null): Promise<void>;
-  close(): void;
+  dispose(): void;
 }
 
 export interface LocalTrackSlot {
@@ -559,7 +559,7 @@ export declare class Peer extends EventTarget {
   off(type: string, callback: (...args: unknown[]) => void): void;
   send(data: unknown): void;
   setLocalTrack(slotId: string, track: MediaStreamTrack | null): Promise<void>;
-  close(): void;
+  dispose(): void;
 
   start(options?: {
     startTimeoutMs?: number;

@@ -80,6 +80,13 @@ local member exits. Use `dispose()` when the user is done with the room; it
 awaits explicit departure before tearing down subscriptions, peer connections,
 owned media, and signaling.
 
+### Lifecycle naming
+
+Package-owned objects use `dispose()` for permanent, non-reusable teardown:
+`P2PRoom`, `P2PSession`, and `Peer`. Only rooms also expose `leave()`, which
+exits presence while keeping the room reusable. Low-level signaling transports
+and native WebRTC objects retain their conventional `close()` methods.
+
 ### Reserved local media slots
 
 Use `localTrackSlots` when a call must reserve a sender before initial SDP
@@ -174,7 +181,7 @@ const session = await startP2PSession({ signaling, localStream });
 const session = await joinP2PSession({ signaling, localStream });
 
 session.on('remoteStream', ({ stream }) => renderStream(stream));
-session.close();
+session.dispose();
 ```
 
 `signaling` must implement `RtcSignalingSource` — see [docs/signaling.md](docs/signaling.md).

@@ -76,7 +76,7 @@ function createDeferred() {
 
 function createResolvedSession() {
   return {
-    close: vi.fn(),
+    dispose: vi.fn(),
     dataChannel: null,
     setLocalTrack: vi.fn(),
   };
@@ -619,7 +619,7 @@ describe('P2PRoom', () => {
     // 'b' drops out of presence (reload, disconnect, or TTL expiry).
     signaling.emitPeers([]);
     await flushAsyncWork();
-    expect(sessions[0].close).toHaveBeenCalledOnce();
+    expect(sessions[0].dispose).toHaveBeenCalledOnce();
     expect(room.pairs.has('b')).toBe(false);
 
     // The same peerId returns: a fresh session is built, not the stale one.
@@ -1244,14 +1244,14 @@ describe('P2PRoom', () => {
     await flushAsyncWork();
 
     signaling.leave.mockImplementationOnce(() => {
-      expect(session.close).not.toHaveBeenCalled();
+      expect(session.dispose).not.toHaveBeenCalled();
     });
     await room.leave();
     signaling.emitPeers(['c']);
     await flushAsyncWork();
 
     expect(signaling.leave).toHaveBeenCalledWith('a');
-    expect(session.close).toHaveBeenCalled();
+    expect(session.dispose).toHaveBeenCalled();
     expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
 
@@ -1284,7 +1284,7 @@ describe('P2PRoom', () => {
     await Promise.resolve();
 
     expect(secondDispose).toBe(firstDispose);
-    expect(session.close).toHaveBeenCalledOnce();
+    expect(session.dispose).toHaveBeenCalledOnce();
     expect(signaling.leave).toHaveBeenCalledWith('a');
     expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
 
@@ -1331,7 +1331,7 @@ describe('P2PRoom', () => {
     expect(room._state).toBe('watching');
     expect(room._joinStarted).toBe(false);
     expect(room._joined).toBe(false);
-    expect(session.close).toHaveBeenCalled();
+    expect(session.dispose).toHaveBeenCalled();
 
     await room.dispose();
   });

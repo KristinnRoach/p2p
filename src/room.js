@@ -703,7 +703,7 @@ export class P2PRoom extends EventTarget {
     })
       .then(async (pair) => {
         if (this._state !== 'active' || controller.signal.aborted) {
-          pair.close();
+          pair.dispose();
           pairSignaling.close?.();
           return;
         }
@@ -717,7 +717,7 @@ export class P2PRoom extends EventTarget {
             appliedVersion = targetVersion;
           }
         } catch (error) {
-          pair.close();
+          pair.dispose();
           pairSignaling.close?.();
           throw error;
         }
@@ -861,7 +861,7 @@ export class P2PRoom extends EventTarget {
   _closeMember(memberId, { emitLeft = true, reason = 'dropped' } = {}) {
     this._controllers.get(memberId)?.abort();
     this._controllers.delete(memberId);
-    this.pairs.get(memberId)?.close();
+    this.pairs.get(memberId)?.dispose();
     this.pairs.delete(memberId);
     this._pairSignalings.get(memberId)?.close?.();
     this._pairSignalings.delete(memberId);

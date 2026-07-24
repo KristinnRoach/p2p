@@ -23,7 +23,7 @@ await peer.start({
   signal: abortController.signal,
 });
 
-peer.close();
+peer.dispose(); // permanent; this Peer cannot be restarted
 ```
 
 To reserve a sender before negotiation, pass stable local track slots. This is
