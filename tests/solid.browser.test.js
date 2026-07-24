@@ -50,6 +50,10 @@ function createFakeRoom(overrides = {}) {
   return room;
 }
 
+async function flushMicrotasks(times = 8) {
+  for (let i = 0; i < times; i += 1) await Promise.resolve();
+}
+
 function createFakeVideo({ play } = {}) {
   return {
     muted: false,
@@ -279,6 +283,53 @@ describe('useP2PRoom', () => {
 
     expect(secondSettled).toBe(true);
     expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+
+    cleanup();
+  });
+
+  it('awaits teardown of a room superseded before it is published', async () => {
+    let resolveCreate;
+    let resolveDispose;
+    const staleRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveDispose = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreate = resolve;
+      }),
+    );
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+
+    let disposed = false;
+    const disposal = solidRoom.dispose().then(() => {
+      disposed = true;
+    });
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    resolveCreate(staleRoom);
+    await flushMicrotasks();
+
+    expect(staleRoom.dispose).toHaveBeenCalledOnce();
+    expect(disposed).toBe(false);
+
+    resolveDispose();
+    await disposal;
+
+    expect(disposed).toBe(true);
+    expect(solidRoom.room()).toBeUndefined();
 
     cleanup();
   });

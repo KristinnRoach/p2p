@@ -1,4 +1,4 @@
-import { createSignal, onCleanup } from 'solid-js';
+import { createSignal, onCleanup, untrack } from 'solid-js';
 import { isLocalStreamError, isRoomFullError, watchP2PRoom } from '../room.js';
 import { setLogger } from '../logger.js';
 
@@ -163,14 +163,27 @@ export function useP2PRoom() {
     setDataChannels(new Map());
   }
 
+  // a room superseded before it is published is torn down by watchRoom, so
+  // teardown has to accumulate here rather than replace what is already tracked
+  function trackDispose(disposePromise) {
+    pendingDispose = Promise.all([pendingDispose, disposePromise]).then(
+      () => undefined,
+    );
+    // tracked teardown may never be awaited; keep failures off the unhandled path
+    pendingDispose.catch(() => {});
+    return pendingDispose;
+  }
+
   function disposeCurrentRoom(nextState = 'idle') {
     currentRunId += 1;
     clearListenerCleanup();
+    // a watch still in flight registers its teardown only once it settles
+    const pendingWatch = untrack(ready);
     const currentRoom = room();
-    if (currentRoom) pendingDispose = currentRoom.dispose();
+    if (currentRoom) trackDispose(currentRoom.dispose());
     setReady(Promise.resolve(undefined));
     resetRoomSignals(nextState);
-    return pendingDispose ?? Promise.resolve();
+    return pendingWatch.then(() => pendingDispose ?? undefined);
   }
 
   function syncRoomSignals(nextRoom) {
@@ -238,7 +251,7 @@ export function useP2PRoom() {
 
     clearListenerCleanup();
     const currentRoom = room();
-    if (currentRoom) pendingDispose = currentRoom.dispose();
+    if (currentRoom) trackDispose(currentRoom.dispose());
     const previousDispose = pendingDispose?.catch(() => {}) ?? Promise.resolve();
     resetRoomSignals('creating');
     setError(undefined);
@@ -248,7 +261,7 @@ export function useP2PRoom() {
       .then(() => watchP2PRoom(roomOptions))
       .then((createdRoom) => {
         if (runId !== currentRunId) {
-          void createdRoom.dispose().catch(() => {});
+          trackDispose(createdRoom.dispose());
           return undefined;
         }
 
