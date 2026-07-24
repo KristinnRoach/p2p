@@ -2,6 +2,10 @@
 
 Signaling-agnostic WebRTC helpers for group and 1:1 peer connections. No backend included — you provide the signaling transport.
 
+The default configuration is STUN-only. That discovers direct paths but cannot
+relay traffic; production calls on symmetric NATs, restrictive mobile or
+corporate networks, and some CGNATs need a TURN service.
+
 ## Install
 
 ```bash
@@ -38,6 +42,25 @@ await room.setPresenceData({ displayName: 'Ada', muted: true });
 
 await room.dispose();
 ```
+
+For short-lived TURN credentials, provide one callback that calls your
+authenticated backend. A room fetches once before creating peer connections,
+shares the result across its pairs, and refreshes it before expiry:
+
+```js
+const room = await joinP2PRoom({
+  peerId,
+  signaling,
+  iceServersProvider: async ({ signal }) => {
+    const response = await fetch('/api/turn-credentials', { signal });
+    if (!response.ok) throw new Error('TURN credentials unavailable');
+    return response.json(); // { iceServers: [...], expiresAt?: epochMs }
+  },
+});
+```
+
+Provider account secrets belong only on that backend, never in browser code.
+Static TURN remains supported through `rtcConfig.iceServers`.
 
 Factory-created media is owned by the room: `leave()` and `dispose()` stop the
 local tracks. You can still pass `signaling` and `localStream` directly when an

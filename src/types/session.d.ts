@@ -1,6 +1,9 @@
 export type {
   DataChannelDetail,
   ErrorDetail,
+  IceServersProvider,
+  IceServersProviderReason,
+  IceServersProviderResult,
   MessageDetail,
   LocalTrackSlot,
   P2PSession,
