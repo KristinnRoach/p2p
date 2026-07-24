@@ -34,7 +34,7 @@ function createFakeRoom(overrides = {}) {
       room.emit('statechange', { previous: 'watching', state: 'joined' });
     }),
     leave: vi.fn(),
-    dispose: vi.fn(),
+    dispose: vi.fn(() => Promise.resolve()),
     send: vi.fn(),
     broadcast: vi.fn(() => 1),
     on(type, callback) {
@@ -202,7 +202,46 @@ describe('useP2PRoom', () => {
     dispose();
   });
 
-  it('stores local stream errors and closes the room', async () => {
+  it('waits for the previous room to dispose before creating a replacement', async () => {
+    let resolveDispose;
+    const firstRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveDispose = resolve;
+          }),
+      ),
+    });
+    const secondRoom = createFakeRoom();
+    roomMocks.watchP2PRoom
+      .mockResolvedValueOnce(firstRoom)
+      .mockResolvedValueOnce(secondRoom);
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+    const replacement = solidRoom.join({
+      signaling: {},
+      peerId: 'peer-a',
+    });
+    await Promise.resolve();
+
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledOnce();
+
+    resolveDispose();
+    await replacement;
+
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+    expect(secondRoom.join).toHaveBeenCalledOnce();
+
+    cleanup();
+  });
+
+  it('stores local stream errors and disposes the room', async () => {
     const error = new Error('local stream failed');
     error.name = 'LocalStreamError';
     const fakeRoom = createFakeRoom({
@@ -454,7 +493,7 @@ describe('useP2PRoom', () => {
     });
   });
 
-  it('ignores stale join completions after the room is closed', async () => {
+  it('ignores stale join completions after the room is disposed', async () => {
     let resolveJoin;
     const fakeRoom = createFakeRoom({
       join: vi.fn(

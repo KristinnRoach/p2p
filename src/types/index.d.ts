@@ -352,7 +352,7 @@ export interface P2PRoomOptions {
   dataChannelOpenTimeoutMs?: number;
   memberCapacity?: number;
   presenceData?: P2PRoomPresenceData;
-  /** Close the room automatically when the last remote member leaves. Default false. */
+  /** Dispose the room automatically when the last remote member leaves. Default false. */
   autoDisposeWhenAlone?: boolean;
   /** @deprecated Use memberCapacity. */
   maxPeers?: number;

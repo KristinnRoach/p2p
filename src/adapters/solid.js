@@ -233,12 +233,14 @@ export function useP2PRoom() {
     const runId = currentRunId;
 
     clearListenerCleanup();
-    void room()?.dispose().catch(() => {});
+    const previousDispose =
+      room()?.dispose().catch(() => {}) ?? Promise.resolve();
     resetRoomSignals('creating');
     setError(undefined);
     setErrorKind(undefined);
 
-    const roomPromise = watchP2PRoom(roomOptions)
+    const roomPromise = previousDispose
+      .then(() => watchP2PRoom(roomOptions))
       .then((createdRoom) => {
         if (runId !== currentRunId) {
           void createdRoom.dispose().catch(() => {});

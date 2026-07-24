@@ -1109,6 +1109,30 @@ describe('P2PRoom', () => {
     await room.dispose();
   });
 
+  it('waits for an in-flight join before closing signaling', async () => {
+    const signaling = createTestRoomSignaling();
+    const join = createDeferred();
+    signaling.join.mockReturnValue(join.promise);
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+    });
+
+    const joinPromise = room.join();
+    await flushAsyncWork();
+    const disposePromise = room.dispose();
+
+    expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
+
+    join.resolve();
+
+    await expect(joinPromise).rejects.toMatchObject({ name: 'AbortError' });
+    await disposePromise;
+
+    expect(signaling.leave).toHaveBeenCalledWith('a');
+    expect(signaling.cleanupSignaling).toHaveBeenCalledOnce();
+  });
+
   it('suppresses async signaling cleanup failures when closed during factory setup', async () => {
     const signaling = createTestRoomSignaling({
       cleanupSignaling: vi.fn(() => Promise.reject(new Error('cleanup failed'))),
@@ -1550,10 +1574,12 @@ describe('P2PRoom', () => {
     controller.abort();
 
     await expect(roomPromise).rejects.toMatchObject({ name: 'AbortError' });
-    expect(signaling.leave).toHaveBeenCalledWith('a');
+    expect(signaling.leave).not.toHaveBeenCalled();
 
     join.resolve();
     await flushAsyncWork();
+
+    expect(signaling.leave).toHaveBeenCalledWith('a');
   });
 
   it('rolls back room presence when the signal aborts after room join', async () => {
@@ -1577,7 +1603,7 @@ describe('P2PRoom', () => {
     expect(room._joined).toBe(false);
     expect(room._state).toBe('closed');
 
-    await expect(room.dispose()).rejects.toThrow('leave failed');
+    await expect(room.dispose()).resolves.toBeUndefined();
   });
 
   it('cleans up owned media when aborted after local stream resolves', async () => {

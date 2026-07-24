@@ -22,7 +22,7 @@ export async function joinP2PRoom(options = {}) {
     await room.ready;
     return room;
   } catch (error) {
-    await room.dispose().catch(() => {});
+    void room.dispose().catch(() => {});
     throw error;
   }
 }
@@ -40,7 +40,7 @@ export async function watchP2PRoom(options = {}) {
     await room.ready;
     return room;
   } catch (error) {
-    await room.dispose().catch(() => {});
+    void room.dispose().catch(() => {});
     throw error;
   }
 }
@@ -255,8 +255,8 @@ export class P2PRoom extends EventTarget {
     if (this._disposePromise) return this._disposePromise;
     if (this._state === 'closed') return Promise.resolve();
 
-    const shouldLeave = this._joinStarted || this._joined;
-    const signaling = this.signaling;
+    const pendingJoin = this._joinPromise;
+    const pendingLeave = this._leavePromise;
     this._setState('closed');
 
     this._stopPresenceHeartbeat();
@@ -266,6 +266,9 @@ export class P2PRoom extends EventTarget {
     this._releaseOwnedLocalStream();
 
     this._disposePromise = (async () => {
+      await Promise.allSettled([pendingJoin, pendingLeave].filter(Boolean));
+      const signaling = this.signaling;
+      const shouldLeave = this._joinStarted || this._joined;
       try {
         if (shouldLeave && signaling) {
           await Promise.resolve(signaling.leave(this.peerId));
