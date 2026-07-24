@@ -1155,13 +1155,17 @@ function normalizeIceRecoveryOptions(value) {
   }
   for (const name of [
     'disconnectedGraceMs',
-    'attemptTimeoutMs',
     'initialBackoffMs',
     'maxBackoffMs',
   ]) {
     if (options[name] < 0) {
       throw new TypeError(`Peer: iceRecovery.${name} must be non-negative`);
     }
+  }
+  if (options.attemptTimeoutMs <= 0) {
+    throw new TypeError(
+      'Peer: iceRecovery.attemptTimeoutMs must be a positive number',
+    );
   }
   if (options.backoffFactor < 1) {
     throw new TypeError('Peer: iceRecovery.backoffFactor must be at least 1');

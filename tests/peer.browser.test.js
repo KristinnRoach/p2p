@@ -76,6 +76,7 @@ describe('Peer', () => {
       [{ maxAttempts: 0 }, 'maxAttempts'],
       [{ maxAttempts: 1.5 }, 'maxAttempts'],
       [{ disconnectedGraceMs: -1 }, 'disconnectedGraceMs'],
+      [{ attemptTimeoutMs: 0 }, 'attemptTimeoutMs'],
       [{ attemptTimeoutMs: Infinity }, 'attemptTimeoutMs'],
       [{ backoffFactor: 0.5 }, 'backoffFactor'],
     ])('rejects invalid ICE recovery option %o', (iceRecovery, name) => {
