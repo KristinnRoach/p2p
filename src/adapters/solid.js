@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, untrack } from 'solid-js';
+import { createSignal, onCleanup } from 'solid-js';
 import { isLocalStreamError, isRoomFullError, watchP2PRoom } from '../room.js';
 import { setLogger } from '../logger.js';
 
@@ -119,9 +119,22 @@ export function useP2PRoom() {
   const [dataChannels, setDataChannels] = createSignal(new Map());
   let listenerCleanup = null;
   let currentRunId = 0;
-  // the room signal is cleared before teardown settles, so keep the in-flight
-  // dispose here to serialize later transitions against it
-  let pendingDispose = null;
+  // the room signal is cleared before teardown settles, so lifecycle ownership
+  // is tracked here instead
+  let activeRoom = null;
+  // lifecycle transitions run one at a time: each completes its creation and
+  // teardown before the next starts
+  let transitions = Promise.resolve();
+
+  function enqueue(transition) {
+    const result = transitions.then(transition);
+    // a rejected transition must not poison the ones queued behind it
+    transitions = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
 
   function setRoomError(cause) {
     const roomFull = isRoomFullError(cause);
@@ -163,33 +176,16 @@ export function useP2PRoom() {
     setDataChannels(new Map());
   }
 
-  // a room superseded before it is published is torn down by watchRoom, so
-  // teardown has to accumulate here rather than replace what is already tracked
-  function trackDispose(disposePromise) {
-    // allSettled, not all: the barrier has to outlast a teardown that rejects
-    // while another is still running
-    const tracked = Promise.allSettled([pendingDispose, disposePromise]).then(
-      (results) => {
-        const failed = results.find((result) => result.status === 'rejected');
-        if (failed) throw failed.reason;
-      },
-    );
-    pendingDispose = tracked;
-    // tracked teardown may never be awaited; keep failures off the unhandled path
-    tracked.catch(() => {});
-    return tracked;
-  }
-
   function disposeCurrentRoom(nextState = 'idle') {
     currentRunId += 1;
     clearListenerCleanup();
-    // a watch still in flight registers its teardown only once it settles
-    const pendingWatch = untrack(ready);
-    const currentRoom = room();
-    if (currentRoom) trackDispose(currentRoom.dispose());
+    // a creation still in flight is now stale; its own transition disposes the
+    // room it produces, and this transition is queued behind it
+    const disposingRoom = activeRoom;
+    activeRoom = null;
     setReady(Promise.resolve(undefined));
     resetRoomSignals(nextState);
-    return pendingWatch.then(() => pendingDispose ?? undefined);
+    return enqueue(() => disposingRoom?.dispose());
   }
 
   function syncRoomSignals(nextRoom) {
@@ -256,37 +252,40 @@ export function useP2PRoom() {
     const runId = currentRunId;
 
     clearListenerCleanup();
-    const currentRoom = room();
-    if (currentRoom) trackDispose(currentRoom.dispose());
-    const trackedDispose = pendingDispose;
-    const previousDispose = trackedDispose?.catch(() => {}) ?? Promise.resolve();
+    const supersededRoom = activeRoom;
+    activeRoom = null;
     resetRoomSignals('creating');
-    setError(undefined);
-    setErrorKind(undefined);
 
-    const roomPromise = previousDispose
-      .then(() => watchP2PRoom(roomOptions))
-      .then((createdRoom) => {
-        if (runId !== currentRunId) {
-          trackDispose(createdRoom.dispose());
-          return undefined;
-        }
+    const roomPromise = enqueue(async () => {
+      // teardown of the room this watch replaces belongs to this transition;
+      // its failure is reported to whoever requested the replaced room's
+      // disposal, not to this watch
+      if (supersededRoom) await supersededRoom.dispose().catch(() => {});
+      if (runId !== currentRunId) return undefined;
 
-        // an older watch may have registered teardown while this one was
-        // creating; only clear the barrier this run already waited on
-        if (pendingDispose === trackedDispose) pendingDispose = null;
-        setRoom(createdRoom);
-        setState(createdRoom.state);
-        syncRoomSignals(createdRoom);
-        listenerCleanup = bindRoomEvents(createdRoom);
-
-        return createdRoom;
-      })
-      .catch((cause) => {
-        if (runId !== currentRunId) return undefined;
-        setRoomError(cause);
+      let createdRoom;
+      try {
+        createdRoom = await watchP2PRoom(roomOptions);
+      } catch (cause) {
+        if (runId === currentRunId) setRoomError(cause);
         return undefined;
-      });
+      }
+
+      // superseded while creating: never publish it, and finish its teardown
+      // before the next transition starts
+      if (runId !== currentRunId) {
+        await createdRoom.dispose().catch(() => {});
+        return undefined;
+      }
+
+      activeRoom = createdRoom;
+      setRoom(createdRoom);
+      setState(createdRoom.state);
+      syncRoomSignals(createdRoom);
+      listenerCleanup = bindRoomEvents(createdRoom);
+
+      return createdRoom;
+    });
 
     setReady(roomPromise);
     return roomPromise;
@@ -305,11 +304,11 @@ export function useP2PRoom() {
       setError(undefined);
       setErrorKind(undefined);
       await currentRoom.join();
-      if (runId !== currentRunId || room() !== currentRoom) return undefined;
+      if (runId !== currentRunId || activeRoom !== currentRoom) return undefined;
       syncRoomSignals(currentRoom);
       return currentRoom;
     } catch (cause) {
-      if (runId !== currentRunId || room() !== currentRoom) return undefined;
+      if (runId !== currentRunId || activeRoom !== currentRoom) return undefined;
       setRoomError(cause);
       if (isLocalStreamError(cause)) {
         void disposeCurrentRoom('error').catch(() => {});
@@ -319,7 +318,7 @@ export function useP2PRoom() {
   }
 
   async function leave() {
-    const currentRoom = room();
+    const currentRoom = activeRoom;
     if (!currentRoom) return;
     await currentRoom.leave();
     syncRoomSignals(currentRoom);
