@@ -1,5 +1,16 @@
 # @kidlib/p2p
 
+## 0.5.0
+
+### Minor Changes
+
+- 6a995a9: Add shared, automatically refreshed ephemeral TURN credentials for peers, sessions, and rooms.
+- ced2977: Add opt-in, bounded ICE restart recovery across peers, sessions, and rooms.
+
+  Note: the `connected` event now fires at most once per `Peer`, even when
+  `iceRecovery` is disabled. Previously it fired on every transition to
+  `connected`. Later reconnections continue to be reported via `statechange`.
+
 ## 0.4.0
 
 ### Minor Changes
