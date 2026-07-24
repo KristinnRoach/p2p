@@ -14,10 +14,21 @@ interface RtcSignalingSource {
   onAnswer(callback: (answer: RTCSessionDescriptionInit) => void): void | (() => void);
   sendCandidate(candidate: RTCIceCandidateInit): void | Promise<void>;
   onRemoteCandidate(callback: (candidate: RTCIceCandidateInit) => void): void | (() => void);
+  sendIceRestartRequest?(request: { requestId: string }): void | Promise<void>;
+  onIceRestartRequest?(
+    callback: (request: { requestId: string }) => void,
+  ): void | (() => void);
 }
 ```
 
 `onOffer`, `onAnswer`, and `onRemoteCandidate` may optionally return an unsubscribe function.
+
+The ICE restart methods are an optional pair: `createPairSignaling()` exposes
+them only when both are present. They let a joiner ask the original initiator
+to create a restart offer. The transport must deliver the request to the remote
+peer and preserve its `requestId` if messages are persisted or replayed.
+Initiators deduplicate recent IDs, so replaying the same request is harmless.
+Joiner-side automatic recovery fails visibly when this extension is absent.
 
 ## P2PRoomSignaling
 
@@ -268,7 +279,11 @@ The helper sends and receives these envelopes:
 type RelaySignalingEnvelope =
   | { kind: 'offer'; offer: RTCSessionDescriptionInit }
   | { kind: 'answer'; answer: RTCSessionDescriptionInit }
-  | { kind: 'candidate'; candidate: RTCIceCandidateInit };
+  | { kind: 'candidate'; candidate: RTCIceCandidateInit }
+  | {
+      kind: 'ice-restart-request';
+      iceRestartRequest: { requestId: string };
+    };
 ```
 
 Incoming messages from other peers and unknown envelope kinds are ignored.

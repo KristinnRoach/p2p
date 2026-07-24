@@ -43,6 +43,29 @@ describe('createPairSignaling', () => {
     expect(source.sendCandidate).toHaveBeenCalledWith(candidate);
   });
 
+  it('exposes ICE restart requests only when both optional methods exist', async () => {
+    const onIceIceRestartRequest = vi.fn();
+    const source = createSource({
+      sendIceRestartRequest: vi.fn(),
+      onIceRestartRequest: onIceIceRestartRequest,
+    });
+    const channel = createPairSignaling(source);
+    const request = { requestId: 'request-1' };
+    const callback = vi.fn();
+
+    await channel.sendIceRestartRequest(request);
+    channel.onIceRestartRequest(callback);
+
+    expect(source.sendIceRestartRequest).toHaveBeenCalledWith(request);
+    expect(onIceIceRestartRequest).toHaveBeenCalledWith(expect.any(Function));
+
+    const incomplete = createPairSignaling(
+      createSource({ sendIceRestartRequest: vi.fn() }),
+    );
+    expect(incomplete.sendIceRestartRequest).toBeUndefined();
+    expect(incomplete.onIceRestartRequest).toBeUndefined();
+  });
+
   it('returns per-listener unsubscribe functions and removes them on close', () => {
     const offerUnsubscribe = vi.fn();
     const answerUnsubscribe = vi.fn();
@@ -238,6 +261,7 @@ describe('createRelayPeerSignaling', () => {
     await signaling.sendOffer(offer);
     await signaling.sendAnswer(answer);
     await signaling.sendCandidate(candidate);
+    await signaling.sendIceRestartRequest({ requestId: 'restart-1' });
 
     expect(relay.send).toHaveBeenCalledWith('peer-b', {
       kind: 'offer',
@@ -251,6 +275,10 @@ describe('createRelayPeerSignaling', () => {
       kind: 'candidate',
       candidate,
     });
+    expect(relay.send).toHaveBeenCalledWith('peer-b', {
+      kind: 'ice-restart-request',
+      iceRestartRequest: { requestId: 'restart-1' },
+    });
   });
 
   it('routes only matching remote-peer relay messages by kind', () => {
@@ -259,6 +287,7 @@ describe('createRelayPeerSignaling', () => {
     const onOffer = vi.fn();
     const onAnswer = vi.fn();
     const onRemoteCandidate = vi.fn();
+    const onIceRestartRequest = vi.fn();
     const offer = { type: 'offer', sdp: 'offer-sdp' };
     const answer = { type: 'answer', sdp: 'answer-sdp' };
     const candidate = { candidate: 'candidate', sdpMid: '0' };
@@ -266,11 +295,16 @@ describe('createRelayPeerSignaling', () => {
     signaling.onOffer(onOffer);
     signaling.onAnswer(onAnswer);
     signaling.onRemoteCandidate(onRemoteCandidate);
+    signaling.onIceRestartRequest(onIceRestartRequest);
     relay.emit('peer-c', { kind: 'offer', offer: { sdp: 'wrong-peer' } });
     relay.emit('peer-b', { kind: 'ignored', ignored: true });
     relay.emit('peer-b', { kind: 'offer', offer });
     relay.emit('peer-b', { kind: 'answer', answer });
     relay.emit('peer-b', { kind: 'candidate', candidate });
+    relay.emit('peer-b', {
+      kind: 'ice-restart-request',
+      iceRestartRequest: { requestId: 'restart-1' },
+    });
 
     expect(onOffer).toHaveBeenCalledOnce();
     expect(onOffer).toHaveBeenCalledWith(offer);
@@ -278,6 +312,9 @@ describe('createRelayPeerSignaling', () => {
     expect(onAnswer).toHaveBeenCalledWith(answer);
     expect(onRemoteCandidate).toHaveBeenCalledOnce();
     expect(onRemoteCandidate).toHaveBeenCalledWith(candidate);
+    expect(onIceRestartRequest).toHaveBeenCalledWith({
+      requestId: 'restart-1',
+    });
   });
 
   it('unsubscribes from the relay and stops callbacks after close', () => {

@@ -14,6 +14,8 @@ const PRESENCE_HEARTBEAT_MS = 5000;
  * calls use {@link startP2PSession} / {@link joinP2PSession} instead.
  *
  * @param {Object} options
+ * @param {false|Object} [options.iceRecovery=false]
+ *   Opt in to bounded ICE restart recovery for every managed pair.
  * @returns {Promise<P2PRoom>}
  */
 export async function joinP2PRoom(options = {}) {
@@ -32,6 +34,8 @@ export async function joinP2PRoom(options = {}) {
  * presence and start connecting to peers.
  *
  * @param {Object} options
+ * @param {false|Object} [options.iceRecovery=false]
+ *   Opt in to bounded ICE restart recovery for every managed pair.
  * @returns {Promise<P2PRoom>}
  */
 export async function watchP2PRoom(options = {}) {
@@ -57,6 +61,7 @@ export class P2PRoom extends EventTarget {
       getLocalStream = null,
       localTrackSlots = [],
       rtcConfig,
+      iceRecovery = false,
       audioOnly = false,
       dataChannel = false,
       dataChannelLabel = 'data',
@@ -85,6 +90,9 @@ export class P2PRoom extends EventTarget {
       onDataChannelOpen = null,
       onDataChannelMessage = null,
       onDataChannelClose = null,
+      onIceReconnecting = null,
+      onIceReconnected = null,
+      onIceReconnectFailed = null,
       onError = null,
     } = options;
 
@@ -138,6 +146,7 @@ export class P2PRoom extends EventTarget {
     }
     this._syncAllSlotTracksToLocalStream();
     this.rtcConfig = rtcConfig;
+    this.iceRecovery = iceRecovery;
     this.audioOnly = audioOnly;
     this.dataChannel = dataChannel;
     this.dataChannelLabel = dataChannelLabel;
@@ -196,6 +205,9 @@ export class P2PRoom extends EventTarget {
       ['dataChannelOpen', onDataChannelOpen],
       ['dataChannelMessage', onDataChannelMessage],
       ['dataChannelClose', onDataChannelClose],
+      ['iceReconnecting', onIceReconnecting],
+      ['iceReconnected', onIceReconnected],
+      ['iceReconnectFailed', onIceReconnectFailed],
       ['error', onError],
     ];
     for (const [event, handler] of handlers) {
@@ -677,6 +689,7 @@ export class P2PRoom extends EventTarget {
       localStream: this.localStream,
       localTrackSlots: this._snapshotLocalTrackSlots(),
       rtcConfig: this.rtcConfig,
+      iceRecovery: this.iceRecovery,
       audioOnly: this.audioOnly,
       dataChannel: this.dataChannel,
       dataChannelLabel: this.dataChannelLabel,
@@ -711,6 +724,24 @@ export class P2PRoom extends EventTarget {
           return;
         }
         try {
+          for (const type of [
+            'iceReconnecting',
+            'iceReconnected',
+            'iceReconnectFailed',
+          ]) {
+            pair.on(type, (detail) => {
+              if (
+                this._state === 'active' &&
+                !controller.signal.aborted
+              ) {
+                this._emit(type, {
+                  ...detail,
+                  memberId: remoteMemberId,
+                  peerId: remoteMemberId,
+                });
+              }
+            });
+          }
           let appliedVersion = initialLocalTrackSlotVersion;
           while (appliedVersion !== this._localTrackSlotVersion) {
             const targetVersion = this._localTrackSlotVersion;

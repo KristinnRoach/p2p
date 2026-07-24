@@ -26,6 +26,8 @@
  * @property {(callback: (answer: RTCSessionDescriptionInit) => void) => void|(() => void)} onAnswer
  * @property {(candidate: RTCIceCandidateInit) => void|Promise<void>} sendCandidate
  * @property {(callback: (candidate: RTCIceCandidateInit) => void) => void|(() => void)} onRemoteCandidate
+ * @property {(request: {requestId: string}) => void|Promise<void>} [sendIceRestartRequest]
+ * @property {(callback: (request: {requestId: string}) => void) => void|(() => void)} [onIceRestartRequest]
  */
 
 const REQUIRED_METHODS = [
@@ -46,6 +48,7 @@ const RELAY_ENVELOPE_KINDS = {
   offer: 'offer',
   answer: 'answer',
   candidate: 'candidate',
+  'ice-restart-request': 'iceRestartRequest',
 };
 
 /**
@@ -96,7 +99,7 @@ export function createPairSignaling(source) {
     return cleanup;
   };
 
-  return {
+  const signaling = {
     sendOffer: (offer) => source.sendOffer(offer),
     sendAnswer: (answer) => source.sendAnswer(answer),
     onOffer: (callback) => subscribe('onOffer', callback),
@@ -126,6 +129,16 @@ export function createPairSignaling(source) {
       }
     },
   };
+  if (
+    typeof source.sendIceRestartRequest === 'function' &&
+    typeof source.onIceRestartRequest === 'function'
+  ) {
+    signaling.sendIceRestartRequest = (request) =>
+      source.sendIceRestartRequest(request);
+    signaling.onIceRestartRequest = (callback) =>
+      subscribe('onIceRestartRequest', callback);
+  }
+  return signaling;
 }
 
 /**
@@ -149,6 +162,7 @@ export function createRelayPeerSignaling(options) {
     offer: new Set(),
     answer: new Set(),
     candidate: new Set(),
+    iceRestartRequest: new Set(),
   };
   let closed = false;
 
@@ -159,9 +173,10 @@ export function createRelayPeerSignaling(options) {
       const kind = message?.kind;
       if (!isRelayEnvelopeKind(kind)) return;
 
-      const payload = message[kind];
+      const listenerKind = RELAY_ENVELOPE_KINDS[kind];
+      const payload = message[listenerKind];
       if (payload == null) return;
-      for (const callback of listeners[kind]) callback(payload);
+      for (const callback of listeners[listenerKind]) callback(payload);
     }),
     'onMessage',
   );
@@ -192,6 +207,13 @@ export function createRelayPeerSignaling(options) {
         candidate,
       }),
     onRemoteCandidate: (callback) => subscribe('candidate', callback),
+    sendIceRestartRequest: (iceRestartRequest) =>
+      send(remotePeerId, {
+        kind: 'ice-restart-request',
+        iceRestartRequest,
+      }),
+    onIceRestartRequest: (callback) =>
+      subscribe('iceRestartRequest', callback),
   });
   const closePairSignaling = pairSignaling.close;
 

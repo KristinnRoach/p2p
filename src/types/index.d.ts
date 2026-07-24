@@ -17,6 +17,12 @@ export interface RtcSignalingSource extends IceTransport {
   onAnswer(
     callback: (answer: RTCSessionDescriptionInit) => void,
   ): void | (() => void);
+  sendIceRestartRequest?(
+    request: { requestId: string },
+  ): void | Promise<void>;
+  onIceRestartRequest?(
+    callback: (request: { requestId: string }) => void,
+  ): void | (() => void);
 }
 
 /** Normalized pair signaling returned by {@link createPairSignaling} — close always provided. */
@@ -31,6 +37,45 @@ export type PeerState =
   | 'disconnected'
   | 'failed'
   | 'closed';
+
+export interface IceRecoveryOptions {
+  maxAttempts?: number;
+  disconnectedGraceMs?: number;
+  attemptTimeoutMs?: number;
+  initialBackoffMs?: number;
+  backoffFactor?: number;
+  maxBackoffMs?: number;
+}
+
+export type IceRecoveryConfig = false | IceRecoveryOptions;
+
+export type IceRecoveryReason =
+  | 'failed'
+  | 'disconnected'
+  | 'remote-request';
+
+export interface IceReconnectingDetail {
+  attempt: number;
+  maxAttempts: number;
+  reason: IceRecoveryReason;
+  nextDelayMs: number;
+}
+
+export interface IceReconnectedDetail {
+  attempt: number;
+  durationMs: number;
+}
+
+export interface IceReconnectFailedDetail {
+  attempts: number;
+  reason: IceRecoveryReason;
+  error: Error;
+}
+
+export interface DisconnectedDetail {
+  reason: 'disconnected' | 'failed';
+  iceRecoveryScheduled: boolean;
+}
 
 export interface RemoteStreamDetail {
   stream: MediaStream;
@@ -61,7 +106,10 @@ export interface P2PSessionEvents {
   remoteTrack: RemoteStreamDetail;
   statechange: StateChangeDetail;
   connected: Record<string, never>;
-  disconnected: Record<string, never>;
+  disconnected: DisconnectedDetail;
+  iceReconnecting: IceReconnectingDetail;
+  iceReconnected: IceReconnectedDetail;
+  iceReconnectFailed: IceReconnectFailedDetail;
   datachannel: DataChannelDetail;
   open: Record<string, never>;
   message: MessageDetail;
@@ -115,6 +163,7 @@ export interface P2PSessionOptions {
   dataChannel?: boolean;
   dataChannelLabel?: string;
   rtcConfig?: RTCConfiguration;
+  iceRecovery?: IceRecoveryConfig;
   startTimeoutMs?: number;
   connectedTimeoutMs?: number;
   dataChannelOpenTimeoutMs?: number;
@@ -157,7 +206,11 @@ export interface P2PRoomPresenceSnapshot {
 export type RelaySignalingEnvelope =
   | { kind: 'offer'; offer: RTCSessionDescriptionInit }
   | { kind: 'answer'; answer: RTCSessionDescriptionInit }
-  | { kind: 'candidate'; candidate: RTCIceCandidateInit };
+  | { kind: 'candidate'; candidate: RTCIceCandidateInit }
+  | {
+      kind: 'ice-restart-request';
+      iceRestartRequest: { requestId: string };
+    };
 
 export interface RelayPeerSignalingOptions {
   remotePeerId: string;
@@ -268,6 +321,22 @@ export interface MemberErrorDetail {
   error: Error;
 }
 
+export interface RoomIceReconnectingDetail extends IceReconnectingDetail {
+  memberId: string;
+  peerId: string;
+}
+
+export interface RoomIceReconnectedDetail extends IceReconnectedDetail {
+  memberId: string;
+  peerId: string;
+}
+
+export interface RoomIceReconnectFailedDetail
+  extends IceReconnectFailedDetail {
+  memberId: string;
+  peerId: string;
+}
+
 export interface LocalStreamDetail {
   stream: MediaStream;
 }
@@ -329,6 +398,9 @@ export interface P2PRoomEvents {
   dataChannelOpen: RoomDataChannelDetail;
   dataChannelMessage: RoomDataChannelMessageDetail;
   dataChannelClose: RoomDataChannelDetail;
+  iceReconnecting: RoomIceReconnectingDetail;
+  iceReconnected: RoomIceReconnectedDetail;
+  iceReconnectFailed: RoomIceReconnectFailedDetail;
   error: PeerErrorDetail;
 }
 
@@ -357,6 +429,7 @@ export interface P2PRoomOptions {
   /** @deprecated Use memberCapacity. */
   maxPeers?: number;
   rtcConfig?: RTCConfiguration;
+  iceRecovery?: IceRecoveryConfig;
   startTimeoutMs?: number;
   signal?: AbortSignal | null;
   onMemberStream?: (detail: MemberStreamDetail, event: CustomEvent) => void;
@@ -400,6 +473,18 @@ export interface P2PRoomOptions {
   ) => void;
   onDataChannelClose?: (
     detail: RoomDataChannelDetail,
+    event: CustomEvent,
+  ) => void;
+  onIceReconnecting?: (
+    detail: RoomIceReconnectingDetail,
+    event: CustomEvent,
+  ) => void;
+  onIceReconnected?: (
+    detail: RoomIceReconnectedDetail,
+    event: CustomEvent,
+  ) => void;
+  onIceReconnectFailed?: (
+    detail: RoomIceReconnectFailedDetail,
     event: CustomEvent,
   ) => void;
   onError?: (detail: PeerErrorDetail, event: CustomEvent) => void;
@@ -516,7 +601,10 @@ export declare const PEER_STATES: Readonly<{
 export interface PeerEvents {
   statechange: StateChangeDetail;
   connected: Record<string, never>;
-  disconnected: Record<string, never>;
+  disconnected: DisconnectedDetail;
+  iceReconnecting: IceReconnectingDetail;
+  iceReconnected: IceReconnectedDetail;
+  iceReconnectFailed: IceReconnectFailedDetail;
   datachannel: DataChannelDetail;
   open: Record<string, never>;
   message: MessageDetail;
@@ -535,6 +623,7 @@ export declare class Peer extends EventTarget {
     dataChannel?: boolean;
     dataChannelLabel?: string;
     rtcConfig?: RTCConfiguration;
+    iceRecovery?: IceRecoveryConfig;
   });
 
   readonly role: 'initiator' | 'joiner';

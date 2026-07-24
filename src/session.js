@@ -6,6 +6,8 @@ import { attachRemoteStream } from './remote-stream.js';
  * For group calls with multiple peers use {@link joinP2PRoom} instead.
  *
  * @param {Object} options
+ * @param {false|Object} [options.iceRecovery=false]
+ *   Opt in to bounded ICE restart recovery for the existing connection.
  * @returns {Promise<P2PSession>}
  */
 export function startP2PSession(options = {}) {
@@ -17,6 +19,8 @@ export function startP2PSession(options = {}) {
  * For group calls with multiple peers use {@link joinP2PRoom} instead.
  *
  * @param {Object} options
+ * @param {false|Object} [options.iceRecovery=false]
+ *   Opt in to bounded ICE restart recovery for the existing connection.
  * @returns {Promise<P2PSession>}
  */
 export function joinP2PSession(options = {}) {
@@ -45,6 +49,7 @@ class P2PSession extends EventTarget {
       dataChannel = false,
       dataChannelLabel = 'data',
       rtcConfig,
+      iceRecovery = false,
       startTimeoutMs = 0,
       connectedTimeoutMs = 0,
       dataChannelOpenTimeoutMs = dataChannel ? 10000 : 0,
@@ -63,6 +68,7 @@ class P2PSession extends EventTarget {
       dataChannel,
       dataChannelLabel,
       rtcConfig,
+      iceRecovery,
     });
     this._remoteStream = null;
     this._cleanups = [];
@@ -174,6 +180,9 @@ class P2PSession extends EventTarget {
       'statechange',
       'connected',
       'disconnected',
+      'iceReconnecting',
+      'iceReconnected',
+      'iceReconnectFailed',
       'datachannel',
       'open',
       'message',
@@ -183,7 +192,10 @@ class P2PSession extends EventTarget {
     ]) {
       this._cleanups.push(
         this.peer.on(type, (detail, event) => {
-          this._emit(type, { ...detail, event });
+          this._emit(
+            type,
+            type.startsWith('ice') ? detail : { ...detail, event },
+          );
         }),
       );
     }
