@@ -240,7 +240,7 @@ function Video({ title, stream, muted = false }) {
 }
 
 function closeCurrentSession({ session, signaling, localStream }) {
-  session?.close();
+  session?.dispose();
   signaling?.close();
   stopStream(localStream);
 }

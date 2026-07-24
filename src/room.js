@@ -568,7 +568,7 @@ export class P2PRoom extends EventTarget {
         await Promise.resolve(signaling.leave(this.peerId));
       }
     } finally {
-      this._closeAllPeers({ emitLeft: true });
+      this._closeAllPeers({ emitLeft: true, reason: 'left' });
       this._hadRemoteMembers = false;
       if (shouldLeave) {
         this._joinStarted = false;
@@ -850,7 +850,7 @@ export class P2PRoom extends EventTarget {
     if (changed) this._emit('localStream', { stream: this.localStream });
   }
 
-  _closeAllPeers({ emitLeft = true } = {}) {
+  _closeAllPeers({ emitLeft = true, reason = 'dropped' } = {}) {
     const memberIds = new Set([
       ...this.pairs.keys(),
       ...this._controllers.keys(),
@@ -858,7 +858,9 @@ export class P2PRoom extends EventTarget {
       ...this.dataChannels.keys(),
       ...this._pairSignalings.keys(),
     ]);
-    for (const memberId of memberIds) this._closeMember(memberId, { emitLeft });
+    for (const memberId of memberIds) {
+      this._closeMember(memberId, { emitLeft, reason });
+    }
   }
 
   _closeMember(memberId, { emitLeft = true, reason = 'dropped' } = {}) {

@@ -1,5 +1,5 @@
 ---
-"@kidlib/p2p": major
+"@kidlib/p2p": minor
 ---
 
 Replace lifecycle `close()` methods on `P2PRoom`, `P2PSession`, `Peer`, and the

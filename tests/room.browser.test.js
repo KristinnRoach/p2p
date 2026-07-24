@@ -1258,9 +1258,11 @@ describe('P2PRoom', () => {
     const session = createResolvedSession();
     sessionMocks.startP2PSession.mockResolvedValue(session);
     const signaling = createTestRoomSignaling();
+    const memberLeft = [];
     const room = await watchP2PRoom({
       signaling,
       peerId: 'a',
+      onMemberLeft: (detail) => memberLeft.push(detail),
     });
 
     signaling.emitPeers(['b']);
@@ -1276,6 +1278,9 @@ describe('P2PRoom', () => {
 
     expect(signaling.leave).toHaveBeenCalledWith('a');
     expect(session.dispose).toHaveBeenCalled();
+    expect(memberLeft).toEqual([
+      { memberId: 'b', stream: null, reason: 'left' },
+    ]);
     expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
 
