@@ -1,11 +1,15 @@
-import { createSignal, onCleanup, untrack } from 'solid-js';
+import { createSignal, onCleanup } from 'solid-js';
 import { isLocalStreamError, isRoomFullError, watchP2PRoom } from '../room.js';
-import { setLogger } from '../logger.js';
+import { log, setLogger } from '../logger.js';
 
 export { setLogger };
 
 function noopBroadcast() {
   return 0;
+}
+
+function logTeardown(cause) {
+  log('useP2PRoom: superseded room teardown failed', cause);
 }
 
 export function attachMediaStream(video, stream, options = {}) {
@@ -118,10 +122,25 @@ export function useP2PRoom() {
   const [isFull, setIsFull] = createSignal(false);
   const [dataChannels, setDataChannels] = createSignal(new Map());
   let listenerCleanup = null;
-  let currentRunId = 0;
-  // the room signal is cleared before teardown settles, so keep the in-flight
-  // dispose here to serialize later transitions against it
-  let pendingDispose = null;
+  // minted per watch()/dispose() request; creation compares it to spot
+  // supersession, having no owned room yet to compare identity against
+  let latestTransitionId = 0;
+  // the room signal is cleared before teardown settles, so lifecycle ownership
+  // is tracked here instead
+  let activeRoom = null;
+  // lifecycle transitions run one at a time: each completes its creation and
+  // teardown before the next starts
+  let transitionChain = Promise.resolve();
+
+  function enqueue(transition) {
+    const result = transitionChain.then(transition);
+    // a rejected transition must not poison the ones queued behind it
+    transitionChain = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
 
   function setRoomError(cause) {
     const roomFull = isRoomFullError(cause);
@@ -163,33 +182,16 @@ export function useP2PRoom() {
     setDataChannels(new Map());
   }
 
-  // a room superseded before it is published is torn down by watchRoom, so
-  // teardown has to accumulate here rather than replace what is already tracked
-  function trackDispose(disposePromise) {
-    // allSettled, not all: the barrier has to outlast a teardown that rejects
-    // while another is still running
-    const tracked = Promise.allSettled([pendingDispose, disposePromise]).then(
-      (results) => {
-        const failed = results.find((result) => result.status === 'rejected');
-        if (failed) throw failed.reason;
-      },
-    );
-    pendingDispose = tracked;
-    // tracked teardown may never be awaited; keep failures off the unhandled path
-    tracked.catch(() => {});
-    return tracked;
-  }
-
   function disposeCurrentRoom(nextState = 'idle') {
-    currentRunId += 1;
+    latestTransitionId += 1;
     clearListenerCleanup();
-    // a watch still in flight registers its teardown only once it settles
-    const pendingWatch = untrack(ready);
-    const currentRoom = room();
-    if (currentRoom) trackDispose(currentRoom.dispose());
+    // a creation still in flight is now superseded; its own transition disposes
+    // the room it produces, and this transition is queued behind it
+    const disposingRoom = activeRoom;
+    activeRoom = null;
     setReady(Promise.resolve(undefined));
     resetRoomSignals(nextState);
-    return pendingWatch.then(() => pendingDispose ?? undefined);
+    return enqueue(() => disposingRoom?.dispose());
   }
 
   function syncRoomSignals(nextRoom) {
@@ -252,41 +254,44 @@ export function useP2PRoom() {
   }
 
   function watchRoom(roomOptions) {
-    currentRunId += 1;
-    const runId = currentRunId;
+    const transitionId = (latestTransitionId += 1);
+    const superseded = () => transitionId !== latestTransitionId;
 
     clearListenerCleanup();
-    const currentRoom = room();
-    if (currentRoom) trackDispose(currentRoom.dispose());
-    const trackedDispose = pendingDispose;
-    const previousDispose = trackedDispose?.catch(() => {}) ?? Promise.resolve();
+    const supersededRoom = activeRoom;
+    activeRoom = null;
     resetRoomSignals('creating');
-    setError(undefined);
-    setErrorKind(undefined);
 
-    const roomPromise = previousDispose
-      .then(() => watchP2PRoom(roomOptions))
-      .then((createdRoom) => {
-        if (runId !== currentRunId) {
-          trackDispose(createdRoom.dispose());
-          return undefined;
-        }
+    const roomPromise = enqueue(async () => {
+      // a room torn down by supersession was never explicitly disposed by
+      // anyone, so its failure has no caller to reject and must not fail this
+      // watch; log it so a stuck teardown stays diagnosable
+      if (supersededRoom) await supersededRoom.dispose().catch(logTeardown);
+      if (superseded()) return undefined;
 
-        // an older watch may have registered teardown while this one was
-        // creating; only clear the barrier this run already waited on
-        if (pendingDispose === trackedDispose) pendingDispose = null;
-        setRoom(createdRoom);
-        setState(createdRoom.state);
-        syncRoomSignals(createdRoom);
-        listenerCleanup = bindRoomEvents(createdRoom);
-
-        return createdRoom;
-      })
-      .catch((cause) => {
-        if (runId !== currentRunId) return undefined;
-        setRoomError(cause);
+      let createdRoom;
+      try {
+        createdRoom = await watchP2PRoom(roomOptions);
+      } catch (cause) {
+        if (!superseded()) setRoomError(cause);
         return undefined;
-      });
+      }
+
+      // never publish a superseded room, and finish its teardown before the
+      // next transition starts
+      if (superseded()) {
+        await createdRoom.dispose().catch(logTeardown);
+        return undefined;
+      }
+
+      activeRoom = createdRoom;
+      setRoom(createdRoom);
+      setState(createdRoom.state);
+      syncRoomSignals(createdRoom);
+      listenerCleanup = bindRoomEvents(createdRoom);
+
+      return createdRoom;
+    });
 
     setReady(roomPromise);
     return roomPromise;
@@ -297,19 +302,18 @@ export function useP2PRoom() {
   });
 
   async function join(options) {
-    const currentRoom = await watchRoom(options);
-    if (!currentRoom) return undefined;
-    const runId = currentRunId;
+    const joiningRoom = await watchRoom(options);
+    if (!joiningRoom) return undefined;
 
     try {
       setError(undefined);
       setErrorKind(undefined);
-      await currentRoom.join();
-      if (runId !== currentRunId || room() !== currentRoom) return undefined;
-      syncRoomSignals(currentRoom);
-      return currentRoom;
+      await joiningRoom.join();
+      if (activeRoom !== joiningRoom) return undefined;
+      syncRoomSignals(joiningRoom);
+      return joiningRoom;
     } catch (cause) {
-      if (runId !== currentRunId || room() !== currentRoom) return undefined;
+      if (activeRoom !== joiningRoom) return undefined;
       setRoomError(cause);
       if (isLocalStreamError(cause)) {
         void disposeCurrentRoom('error').catch(() => {});
@@ -319,10 +323,11 @@ export function useP2PRoom() {
   }
 
   async function leave() {
-    const currentRoom = room();
-    if (!currentRoom) return;
-    await currentRoom.leave();
-    syncRoomSignals(currentRoom);
+    const leavingRoom = activeRoom;
+    if (!leavingRoom) return;
+    await leavingRoom.leave();
+    if (activeRoom !== leavingRoom) return;
+    syncRoomSignals(leavingRoom);
   }
 
   function dispose() {
