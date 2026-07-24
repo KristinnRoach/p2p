@@ -465,6 +465,50 @@ describe('useP2PRoom', () => {
     cleanup();
   });
 
+  it('does not resync signals from a room superseded during leave', async () => {
+    let resolveLeave;
+    const leavePromise = new Promise((resolve) => {
+      resolveLeave = resolve;
+    });
+    const firstRoom = createFakeRoom({
+      members: ['peer-a', 'stale-peer'],
+      memberCount: 2,
+      leave: vi.fn(() => leavePromise),
+      // P2PRoom.dispose() awaits an in-flight leave before settling
+      dispose: vi.fn(() => leavePromise),
+    });
+    const secondRoom = createFakeRoom({ roomId: 'room-b', members: ['peer-b'] });
+    roomMocks.watchP2PRoom
+      .mockResolvedValueOnce(firstRoom)
+      .mockResolvedValueOnce(secondRoom);
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    expect(solidRoom.members()).toEqual(['peer-a', 'stale-peer']);
+
+    const leaving = solidRoom.leave();
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-b' });
+    expect(solidRoom.members()).toEqual([]);
+
+    resolveLeave();
+    await leaving;
+
+    // the replacement has not been published yet, so the left room must not
+    // write its membership back over the cleared signals
+    expect(solidRoom.room()).toBeUndefined();
+    expect(solidRoom.members()).toEqual([]);
+
+    await vi.waitFor(() => expect(solidRoom.room()).toBe(secondRoom));
+    expect(solidRoom.members()).toEqual(['peer-b']);
+
+    cleanup();
+  });
+
   it('stores local stream errors and disposes the room', async () => {
     const error = new Error('local stream failed');
     error.name = 'LocalStreamError';

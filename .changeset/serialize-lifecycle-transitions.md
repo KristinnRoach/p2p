@@ -7,4 +7,6 @@ Serialize `useP2PRoom` lifecycle transitions on a single chain. `watch()`,
 second `watch()` can no longer create a room while an earlier creation is still
 in flight and use the same peer identity concurrently. A superseded room is
 never published through the `room` signal, and a rejected creation or disposal
-no longer blocks later transitions.
+no longer blocks later transitions. `leave()` no longer writes the left room's
+membership and streams back over the signals when a `watch()` supersedes it
+mid-call.

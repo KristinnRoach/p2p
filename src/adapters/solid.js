@@ -257,9 +257,9 @@ export function useP2PRoom() {
     resetRoomSignals('creating');
 
     const roomPromise = enqueue(async () => {
-      // teardown of the room this watch replaces belongs to this transition;
-      // its failure is reported to whoever requested the replaced room's
-      // disposal, not to this watch
+      // a room replaced by watch() was never explicitly disposed by anyone, so
+      // its teardown failure has no caller to reject; swallow it rather than
+      // fail this watch
       if (supersededRoom) await supersededRoom.dispose().catch(() => {});
       if (runId !== currentRunId) return undefined;
 
@@ -321,6 +321,8 @@ export function useP2PRoom() {
     const currentRoom = activeRoom;
     if (!currentRoom) return;
     await currentRoom.leave();
+    // a watch() may have superseded this room while leave() was in flight
+    if (activeRoom !== currentRoom) return;
     syncRoomSignals(currentRoom);
   }
 
