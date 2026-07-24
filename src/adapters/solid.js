@@ -122,6 +122,11 @@ export function useP2PRoom() {
   const [isFull, setIsFull] = createSignal(false);
   const [dataChannels, setDataChannels] = createSignal(new Map());
   let listenerCleanup = null;
+  // two staleness questions, each answered where the other cannot be:
+  // "is this run still current?" only during creation, when no room is owned
+  // yet, and "is this still the owned room?" once a room is in hand. Every run
+  // id bump nulls activeRoom in the same step and a room is only ever adopted
+  // from a fresh watchP2PRoom(), so holding a room makes identity sufficient.
   let currentRunId = 0;
   // the room signal is cleared before teardown settles, so lifecycle ownership
   // is tracked here instead
@@ -302,17 +307,18 @@ export function useP2PRoom() {
   async function join(options) {
     const currentRoom = await watchRoom(options);
     if (!currentRoom) return undefined;
-    const runId = currentRunId;
 
     try {
       setError(undefined);
       setErrorKind(undefined);
       await currentRoom.join();
-      if (runId !== currentRunId || activeRoom !== currentRoom) return undefined;
+      // a watch() or dispose() may have superseded this room while join() was
+      // in flight
+      if (activeRoom !== currentRoom) return undefined;
       syncRoomSignals(currentRoom);
       return currentRoom;
     } catch (cause) {
-      if (runId !== currentRunId || activeRoom !== currentRoom) return undefined;
+      if (activeRoom !== currentRoom) return undefined;
       setRoomError(cause);
       if (isLocalStreamError(cause)) {
         void disposeCurrentRoom('error').catch(() => {});
@@ -325,7 +331,8 @@ export function useP2PRoom() {
     const currentRoom = activeRoom;
     if (!currentRoom) return;
     await currentRoom.leave();
-    // a watch() may have superseded this room while leave() was in flight
+    // a watch() or dispose() may have superseded this room while leave() was
+    // in flight
     if (activeRoom !== currentRoom) return;
     syncRoomSignals(currentRoom);
   }
