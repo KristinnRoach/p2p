@@ -1,5 +1,35 @@
 # @kidlib/p2p
 
+## 0.4.0
+
+### Minor Changes
+
+- 1cd6407: Add explicit `left` versus `dropped` reasons to room departure events.
+- b677367: Replace lifecycle `close()` methods on `P2PRoom`, `P2PSession`, `Peer`, and the
+  Solid room adapter with `dispose()`. Package-owned objects now consistently use
+  `dispose()` for permanent, non-reusable teardown; low-level signaling and native
+  WebRTC transports retain their conventional `close()` methods.
+
+  Room disposal is asynchronous because it first awaits an explicit signaling
+  departure so network transports report intentional exits as `left` instead of
+  racing teardown and reporting `dropped`. Peer and session disposal remain
+  synchronous because they have no presence departure to await.
+
+  Use `await room.leave()` to exit presence while keeping the room reusable. Use
+  `await room.dispose()` for graceful departure followed by permanent teardown.
+  The related `autoCloseWhenAlone` option is now `autoDisposeWhenAlone`.
+
+### Patch Changes
+
+- 8b69951: Serialize `useP2PRoom` lifecycle transitions on a single chain. `watch()`,
+  `dispose()`, and teardown of superseded rooms now run one at a time, so a
+  second `watch()` can no longer start creating a room while an earlier creation
+  is still in flight — which previously left two rooms using the same peer
+  identity and signaling at once. A superseded room is never published through
+  the `room` signal, and a rejected creation or disposal no longer blocks later
+  transitions. `leave()` no longer writes the left room's membership and streams
+  back over the signals when a `watch()` supersedes it mid-call.
+
 ## 0.3.0
 
 ### Minor Changes
