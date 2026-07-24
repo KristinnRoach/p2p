@@ -96,6 +96,26 @@ describe('ICE servers manager', () => {
     manager.dispose();
   });
 
+  it('clamps an override that is at least the credential lifetime', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    const provider = vi.fn().mockResolvedValue({
+      iceServers: servers('turn.example'),
+      expiresAt: 11000,
+    });
+    const manager = createIceServersManager({
+      provider,
+      refreshMarginMs: 10000,
+    });
+
+    await manager.ensureFresh('initial');
+    expect(provider).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(provider).toHaveBeenCalledTimes(2);
+
+    manager.dispose();
+  });
+
   it('isolates failing and removed peer connections', async () => {
     const onError = vi.fn();
     const provider = vi

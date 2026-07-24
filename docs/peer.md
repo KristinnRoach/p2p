@@ -48,6 +48,8 @@ package refreshes before expiry (by default, the smaller of 60 seconds or 10%
 of the credential lifetime), applies the new configuration to the live
 connection, and does not restart ICE. An explicit non-negative
 `iceServersRefreshMarginMs` overrides that margin.
+Overrides at or above the observed credential lifetime are clamped just below
+the lifetime to prevent an immediate refresh loop.
 
 Initial failure prevents connection construction. Refresh failure keeps
 unexpired credentials and retries briefly; expired credentials are never

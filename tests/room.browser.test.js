@@ -111,7 +111,9 @@ describe('P2PRoom', () => {
   it('shares one ICE server lifecycle across room pairs and keeps it on leave', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();
-    const provider = vi.fn();
+    const provider = vi.fn(async () => ({
+      iceServers: [{ urls: 'stun:test.example' }],
+    }));
     const room = await joinP2PRoom({
       signaling,
       peerId: 'a',
@@ -129,7 +131,11 @@ describe('P2PRoom', () => {
 
     await room.leave();
     expect(room._iceServersManager).toBe(firstManager);
+    await expect(firstManager.ensureFresh('initial')).resolves.toBeUndefined();
     await room.dispose();
+    await expect(firstManager.ensureFresh('initial')).rejects.toMatchObject({
+      name: 'AbortError',
+    });
   });
 
   it('replaces a reserved slot across every active pair and local stream', async () => {
