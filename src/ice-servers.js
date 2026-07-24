@@ -86,9 +86,8 @@ export function createIceServersManager({
       refreshMarginMs === undefined
         ? Math.min(60000, lifetime * 0.1)
         : refreshMarginMs;
-    // Keep explicit margins below the observed lifetime to avoid a
-    // successful provider creating a zero-delay refresh loop.
-    const margin = Math.min(requestedMargin, Math.max(0, lifetime - 1));
+    // Keep at least 10% of the observed lifetime between successful fetches.
+    const margin = Math.min(requestedMargin, lifetime * 0.9);
     refreshTimer = setTimeout(
       () => {
         refreshTimer = null;

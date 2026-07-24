@@ -110,6 +110,8 @@ describe('ICE servers manager', () => {
 
     await manager.ensureFresh('initial');
     expect(provider).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(provider).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(1);
     expect(provider).toHaveBeenCalledTimes(2);
 
