@@ -166,12 +166,18 @@ export function useP2PRoom() {
   // a room superseded before it is published is torn down by watchRoom, so
   // teardown has to accumulate here rather than replace what is already tracked
   function trackDispose(disposePromise) {
-    pendingDispose = Promise.all([pendingDispose, disposePromise]).then(
-      () => undefined,
+    // allSettled, not all: the barrier has to outlast a teardown that rejects
+    // while another is still running
+    const tracked = Promise.allSettled([pendingDispose, disposePromise]).then(
+      (results) => {
+        const failed = results.find((result) => result.status === 'rejected');
+        if (failed) throw failed.reason;
+      },
     );
+    pendingDispose = tracked;
     // tracked teardown may never be awaited; keep failures off the unhandled path
-    pendingDispose.catch(() => {});
-    return pendingDispose;
+    tracked.catch(() => {});
+    return tracked;
   }
 
   function disposeCurrentRoom(nextState = 'idle') {
@@ -252,7 +258,8 @@ export function useP2PRoom() {
     clearListenerCleanup();
     const currentRoom = room();
     if (currentRoom) trackDispose(currentRoom.dispose());
-    const previousDispose = pendingDispose?.catch(() => {}) ?? Promise.resolve();
+    const trackedDispose = pendingDispose;
+    const previousDispose = trackedDispose?.catch(() => {}) ?? Promise.resolve();
     resetRoomSignals('creating');
     setError(undefined);
     setErrorKind(undefined);
@@ -265,7 +272,9 @@ export function useP2PRoom() {
           return undefined;
         }
 
-        pendingDispose = null;
+        // an older watch may have registered teardown while this one was
+        // creating; only clear the barrier this run already waited on
+        if (pendingDispose === trackedDispose) pendingDispose = null;
         setRoom(createdRoom);
         setState(createdRoom.state);
         syncRoomSignals(createdRoom);

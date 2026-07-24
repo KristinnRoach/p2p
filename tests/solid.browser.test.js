@@ -320,9 +320,8 @@ describe('useP2PRoom', () => {
     expect(disposed).toBe(false);
 
     resolveCreate(staleRoom);
-    await flushMicrotasks();
+    await vi.waitFor(() => expect(staleRoom.dispose).toHaveBeenCalledOnce());
 
-    expect(staleRoom.dispose).toHaveBeenCalledOnce();
     expect(disposed).toBe(false);
 
     resolveDispose();
@@ -330,6 +329,116 @@ describe('useP2PRoom', () => {
 
     expect(disposed).toBe(true);
     expect(solidRoom.room()).toBeUndefined();
+
+    cleanup();
+  });
+
+  it('holds the barrier when one tracked disposal rejects and another is pending', async () => {
+    let resolveCreate;
+    let resolveSlowDispose;
+    const firstRoom = createFakeRoom({
+      dispose: vi.fn(() => Promise.reject(new Error('leave failed'))),
+    });
+    const staleRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveSlowDispose = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom
+      .mockResolvedValueOnce(firstRoom)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(createFakeRoom());
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    await solidRoom.join({ signaling: {}, peerId: 'peer-a' });
+
+    // supersedes firstRoom (rejecting teardown) and leaves a creation in flight
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+    solidRoom.dispose().catch(() => {});
+
+    resolveCreate(staleRoom);
+    await vi.waitFor(() => expect(staleRoom.dispose).toHaveBeenCalledOnce());
+
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+
+    resolveSlowDispose();
+    await vi.waitFor(() =>
+      expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(3),
+    );
+
+    cleanup();
+  });
+
+  it('keeps teardown registered by a stale watch after a newer watch publishes', async () => {
+    let resolveStaleCreate;
+    let resolveNewCreate;
+    let resolveStaleDispose;
+    const staleRoom = createFakeRoom({
+      dispose: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveStaleDispose = resolve;
+          }),
+      ),
+    });
+    roomMocks.watchP2PRoom
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveStaleCreate = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveNewCreate = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(createFakeRoom());
+
+    let solidRoom;
+    const cleanup = createRoot((dispose) => {
+      solidRoom = useP2PRoom();
+      return dispose;
+    });
+
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+
+    // stale creation settles first and registers its teardown
+    resolveStaleCreate(staleRoom);
+    await vi.waitFor(() => expect(staleRoom.dispose).toHaveBeenCalledOnce());
+
+    const newRoom = createFakeRoom();
+    resolveNewCreate(newRoom);
+    await vi.waitFor(() => expect(solidRoom.room()).toBe(newRoom));
+
+    // publishing must not drop the stale teardown the next watch has to wait on
+    void solidRoom.watch({ signaling: {}, peerId: 'peer-a' });
+    await flushMicrotasks();
+
+    expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
+
+    resolveStaleDispose();
+    await vi.waitFor(() =>
+      expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(3),
+    );
 
     cleanup();
   });
