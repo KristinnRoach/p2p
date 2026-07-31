@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.5.1
+
+### Patch Changes
+
+- 15aa884: Forward `connectedTimeoutMs` from `P2PRoom` to its peer sessions and log concise WebRTC state when initial connection establishment fails.
+
 ## 0.5.0
 
 ### Minor Changes
