@@ -1079,6 +1079,13 @@ export class Peer extends EventTarget {
         }
       });
       timer = setTimeout(() => {
+        log('[Peer] Connection timed out', {
+          timeoutMs,
+          role: this._role,
+          connectionState: this._pc?.connectionState,
+          iceConnectionState: this._pc?.iceConnectionState,
+          signalingState: this._pc?.signalingState,
+        });
         fail(
           new Error(`Peer.start: connection timed out after ${timeoutMs}ms`),
         );

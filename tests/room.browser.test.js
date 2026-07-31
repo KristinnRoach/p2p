@@ -158,6 +158,25 @@ describe('P2PRoom', () => {
     await room.dispose();
   });
 
+  it('passes the connection timeout to pairs', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const room = await joinP2PRoom({
+      signaling,
+      peerId: 'a',
+      connectedTimeoutMs: 12000,
+    });
+
+    signaling.emitPeers(['b']);
+    await flushAsyncWork();
+
+    expect(sessionMocks.startP2PSession).toHaveBeenCalledWith(
+      expect.objectContaining({ connectedTimeoutMs: 12000 }),
+    );
+
+    await room.dispose();
+  });
+
   it('shares one ICE server lifecycle across room pairs and keeps it on leave', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();
