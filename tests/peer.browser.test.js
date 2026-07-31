@@ -7,6 +7,7 @@
 import { server } from 'vitest/browser';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Peer, PEER_STATES } from '../src/peer.js';
+import { setLogger } from '../src/logger.js';
 import { createLoopbackSignaling as createSharedLoopbackSignaling } from '../examples/shared/index.js';
 
 const loopbackRtcConfig = { iceServers: [] };
@@ -38,6 +39,7 @@ describe('Peer', () => {
       } catch (_) {}
     });
     peers = null;
+    setLogger(() => {});
   });
 
   describe('construction', () => {
@@ -413,6 +415,8 @@ describe('Peer', () => {
     });
 
     it('rejects and closes when connectedTimeoutMs elapses', async () => {
+      const logs = [];
+      setLogger((...args) => logs.push(args));
       const signaling = {
         sendOffer: vi.fn(),
         sendAnswer: vi.fn(),
@@ -433,6 +437,16 @@ describe('Peer', () => {
         /connection timed out/,
       );
       expect(initiator.state).toBe(PEER_STATES.CLOSED);
+      expect(logs).toContainEqual([
+        '[Peer] Connection timed out',
+        expect.objectContaining({
+          timeoutMs: 1,
+          role: 'initiator',
+          connectionState: expect.any(String),
+          iceConnectionState: expect.any(String),
+          signalingState: expect.any(String),
+        }),
+      ]);
     });
 
     it('rejects and closes when start() is aborted', async () => {

@@ -70,6 +70,7 @@ export class P2PRoom extends EventTarget {
       dataChannel = false,
       dataChannelLabel = 'data',
       startTimeoutMs = 8000,
+      connectedTimeoutMs = 0,
       dataChannelOpenTimeoutMs = dataChannel ? 10000 : 0,
       memberCapacity = options.maxPeers ?? Infinity,
       presenceData = undefined,
@@ -167,6 +168,7 @@ export class P2PRoom extends EventTarget {
     this.dataChannel = dataChannel;
     this.dataChannelLabel = dataChannelLabel;
     this.startTimeoutMs = startTimeoutMs;
+    this.connectedTimeoutMs = connectedTimeoutMs;
     this.dataChannelOpenTimeoutMs = dataChannelOpenTimeoutMs;
     this.memberCapacity = memberCapacity;
     this.maxPeers = memberCapacity;
@@ -712,6 +714,7 @@ export class P2PRoom extends EventTarget {
       dataChannel: this.dataChannel,
       dataChannelLabel: this.dataChannelLabel,
       startTimeoutMs: this.startTimeoutMs,
+      connectedTimeoutMs: this.connectedTimeoutMs,
       dataChannelOpenTimeoutMs: this.dataChannelOpenTimeoutMs,
       signal: controller.signal,
       onRemoteStream: ({ stream, track, event }) => {

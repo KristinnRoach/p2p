@@ -453,6 +453,7 @@ export interface P2PRoomOptions {
   iceServersProvider?: IceServersProvider;
   iceServersRefreshMarginMs?: number;
   startTimeoutMs?: number;
+  connectedTimeoutMs?: number;
   signal?: AbortSignal | null;
   onMemberStream?: (detail: MemberStreamDetail, event: CustomEvent) => void;
   onMemberTrack?: (detail: MemberStreamDetail, event: CustomEvent) => void;
