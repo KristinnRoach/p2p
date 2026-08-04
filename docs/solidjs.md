@@ -84,6 +84,8 @@ function Video(props: { stream: MediaStream; muted?: boolean }) {
 exits presence while keeping the room reusable. `dispose()` awaits intentional
 departure and permanently tears down the room, subscriptions, connections, and
 owned media.
+During rapid room replacement, teardown failures for superseded rooms may be
+reported through the log sink instead of rejecting the later `dispose()` call.
 Use `room.memberPresence()` for the metadata-aware roster. It is the Solid
 accessor form of `P2PRoom.memberPresence`, while `room.members()` remains the
 ID-only compatibility list.

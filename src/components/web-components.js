@@ -1,4 +1,5 @@
 import { joinP2PRoom } from '../index.js';
+import { log } from '../logger.js';
 
 const CHAT_TYPE = 'kidlib:p2p:components:chat';
 const DEFAULT_MEMBER_CAPACITY = 6;
@@ -228,7 +229,9 @@ export class P2PRoomElement extends HTMLElement {
       });
 
       if (this.#joinController !== controller || controller.signal.aborted) {
-        void room.dispose().catch(() => {});
+        void room
+          .dispose()
+          .catch((error) => log('[p2p-room] Superseded room dispose failed:', error));
         return;
       }
       this.#joinController = null;

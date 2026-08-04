@@ -26,7 +26,11 @@ export async function joinP2PRoom(options = {}) {
     await room.ready;
     return room;
   } catch (error) {
-    void room.dispose().catch(() => {});
+    void room
+      .dispose()
+      .catch((disposeError) =>
+        log('[Room] dispose after failed join threw:', disposeError),
+      );
     throw error;
   }
 }
@@ -46,7 +50,11 @@ export async function watchP2PRoom(options = {}) {
     await room.ready;
     return room;
   } catch (error) {
-    void room.dispose().catch(() => {});
+    void room
+      .dispose()
+      .catch((disposeError) =>
+        log('[Room] dispose after failed watch threw:', disposeError),
+      );
     throw error;
   }
 }
