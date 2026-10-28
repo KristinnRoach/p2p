@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Peer } from '../src/peer.js';
+import { joinP2PSession } from '../src/session.js';
 
 function deferred() {
   let resolve;
@@ -153,4 +154,176 @@ describe('early offer during credential loading', () => {
       expect(b.sendAnswer).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('initial negotiation failure', () => {
+  it.each(['buffered Peer', 'subscribed Peer', 'buffered session'])(
+    'stops queued distinct offers after the first answer fails (%s)',
+    async (mode) => {
+      const raw = new RTCPeerConnection({ iceServers: [] });
+      peers.push({ dispose: () => raw.close() });
+      raw.createDataChannel('probe');
+      const offer = await raw.createOffer();
+      await raw.setLocalDescription(offer);
+      const {
+        endpoints: [a, b],
+      } = unbufferedPair();
+      const pending = deferred();
+      const providerCalled = deferred();
+      const failure = new Error('first answer failed');
+      b.sendAnswer.mockRejectedValueOnce(failure);
+      const handled = vi.spyOn(Peer.prototype, '_handleOffer');
+      const options = {
+        role: 'joiner',
+        signaling: b,
+        rtcConfig: { iceServers: [] },
+        iceServersProvider: () => {
+          providerCalled.resolve();
+          return pending.promise;
+        },
+      };
+      const direct = mode === 'buffered session' ? null : new Peer(options);
+      if (direct) peers.push(direct);
+      const outcome = (direct ? direct.start() : joinP2PSession(options)).then(
+        () => null,
+        (error) => error,
+      );
+      await providerCalled.promise;
+      if (mode === 'subscribed Peer') {
+        pending.resolve(credentials);
+        await vi.waitFor(() => expect(direct.pc).not.toBeNull());
+      }
+      a.sendOffer(offer);
+      // A distinct valid SDP bypasses identical-offer deduplication.
+      a.sendOffer({
+        type: offer.type,
+        sdp: offer.sdp + 'a=x-regression:second\r\n',
+      });
+      pending.resolve(credentials);
+      expect(await outcome).toBe(failure);
+      const peer = direct ?? handled.mock.contexts[0];
+      await peer._offerChain;
+      expect(b.sendAnswer).toHaveBeenCalledOnce();
+      expect(handled).toHaveBeenCalledOnce();
+      if (direct) expect(direct.state).toBe('failed');
+    },
+  );
+});
+
+const BUFFER_MESSAGES = 256;
+const BUFFER_BYTES = 1024 * 1024;
+function sizedPayload(key, bytes) {
+  return { [key]: 'x'.repeat(bytes - JSON.stringify({ [key]: '' }).length) };
+}
+
+// Both budgets apply to all early signal types together, independent of timeout.
+describe.each([0, 10000])(
+  'initial signaling budget (timeout %i)',
+  (startTimeoutMs) => {
+    async function pendingJoiner() {
+      const pair = unbufferedPair();
+      const [sender, signaling] = pair.endpoints;
+      const pending = deferred();
+      const entered = deferred();
+      let signal;
+      const peer = new Peer({
+        role: 'joiner',
+        signaling,
+        iceServersProvider: (context) => {
+          signal = context.signal;
+          entered.resolve();
+          return pending.promise;
+        },
+      });
+      peers.push(peer);
+      const outcome = peer.start({ startTimeoutMs }).then(
+        () => null,
+        (error) => error,
+      );
+      await entered.promise;
+      return { ...pair, sender, peer, pending, outcome, signal };
+    }
+
+    async function expectOverflow(context) {
+      expect(context.peer.state).toBe('closed');
+      const error = await context.outcome;
+      expect(error?.code).toBe('ERR_P2P_INITIAL_SIGNAL_BUFFER_LIMIT');
+      expect(context.signal.aborted).toBe(true);
+      for (const handlers of context.listeners[1].values())
+        expect(handlers.size).toBe(0);
+      context.pending.resolve(credentials);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(context.peer.pc).toBeNull();
+      expect(context.endpoints[1].sendAnswer).not.toHaveBeenCalled();
+    }
+
+    it.each(['offers', 'candidates', 'mixed'])(
+      'accepts the count boundary then rejects another signal (%s)',
+      async (kind) => {
+        const context = await pendingJoiner();
+        for (let index = 0; index < BUFFER_MESSAGES; index++) {
+          if (kind === 'candidates' || (kind === 'mixed' && index % 2))
+            context.sender.sendCandidate({ candidate: 'small' });
+          else context.sender.sendOffer({ type: 'offer', sdp: 'small' });
+        }
+        expect(context.peer.state).toBe('connecting');
+        context.sender.sendCandidate({ candidate: 'one too many' });
+        await expectOverflow(context);
+      },
+    );
+
+    it('accepts the shared byte boundary then rejects another signal', async () => {
+      const context = await pendingJoiner();
+      context.sender.sendOffer(sizedPayload('sdp', BUFFER_BYTES / 2));
+      context.sender.sendCandidate(sizedPayload('candidate', BUFFER_BYTES / 2));
+      expect(context.peer.state).toBe('connecting');
+      context.sender.sendOffer({ sdp: 'over budget' });
+      await expectOverflow(context);
+    });
+
+    it.each(['sdp', 'candidate'])(
+      'rejects a single oversized %s payload',
+      async (key) => {
+        const context = await pendingJoiner();
+        const send =
+          key === 'sdp'
+            ? context.sender.sendOffer
+            : context.sender.sendCandidate;
+        send(sizedPayload(key, BUFFER_BYTES + 1));
+        await expectOverflow(context);
+      },
+    );
+
+    it('counts UTF-8 bytes rather than string characters', async () => {
+      const context = await pendingJoiner();
+      context.sender.sendOffer({ sdp: 'é'.repeat(BUFFER_BYTES / 2) });
+      await expectOverflow(context);
+    });
+  },
+);
+
+it('cleans up overflow during synchronous subscription replay', async () => {
+  const {
+    endpoints: [, signaling],
+  } = unbufferedPair();
+  const unsubscribe = vi.fn();
+  signaling.onOffer = (callback) => {
+    for (let index = 0; index <= BUFFER_MESSAGES; index++)
+      callback({ sdp: 'small' });
+    return unsubscribe;
+  };
+  const candidates = vi.spyOn(signaling, 'onRemoteCandidate');
+  const provider = vi.fn();
+  const peer = new Peer({
+    role: 'joiner',
+    signaling,
+    iceServersProvider: provider,
+  });
+  peers.push(peer);
+  const error = await peer.start().catch((error) => error);
+  expect(error.code).toBe('ERR_P2P_INITIAL_SIGNAL_BUFFER_LIMIT');
+  expect(unsubscribe).toHaveBeenCalledOnce();
+  expect(candidates).not.toHaveBeenCalled();
+  expect(provider).not.toHaveBeenCalled();
+  expect(peer.pc).toBeNull();
 });

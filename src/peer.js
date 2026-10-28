@@ -29,6 +29,9 @@ const PEER_STATES = Object.freeze({
   FAILED: 'failed',
   CLOSED: 'closed',
 });
+// Shared admission budget while initial SDP/ICE waits for credentials.
+const INITIAL_SIGNAL_MAX_MESSAGES = 256;
+const INITIAL_SIGNAL_MAX_BYTES = 1024 * 1024;
 const START_CLOSED_ERROR = 'Peer: closed before start completed';
 const RECOVERY_CANCELLED = Symbol('ice recovery cancelled');
 const ICE_RECOVERY_DEFAULTS = Object.freeze({
@@ -257,12 +260,20 @@ export class Peer extends EventTarget {
         this._throwIfClosedDuringStart();
         // Unbuffered transports may deliver the offer and trickled ICE while
         // credentials are loading. Subscribe now; create the PC only once ready.
+        const signalBudget = { count: 0, bytes: 0 };
         const onOffer =
-          this._role === 'joiner' ? this._bufferInitialSignal('onOffer') : null;
+          this._role === 'joiner'
+            ? this._bufferInitialSignal('onOffer', signalBudget, failAndClose)
+            : null;
         const onRemoteCandidate =
           this._role === 'joiner'
-            ? this._bufferInitialSignal('onRemoteCandidate')
+            ? this._bufferInitialSignal(
+                'onRemoteCandidate',
+                signalBudget,
+                failAndClose,
+              )
             : null;
+        this._throwIfClosedDuringStart();
         if (this._iceServersManager.hasProvider) {
           this._startingIceServers = true;
           await this._iceServersManager.ensureFresh('initial');
@@ -504,15 +515,19 @@ export class Peer extends EventTarget {
 
     await new Promise((resolve, reject) => {
       let initialSettled = false;
+      let initialFailed = false;
       onOffer((offer) => {
         this._offerChain = this._offerChain
-          .then(() => this._handleOffer(offer))
+          .then(() => (initialFailed ? false : this._handleOffer(offer)))
           .then((applied) => {
             if (!applied || initialSettled) return;
             initialSettled = true;
             resolve();
           })
           .catch((err) => {
+            // Stop already scheduled offers before rejecting startup. Recovery
+            // after a successful initial answer keeps its existing retry path.
+            if (!initialSettled) initialFailed = true;
             const recovering = this._iceRecovery.running;
             this._emit('error', {
               error: err,
@@ -1030,25 +1045,73 @@ export class Peer extends EventTarget {
 
   // Bridge the credential-loading window without requiring transport replay.
   // Once attached, the normal offer chain / ICE queue owns processing order.
-  _bufferInitialSignal(method) {
+  _bufferInitialSignal(method, budget, failStart) {
+    if (this._closed) return () => {};
     let listener = null;
     let active = true;
+    let unsubscribe;
     const queued = [];
-    const unsubscribe = this._signaling[method]((value) => {
-      if (!active || this._closed) return;
-      if (listener) listener(value);
-      else queued.push(value);
-    });
+    const release = ({ bytes }) => {
+      budget.count--;
+      budget.bytes -= bytes;
+    };
+    // Register first: some transports synchronously replay from subscribe().
     this._rememberSignalingCleanup(() => {
       active = false;
       listener = null;
+      queued.forEach(release);
       queued.length = 0;
       if (typeof unsubscribe === 'function') unsubscribe();
     });
+    unsubscribe = this._signaling[method]((value) => {
+      if (!active || this._closed) return;
+      if (listener) {
+        listener(value);
+        return;
+      }
+      let bytes;
+      try {
+        const serialized = JSON.stringify(value);
+        if (typeof serialized !== 'string') {
+          throw new TypeError(
+            'Peer.start: initial signal must be JSON serializable',
+          );
+        }
+        // Avoid allocating a second large representation for oversized input.
+        bytes =
+          serialized.length > INITIAL_SIGNAL_MAX_BYTES
+            ? serialized.length
+            : new TextEncoder().encode(serialized).byteLength;
+      } catch (error) {
+        failStart(error);
+        return;
+      }
+      if (
+        budget.count >= INITIAL_SIGNAL_MAX_MESSAGES ||
+        budget.bytes + bytes > INITIAL_SIGNAL_MAX_BYTES
+      ) {
+        const error = new Error(
+          'Peer.start: initial signaling buffer limit exceeded',
+        );
+        error.code = 'ERR_P2P_INITIAL_SIGNAL_BUFFER_LIMIT';
+        failStart(error);
+        return;
+      }
+      budget.count++;
+      budget.bytes += bytes;
+      queued.push({ value, bytes });
+    });
+    // Overflow during synchronous replay can dispose before subscribe returns.
+    if (!active && typeof unsubscribe === 'function') unsubscribe();
     return (callback) => {
       if (!active || this._closed) return;
       listener = callback;
-      for (const value of queued.splice(0)) callback(value);
+      const retained = queued.splice(0);
+      retained.forEach(release);
+      for (const { value } of retained) {
+        if (!active || this._closed) break;
+        callback(value);
+      }
     };
   }
 
