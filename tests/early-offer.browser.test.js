@@ -211,9 +211,9 @@ describe('initial negotiation failure', () => {
 });
 
 const BUFFER_MESSAGES = 256;
-const BUFFER_BYTES = 1024 * 1024;
-function sizedPayload(key, bytes) {
-  return { [key]: 'x'.repeat(bytes - JSON.stringify({ [key]: '' }).length) };
+const BUFFER_SIZE = 1024 * 1024;
+function sizedPayload(key, size) {
+  return { [key]: 'x'.repeat(size - JSON.stringify({ [key]: '' }).length) };
 }
 
 // Both budgets apply to all early signal types together, independent of timeout.
@@ -272,10 +272,10 @@ describe.each([0, 10000])(
       },
     );
 
-    it('accepts the shared byte boundary then rejects another signal', async () => {
+    it('accepts the shared size boundary then rejects another signal', async () => {
       const context = await pendingJoiner();
-      context.sender.sendOffer(sizedPayload('sdp', BUFFER_BYTES / 2));
-      context.sender.sendCandidate(sizedPayload('candidate', BUFFER_BYTES / 2));
+      context.sender.sendOffer(sizedPayload('sdp', BUFFER_SIZE / 2));
+      context.sender.sendCandidate(sizedPayload('candidate', BUFFER_SIZE / 2));
       expect(context.peer.state).toBe('connecting');
       context.sender.sendOffer({ sdp: 'over budget' });
       await expectOverflow(context);
@@ -289,16 +289,10 @@ describe.each([0, 10000])(
           key === 'sdp'
             ? context.sender.sendOffer
             : context.sender.sendCandidate;
-        send(sizedPayload(key, BUFFER_BYTES + 1));
+        send(sizedPayload(key, BUFFER_SIZE + 1));
         await expectOverflow(context);
       },
     );
-
-    it('counts UTF-8 bytes rather than string characters', async () => {
-      const context = await pendingJoiner();
-      context.sender.sendOffer({ sdp: 'é'.repeat(BUFFER_BYTES / 2) });
-      await expectOverflow(context);
-    });
   },
 );
 

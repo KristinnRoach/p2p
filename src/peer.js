@@ -31,7 +31,7 @@ const PEER_STATES = Object.freeze({
 });
 // Shared admission budget while initial SDP/ICE waits for credentials.
 const INITIAL_SIGNAL_MAX_MESSAGES = 256;
-const INITIAL_SIGNAL_MAX_BYTES = 1024 * 1024;
+const INITIAL_SIGNAL_MAX_SIZE = 1024 * 1024; // serialized JSON length
 const START_CLOSED_ERROR = 'Peer: closed before start completed';
 const RECOVERY_CANCELLED = Symbol('ice recovery cancelled');
 const ICE_RECOVERY_DEFAULTS = Object.freeze({
@@ -260,18 +260,9 @@ export class Peer extends EventTarget {
         this._throwIfClosedDuringStart();
         // Unbuffered transports may deliver the offer and trickled ICE while
         // credentials are loading. Subscribe now; create the PC only once ready.
-        const signalBudget = { count: 0, bytes: 0 };
-        const onOffer =
+        const initialSignals =
           this._role === 'joiner'
-            ? this._bufferInitialSignal('onOffer', signalBudget, failAndClose)
-            : null;
-        const onRemoteCandidate =
-          this._role === 'joiner'
-            ? this._bufferInitialSignal(
-                'onRemoteCandidate',
-                signalBudget,
-                failAndClose,
-              )
+            ? this._bufferInitialJoinerSignals(failAndClose)
             : null;
         this._throwIfClosedDuringStart();
         if (this._iceServersManager.hasProvider) {
@@ -283,7 +274,7 @@ export class Peer extends EventTarget {
         if (this._role === 'initiator') {
           await this._startInitiator();
         } else {
-          await this._startJoiner(onOffer, onRemoteCandidate);
+          await this._startJoiner(initialSignals);
         }
         if (startTimer) {
           clearTimeout(startTimer);
@@ -508,7 +499,7 @@ export class Peer extends EventTarget {
     log('[Peer] Offer sent (initiator)');
   }
 
-  async _startJoiner(onOffer, onRemoteCandidate) {
+  async _startJoiner({ onOffer, onRemoteCandidate }) {
     this._initPc(onRemoteCandidate);
 
     this._throwIfClosedDuringStart();
@@ -1045,73 +1036,65 @@ export class Peer extends EventTarget {
 
   // Bridge the credential-loading window without requiring transport replay.
   // Once attached, the normal offer chain / ICE queue owns processing order.
-  _bufferInitialSignal(method, budget, failStart) {
-    if (this._closed) return () => {};
-    let listener = null;
-    let active = true;
-    let unsubscribe;
-    const queued = [];
-    const release = ({ bytes }) => {
-      budget.count--;
-      budget.bytes -= bytes;
-    };
-    // Register first: some transports synchronously replay from subscribe().
-    this._rememberSignalingCleanup(() => {
-      active = false;
-      listener = null;
-      queued.forEach(release);
-      queued.length = 0;
-      if (typeof unsubscribe === 'function') unsubscribe();
-    });
-    unsubscribe = this._signaling[method]((value) => {
-      if (!active || this._closed) return;
-      if (listener) {
-        listener(value);
-        return;
-      }
-      let bytes;
+  // Offers and candidates share one budget, enforced until handlers attach.
+  _bufferInitialJoinerSignals(failStart) {
+    let count = 0;
+    let size = 0;
+    const admit = (value) => {
+      let length = 0;
       try {
-        const serialized = JSON.stringify(value);
-        if (typeof serialized !== 'string') {
-          throw new TypeError(
-            'Peer.start: initial signal must be JSON serializable',
-          );
-        }
-        // Avoid allocating a second large representation for oversized input.
-        bytes =
-          serialized.length > INITIAL_SIGNAL_MAX_BYTES
-            ? serialized.length
-            : new TextEncoder().encode(serialized).byteLength;
-      } catch (error) {
-        failStart(error);
-        return;
+        // ponytail: UTF-16 length approximates bytes; fine for a memory guard.
+        length = JSON.stringify(value)?.length ?? 0;
+      } catch {
+        // Unserializable: count only; _handleOffer validates the value.
       }
       if (
-        budget.count >= INITIAL_SIGNAL_MAX_MESSAGES ||
-        budget.bytes + bytes > INITIAL_SIGNAL_MAX_BYTES
+        count >= INITIAL_SIGNAL_MAX_MESSAGES ||
+        size + length > INITIAL_SIGNAL_MAX_SIZE
       ) {
         const error = new Error(
           'Peer.start: initial signaling buffer limit exceeded',
         );
         error.code = 'ERR_P2P_INITIAL_SIGNAL_BUFFER_LIMIT';
         failStart(error);
-        return;
+        return false;
       }
-      budget.count++;
-      budget.bytes += bytes;
-      queued.push({ value, bytes });
-    });
-    // Overflow during synchronous replay can dispose before subscribe returns.
-    if (!active && typeof unsubscribe === 'function') unsubscribe();
-    return (callback) => {
-      if (!active || this._closed) return;
-      listener = callback;
-      const retained = queued.splice(0);
-      retained.forEach(release);
-      for (const { value } of retained) {
-        if (!active || this._closed) break;
-        callback(value);
-      }
+      count++;
+      size += length;
+      return true;
+    };
+    const buffer = (method) => {
+      if (this._closed) return () => {};
+      let listener = null;
+      let active = true;
+      let unsubscribe;
+      const queued = [];
+      // Register first: some transports synchronously replay from subscribe().
+      this._rememberSignalingCleanup(() => {
+        active = false;
+        listener = null;
+        queued.length = 0;
+        if (typeof unsubscribe === 'function') unsubscribe();
+      });
+      unsubscribe = this._signaling[method]((value) => {
+        if (!active || this._closed) return;
+        if (listener) listener(value);
+        else if (admit(value)) queued.push(value);
+      });
+      // Overflow during synchronous replay can dispose before subscribe returns.
+      if (!active && typeof unsubscribe === 'function') unsubscribe();
+      return (callback) => {
+        if (!active || this._closed) return;
+        listener = callback;
+        for (const value of queued.splice(0)) {
+          if (!active || this._closed) break;
+          callback(value);
+        }
+      };
+    };
+    return {
+      onOffer: buffer('onOffer'),
+      onRemoteCandidate: buffer('onRemoteCandidate'),
     };
   }
 
