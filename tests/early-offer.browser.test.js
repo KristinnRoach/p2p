@@ -212,6 +212,7 @@ describe('initial negotiation failure', () => {
 
 const BUFFER_MESSAGES = 256;
 const BUFFER_SIZE = 1024 * 1024;
+const BUFFER_LIMIT = /initial signaling buffer limit exceeded/;
 function sizedPayload(key, size) {
   return { [key]: 'x'.repeat(size - JSON.stringify({ [key]: '' }).length) };
 }
@@ -247,7 +248,7 @@ describe.each([0, 10000])(
     async function expectOverflow(context) {
       expect(context.peer.state).toBe('closed');
       const error = await context.outcome;
-      expect(error?.code).toBe('ERR_P2P_INITIAL_SIGNAL_BUFFER_LIMIT');
+      expect(error?.message).toMatch(BUFFER_LIMIT);
       expect(context.signal.aborted).toBe(true);
       for (const handlers of context.listeners[1].values())
         expect(handlers.size).toBe(0);
@@ -315,7 +316,7 @@ it('cleans up overflow during synchronous subscription replay', async () => {
   });
   peers.push(peer);
   const error = await peer.start().catch((error) => error);
-  expect(error.code).toBe('ERR_P2P_INITIAL_SIGNAL_BUFFER_LIMIT');
+  expect(error.message).toMatch(BUFFER_LIMIT);
   expect(unsubscribe).toHaveBeenCalledOnce();
   expect(candidates).not.toHaveBeenCalled();
   expect(provider).not.toHaveBeenCalled();

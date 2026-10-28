@@ -1052,11 +1052,9 @@ export class Peer extends EventTarget {
         count >= INITIAL_SIGNAL_MAX_MESSAGES ||
         size + length > INITIAL_SIGNAL_MAX_SIZE
       ) {
-        const error = new Error(
-          'Peer.start: initial signaling buffer limit exceeded',
+        failStart(
+          new Error('Peer.start: initial signaling buffer limit exceeded'),
         );
-        error.code = 'ERR_P2P_INITIAL_SIGNAL_BUFFER_LIMIT';
-        failStart(error);
         return false;
       }
       count++;

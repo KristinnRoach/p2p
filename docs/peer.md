@@ -95,7 +95,7 @@ still depend on the transport's own delivery policy.
 
 The initial offer and candidate buffers share a limit of 256 messages and
 1 MiB of serialized JSON payload. Exceeding either limit rejects startup
-with `error.code === 'ERR_P2P_INITIAL_SIGNAL_BUFFER_LIMIT'` and disposes the
+with `Peer.start: initial signaling buffer limit exceeded` and disposes the
 peer, releasing both buffers and subscriptions. These limits apply even when
 the startup timeout is disabled; they do not limit signaling after handlers
 are attached. An initial negotiation failure also invalidates queued offers,
