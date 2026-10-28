@@ -1,5 +1,13 @@
 # @kidlib/p2p
 
+## 0.5.2
+
+### Patch Changes
+
+- 8e1eef3: Retain joiner offers and ICE candidates received while initial ICE credentials load, so unbuffered signaling transports do not lose the initial negotiation. Clear retained signals and subscriptions when startup fails, is aborted, or the peer is disposed.
+
+  Bound retained startup signaling by message count and serialized payload size, failing and disposing on overflow. Stop queued offers after the initial negotiation fails.
+
 ## 0.5.1
 
 ### Patch Changes
