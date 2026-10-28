@@ -255,6 +255,14 @@ export class Peer extends EventTarget {
       (async () => {
         this._setState(PEER_STATES.CONNECTING);
         this._throwIfClosedDuringStart();
+        // Unbuffered transports may deliver the offer and trickled ICE while
+        // credentials are loading. Subscribe now; create the PC only once ready.
+        const onOffer =
+          this._role === 'joiner' ? this._bufferInitialSignal('onOffer') : null;
+        const onRemoteCandidate =
+          this._role === 'joiner'
+            ? this._bufferInitialSignal('onRemoteCandidate')
+            : null;
         if (this._iceServersManager.hasProvider) {
           this._startingIceServers = true;
           await this._iceServersManager.ensureFresh('initial');
@@ -264,7 +272,7 @@ export class Peer extends EventTarget {
         if (this._role === 'initiator') {
           await this._startInitiator();
         } else {
-          await this._startJoiner();
+          await this._startJoiner(onOffer, onRemoteCandidate);
         }
         if (startTimer) {
           clearTimeout(startTimer);
@@ -489,15 +497,15 @@ export class Peer extends EventTarget {
     log('[Peer] Offer sent (initiator)');
   }
 
-  async _startJoiner() {
-    this._initPc();
+  async _startJoiner(onOffer, onRemoteCandidate) {
+    this._initPc(onRemoteCandidate);
 
     this._throwIfClosedDuringStart();
 
     await new Promise((resolve, reject) => {
       let initialSettled = false;
       this._rememberSignalingCleanup(
-        this._signaling.onOffer((offer) => {
+        onOffer((offer) => {
           this._offerChain = this._offerChain
             .then(() => this._handleOffer(offer))
             .then((applied) => {
@@ -583,7 +591,7 @@ export class Peer extends EventTarget {
 
   // ─── Private: PC setup + event wiring ─────────────────────────────────
 
-  _initPc() {
+  _initPc(onRemoteCandidate) {
     const pc = new RTCPeerConnection(this._iceServersManager.getRtcConfig());
     this._pc = pc;
     this._iceServersManager.addPeerConnection(pc);
@@ -611,7 +619,14 @@ export class Peer extends EventTarget {
       }
     }
 
-    this._rememberSignalingCleanup(setupIceCandidates(pc, this._signaling));
+    this._rememberSignalingCleanup(
+      setupIceCandidates(pc, {
+        sendCandidate: (candidate) => this._signaling.sendCandidate(candidate),
+        onRemoteCandidate:
+          onRemoteCandidate ??
+          ((callback) => this._signaling.onRemoteCandidate(callback)),
+      }),
+    );
 
     pc.addEventListener('track', (event) => {
       log('[Peer] Track event:', {
@@ -1013,6 +1028,30 @@ export class Peer extends EventTarget {
 
   _emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
+  }
+
+  // Bridge the credential-loading window without requiring transport replay.
+  // Once attached, the normal offer chain / ICE queue owns processing order.
+  _bufferInitialSignal(method) {
+    let listener = null;
+    let active = true;
+    const queued = [];
+    const unsubscribe = this._signaling[method]((value) => {
+      if (!active || this._closed) return;
+      if (listener) listener(value);
+      else queued.push(value);
+    });
+    this._rememberSignalingCleanup(() => {
+      active = false;
+      listener = null;
+      queued.length = 0;
+      if (typeof unsubscribe === 'function') unsubscribe();
+    });
+    return (callback) => {
+      if (!active || this._closed) return;
+      listener = callback;
+      for (const value of queued.splice(0)) callback(value);
+    };
   }
 
   _rememberSignalingCleanup(cleanup) {

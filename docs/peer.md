@@ -87,6 +87,12 @@ connection, and does not restart ICE. An explicit non-negative
 Overrides at or above the observed credential lifetime are clamped to 90% of
 the lifetime to prevent an immediate refresh loop.
 
+A joiner subscribes to incoming offers and ICE candidates as soon as `start()`
+runs, retaining them while initial credentials load. Connection construction
+and negotiation wait for those credentials; abort, startup failure, or disposal
+clears retained signals and subscriptions. Signals delivered before `start()`
+still depend on the transport's own delivery policy.
+
 Initial failure prevents connection construction. Refresh failure keeps
 unexpired credentials and retries briefly; expired credentials are never
 silently replaced with the default STUN server. Disposal aborts the provider
