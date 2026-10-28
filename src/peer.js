@@ -504,30 +504,28 @@ export class Peer extends EventTarget {
 
     await new Promise((resolve, reject) => {
       let initialSettled = false;
-      this._rememberSignalingCleanup(
-        onOffer((offer) => {
-          this._offerChain = this._offerChain
-            .then(() => this._handleOffer(offer))
-            .then((applied) => {
-              if (!applied || initialSettled) return;
-              initialSettled = true;
-              resolve();
-            })
-            .catch((err) => {
-              const recovering = this._iceRecovery.running;
-              this._emit('error', {
-                error: err,
-                phase: recovering ? 'ice-restart' : 'offer',
-              });
-              if (recovering) this._iceRecovery.reportedError = err;
-              this._rejectRecoveryWait(err);
-              if (!initialSettled) {
-                initialSettled = true;
-                reject(err);
-              }
+      onOffer((offer) => {
+        this._offerChain = this._offerChain
+          .then(() => this._handleOffer(offer))
+          .then((applied) => {
+            if (!applied || initialSettled) return;
+            initialSettled = true;
+            resolve();
+          })
+          .catch((err) => {
+            const recovering = this._iceRecovery.running;
+            this._emit('error', {
+              error: err,
+              phase: recovering ? 'ice-restart' : 'offer',
             });
-        }),
-      );
+            if (recovering) this._iceRecovery.reportedError = err;
+            this._rejectRecoveryWait(err);
+            if (!initialSettled) {
+              initialSettled = true;
+              reject(err);
+            }
+          });
+      });
     });
   }
 
