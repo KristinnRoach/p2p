@@ -29,6 +29,9 @@ const PEER_STATES = Object.freeze({
   FAILED: 'failed',
   CLOSED: 'closed',
 });
+// Shared admission budget while initial SDP/ICE waits for credentials.
+const INITIAL_SIGNAL_MAX_MESSAGES = 256;
+const INITIAL_SIGNAL_MAX_SIZE = 1024 * 1024; // serialized JSON length
 const START_CLOSED_ERROR = 'Peer: closed before start completed';
 const RECOVERY_CANCELLED = Symbol('ice recovery cancelled');
 const ICE_RECOVERY_DEFAULTS = Object.freeze({
@@ -255,6 +258,13 @@ export class Peer extends EventTarget {
       (async () => {
         this._setState(PEER_STATES.CONNECTING);
         this._throwIfClosedDuringStart();
+        // Unbuffered transports may deliver the offer and trickled ICE while
+        // credentials are loading. Subscribe now; create the PC only once ready.
+        const initialSignals =
+          this._role === 'joiner'
+            ? this._bufferInitialJoinerSignals(failAndClose)
+            : null;
+        this._throwIfClosedDuringStart();
         if (this._iceServersManager.hasProvider) {
           this._startingIceServers = true;
           await this._iceServersManager.ensureFresh('initial');
@@ -264,7 +274,7 @@ export class Peer extends EventTarget {
         if (this._role === 'initiator') {
           await this._startInitiator();
         } else {
-          await this._startJoiner();
+          await this._startJoiner(initialSignals);
         }
         if (startTimer) {
           clearTimeout(startTimer);
@@ -489,37 +499,39 @@ export class Peer extends EventTarget {
     log('[Peer] Offer sent (initiator)');
   }
 
-  async _startJoiner() {
-    this._initPc();
+  async _startJoiner({ onOffer, onRemoteCandidate }) {
+    this._initPc(onRemoteCandidate);
 
     this._throwIfClosedDuringStart();
 
     await new Promise((resolve, reject) => {
       let initialSettled = false;
-      this._rememberSignalingCleanup(
-        this._signaling.onOffer((offer) => {
-          this._offerChain = this._offerChain
-            .then(() => this._handleOffer(offer))
-            .then((applied) => {
-              if (!applied || initialSettled) return;
-              initialSettled = true;
-              resolve();
-            })
-            .catch((err) => {
-              const recovering = this._iceRecovery.running;
-              this._emit('error', {
-                error: err,
-                phase: recovering ? 'ice-restart' : 'offer',
-              });
-              if (recovering) this._iceRecovery.reportedError = err;
-              this._rejectRecoveryWait(err);
-              if (!initialSettled) {
-                initialSettled = true;
-                reject(err);
-              }
+      let initialFailed = false;
+      onOffer((offer) => {
+        this._offerChain = this._offerChain
+          .then(() => (initialFailed ? false : this._handleOffer(offer)))
+          .then((applied) => {
+            if (!applied || initialSettled) return;
+            initialSettled = true;
+            resolve();
+          })
+          .catch((err) => {
+            // Stop already scheduled offers before rejecting startup. Recovery
+            // after a successful initial answer keeps its existing retry path.
+            if (!initialSettled) initialFailed = true;
+            const recovering = this._iceRecovery.running;
+            this._emit('error', {
+              error: err,
+              phase: recovering ? 'ice-restart' : 'offer',
             });
-        }),
-      );
+            if (recovering) this._iceRecovery.reportedError = err;
+            this._rejectRecoveryWait(err);
+            if (!initialSettled) {
+              initialSettled = true;
+              reject(err);
+            }
+          });
+      });
     });
   }
 
@@ -583,7 +595,7 @@ export class Peer extends EventTarget {
 
   // ─── Private: PC setup + event wiring ─────────────────────────────────
 
-  _initPc() {
+  _initPc(onRemoteCandidate) {
     const pc = new RTCPeerConnection(this._iceServersManager.getRtcConfig());
     this._pc = pc;
     this._iceServersManager.addPeerConnection(pc);
@@ -611,7 +623,14 @@ export class Peer extends EventTarget {
       }
     }
 
-    this._rememberSignalingCleanup(setupIceCandidates(pc, this._signaling));
+    this._rememberSignalingCleanup(
+      setupIceCandidates(pc, {
+        sendCandidate: (candidate) => this._signaling.sendCandidate(candidate),
+        onRemoteCandidate:
+          onRemoteCandidate ??
+          ((callback) => this._signaling.onRemoteCandidate(callback)),
+      }),
+    );
 
     pc.addEventListener('track', (event) => {
       log('[Peer] Track event:', {
@@ -1013,6 +1032,68 @@ export class Peer extends EventTarget {
 
   _emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
+  }
+
+  // Bridge the credential-loading window without requiring transport replay.
+  // Once attached, the normal offer chain / ICE queue owns processing order.
+  // Offers and candidates share one budget, enforced until handlers attach.
+  _bufferInitialJoinerSignals(failStart) {
+    let count = 0;
+    let size = 0;
+    const admit = (value) => {
+      let length = 0;
+      try {
+        // ponytail: UTF-16 length approximates bytes; fine for a memory guard.
+        length = JSON.stringify(value)?.length ?? 0;
+      } catch {
+        // Unserializable: count only; _handleOffer validates the value.
+      }
+      if (
+        count >= INITIAL_SIGNAL_MAX_MESSAGES ||
+        size + length > INITIAL_SIGNAL_MAX_SIZE
+      ) {
+        failStart(
+          new Error('Peer.start: initial signaling buffer limit exceeded'),
+        );
+        return false;
+      }
+      count++;
+      size += length;
+      return true;
+    };
+    const buffer = (method) => {
+      if (this._closed) return () => {};
+      let listener = null;
+      let active = true;
+      let unsubscribe;
+      const queued = [];
+      // Register first: some transports synchronously replay from subscribe().
+      this._rememberSignalingCleanup(() => {
+        active = false;
+        listener = null;
+        queued.length = 0;
+        if (typeof unsubscribe === 'function') unsubscribe();
+      });
+      unsubscribe = this._signaling[method]((value) => {
+        if (!active || this._closed) return;
+        if (listener) listener(value);
+        else if (admit(value)) queued.push(value);
+      });
+      // Overflow during synchronous replay can dispose before subscribe returns.
+      if (!active && typeof unsubscribe === 'function') unsubscribe();
+      return (callback) => {
+        if (!active || this._closed) return;
+        listener = callback;
+        for (const value of queued.splice(0)) {
+          if (!active || this._closed) break;
+          callback(value);
+        }
+      };
+    };
+    return {
+      onOffer: buffer('onOffer'),
+      onRemoteCandidate: buffer('onRemoteCandidate'),
+    };
   }
 
   _rememberSignalingCleanup(cleanup) {

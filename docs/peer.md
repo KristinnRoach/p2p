@@ -87,6 +87,21 @@ connection, and does not restart ICE. An explicit non-negative
 Overrides at or above the observed credential lifetime are clamped to 90% of
 the lifetime to prevent an immediate refresh loop.
 
+A joiner subscribes to incoming offers and ICE candidates as soon as `start()`
+runs, retaining them while initial credentials load. Connection construction
+and negotiation wait for those credentials; abort, startup failure, or disposal
+clears retained signals and subscriptions. Signals delivered before `start()`
+still depend on the transport's own delivery policy.
+
+The initial offer and candidate buffers share a limit of 256 messages and
+1 MiB of serialized JSON payload. Exceeding either limit rejects startup
+with `Peer.start: initial signaling buffer limit exceeded` and disposes the
+peer, releasing both buffers and subscriptions. These limits apply even when
+the startup timeout is disabled; they do not limit signaling after handlers
+are attached. An initial negotiation failure also invalidates queued offers,
+so they cannot send answers after `start()` rejects. Direct `Peer` callers
+should still dispose a failed peer to release its connection.
+
 Initial failure prevents connection construction. Refresh failure keeps
 unexpired credentials and retries briefly; expired credentials are never
 silently replaced with the default STUN server. Disposal aborts the provider
