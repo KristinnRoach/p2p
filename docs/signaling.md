@@ -131,6 +131,27 @@ expired by TTL — the adapter must stop relaying signaling messages to it.
 Otherwise offers, answers, and candidates fan out to a dead connection and the
 fresh one may never converge.
 
+### Ownership is the backend's job
+
+"Latest join wins" is only safe once the backend knows who owns a `peerId`.
+Peer IDs and presence data are self-asserted claims, not proof of ownership.
+A backend that relays between untrusted clients must:
+
+- authorize every claimed `peerId` against the authenticated connection,
+  including IDs nobody currently holds, so a first registration cannot squat
+  someone else's ID;
+- verify the new connection has the same owner before it replaces an existing
+  socket for that `peerId`;
+- derive a relayed message's sender from the admitted connection, never from a
+  `from` field the client supplies;
+- reject or close stale sockets rather than relaying to or from them.
+
+If admission is asynchronous, resolve `join()` only after the server accepts
+this connection, and reject it when the server denies it. A room-wide `onPeers`
+snapshot listing the `peerId` is not an acknowledgment: it may describe another
+connection using the same ID. Adapters differ in whether `leave()` rejects a
+`join()` that is still pending, so don't rely on that behavior.
+
 ### Example: TTL expiry and stale-socket guard
 
 A minimal in-memory sketch. A real adapter would back `records` with the
@@ -138,7 +159,9 @@ provider (RTDB, Firestore, Redis, a server table). The room calls
 `refreshPresence(peerId)` on a short interval while joined; expiry runs off a
 timer and removes any record older than the TTL. Each `peerId` maps to exactly
 one live socket, so a newer registration retires the previous one and signaling
-is only relayed to the current socket.
+is only relayed to the current socket. The sketch omits authentication: it
+assumes the [ownership checks](#ownership-is-the-backends-job) above already
+admitted the connection.
 
 ```js
 const TTL_MS = 20_000; // a few times the room's refresh interval
@@ -152,7 +175,8 @@ function publishPeers() {
 
 const signaling = {
   join(peerId) {
-    // A reconnecting peerId replaces its own previous socket: latest join wins.
+    // Latest join wins, but only after the backend verified this connection
+    // owns peerId. Without that check, anyone can evict the current owner.
     records.set(peerId, { lastSeen: Date.now(), socket: currentSocket(peerId) });
     publishPeers();
   },
