@@ -1097,8 +1097,13 @@ export class P2PRoom extends EventTarget {
 
   _allowedMemberIds(memberIds) {
     if (!Number.isFinite(this.memberCapacity)) return memberIds;
-    if (memberIds.includes(this.peerId)) return memberIds;
-    return memberIds.slice(0, Math.max(0, this.memberCapacity - 1));
+    const remoteMemberIds = memberIds.filter((id) => id !== this.peerId);
+    const isAdmitted = (id) => this.pairs.has(id) || this._controllers.has(id);
+    // Admitted members keep their slots; overflow is refused without eviction.
+    return [
+      ...remoteMemberIds.filter(isAdmitted),
+      ...remoteMemberIds.filter((id) => !isAdmitted(id)),
+    ].slice(0, Math.max(0, this.memberCapacity - 1));
   }
 
   _trackListener(type, callback, handler) {
