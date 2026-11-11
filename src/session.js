@@ -1,4 +1,11 @@
-import { Peer, PEER_STATES } from './peer.js';
+import {
+  Peer,
+  PEER_STATES,
+  P2P_ERROR_CODES,
+  connectionStateErrorCode,
+  createAbortError,
+  createP2PError,
+} from './peer.js';
 import { attachRemoteStream } from './remote-stream.js';
 
 /**
@@ -227,12 +234,10 @@ class P2PSession extends EventTarget {
       return Promise.resolve();
     }
     if (readyState === 'closing' || readyState === 'closed') {
-      return Promise.reject(
-        new Error('P2PSession: data channel closed before open'),
-      );
+      return Promise.reject(createDataChannelClosedError());
     }
     if (signal?.aborted) {
-      return Promise.reject(createAbortError());
+      return Promise.reject(createAbortError('P2PSession: aborted'));
     }
     const terminalError = getTerminalPeerError(this.peer.state);
     if (terminalError) {
@@ -267,7 +272,7 @@ class P2PSession extends EventTarget {
         resolve();
       });
       offClose = this.once('close', () => {
-        fail(new Error('P2PSession: data channel closed before open'));
+        fail(createDataChannelClosedError());
       });
       offError = this.once('error', ({ error }) => {
         fail(error);
@@ -280,7 +285,7 @@ class P2PSession extends EventTarget {
       });
       if (signal) {
         const abortHandler = () => {
-          fail(createAbortError());
+          fail(createAbortError('P2PSession: aborted'));
         };
         signal.addEventListener('abort', abortHandler, { once: true });
         abortCleanup = () => {
@@ -289,8 +294,9 @@ class P2PSession extends EventTarget {
       }
       timer = setTimeout(() => {
         fail(
-          new Error(
+          createP2PError(
             `P2PSession: data channel open timed out after ${timeoutMs}ms`,
+            P2P_ERROR_CODES.DATA_CHANNEL_OPEN_TIMEOUT,
           ),
         );
       }, timeoutMs);
@@ -317,20 +323,18 @@ class P2PSession extends EventTarget {
   }
 }
 
-function createAbortError() {
-  try {
-    return new DOMException('P2PSession: aborted', 'AbortError');
-  } catch (_) {
-    const error = new Error('P2PSession: aborted');
-    error.name = 'AbortError';
-    return error;
-  }
+function createDataChannelClosedError() {
+  return createP2PError(
+    'P2PSession: data channel closed before open',
+    P2P_ERROR_CODES.DATA_CHANNEL_CLOSED,
+  );
 }
 
 function getTerminalPeerError(state) {
   if (state === PEER_STATES.FAILED || state === PEER_STATES.CLOSED) {
-    return new Error(
+    return createP2PError(
       `P2PSession: peer ${state} before data channel open`,
+      connectionStateErrorCode(state),
     );
   }
   return null;

@@ -209,6 +209,32 @@ session.dispose();
 
 `signaling` must implement `RtcSignalingSource` — see [docs/signaling.md](docs/signaling.md).
 
+### Startup error codes
+
+Startup failures from `Peer.start()`, the session factories, and `P2PRoom`
+(rejected promises and the room `error` event's `error`) carry a stable
+`error.code`. Match on the code, not the message.
+
+```js
+import { P2P_ERROR_CODES } from '@kidlib/p2p';
+
+room.on('error', ({ memberId, error }) => {
+  if (error.code === P2P_ERROR_CODES.CONNECTION_TIMEOUT) retry(memberId);
+});
+```
+
+| Code | Cause |
+|------|-------|
+| `START_TIMEOUT` | `startTimeoutMs` elapsed |
+| `CONNECTION_TIMEOUT` | `connectedTimeoutMs` elapsed |
+| `CONNECTION_FAILED` | Connection failed before start/data channel open completed |
+| `CONNECTION_CLOSED` | Connection closed before start/data channel open completed |
+| `DATA_CHANNEL_OPEN_TIMEOUT` | `dataChannelOpenTimeoutMs` elapsed |
+| `DATA_CHANNEL_CLOSED` | Data channel closed before opening |
+| `START_CLOSED` | Peer was disposed before start completed |
+| `SIGNAL_BUFFER_LIMIT` | Joiner's early-signal buffer overflowed |
+| `ABORTED` | `signal` aborted; `error.name` stays `'AbortError'` |
+
 ## Lower-level exports
 
 | Export | Description | Docs |
@@ -218,6 +244,7 @@ session.dispose();
 | `createRoomSignaling` | Normalize a room signaling source | [docs/signaling.md](docs/signaling.md) |
 | `validateRoomSignaling` | Validate a room signaling source | [docs/signaling.md](docs/signaling.md) |
 | `Peer` | Direct `RTCPeerConnection` control | [docs/peer.md](docs/peer.md) |
+| `P2P_ERROR_CODES` | Stable startup `error.code` values | [Startup error codes](#startup-error-codes) |
 | `attachRemoteStream` | Assemble remote tracks into a `MediaStream` | [docs/peer.md](docs/peer.md) |
 | `setLogger` | Wire a custom logger | [docs/peer.md](docs/peer.md) |
 

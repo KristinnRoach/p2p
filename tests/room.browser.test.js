@@ -18,6 +18,7 @@ import {
   watchP2PRoom,
 } from '../src/room.js';
 import { setLogger } from '../src/logger.js';
+import { P2P_ERROR_CODES } from '../src/peer.js';
 
 function createPairSignaling() {
   return {
@@ -1796,6 +1797,37 @@ describe('P2PRoom', () => {
       { peerId: 'b', memberId: 'b', error: startupError },
     ]);
     expect(peerLeft).toHaveLength(0);
+
+    await room.dispose();
+  });
+
+  it('propagates startup error codes through the error event', async () => {
+    const actualSession = await vi.importActual('../src/session.js');
+    sessionMocks.startP2PSession.mockImplementation(
+      actualSession.startP2PSession,
+    );
+    const signaling = createTestRoomSignaling();
+    const errors = [];
+
+    const room = new P2PRoom({
+      signaling,
+      peerId: 'a',
+      startTimeoutMs: 0,
+      connectedTimeoutMs: 1,
+    });
+    room.on('error', (detail) => errors.push(detail));
+
+    await room.ready;
+    signaling.emitPeers(['a', 'b']);
+    await vi.waitFor(() => expect(errors).toHaveLength(1));
+
+    expect(errors[0]).toMatchObject({
+      memberId: 'b',
+      error: {
+        code: P2P_ERROR_CODES.CONNECTION_TIMEOUT,
+        message: expect.stringMatching(/connection timed out/),
+      },
+    });
 
     await room.dispose();
   });

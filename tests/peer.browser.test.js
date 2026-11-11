@@ -6,7 +6,7 @@
 
 import { server } from 'vitest/browser';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Peer, PEER_STATES } from '../src/peer.js';
+import { P2P_ERROR_CODES, Peer, PEER_STATES } from '../src/peer.js';
 import { setLogger } from '../src/logger.js';
 import { createLoopbackSignaling as createSharedLoopbackSignaling } from '../examples/shared/index.js';
 
@@ -408,9 +408,10 @@ describe('Peer', () => {
       const joiner = new Peer({ role: 'joiner', signaling: b });
       peers = [joiner];
 
-      await expect(joiner.start({ startTimeoutMs: 1 })).rejects.toThrow(
-        /timed out/,
-      );
+      await expect(joiner.start({ startTimeoutMs: 1 })).rejects.toMatchObject({
+        message: expect.stringMatching(/timed out/),
+        code: P2P_ERROR_CODES.START_TIMEOUT,
+      });
       expect(joiner.state).toBe(PEER_STATES.CLOSED);
     });
 
@@ -433,9 +434,12 @@ describe('Peer', () => {
       });
       peers = [initiator];
 
-      await expect(initiator.start({ connectedTimeoutMs: 1 })).rejects.toThrow(
-        /connection timed out/,
-      );
+      await expect(
+        initiator.start({ connectedTimeoutMs: 1 }),
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/connection timed out/),
+        code: P2P_ERROR_CODES.CONNECTION_TIMEOUT,
+      });
       expect(initiator.state).toBe(PEER_STATES.CLOSED);
       expect(logs).toContainEqual([
         '[Peer] Connection timed out',
@@ -461,6 +465,7 @@ describe('Peer', () => {
 
       await expect(startPromise).rejects.toMatchObject({
         name: 'AbortError',
+        code: P2P_ERROR_CODES.ABORTED,
       });
       expect(joiner.state).toBe(PEER_STATES.CLOSED);
     });

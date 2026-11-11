@@ -1,4 +1,5 @@
 import { startP2PSession, joinP2PSession } from './session.js';
+import { createAbortError as createPeerAbortError } from './peer.js';
 import { createRoomSignaling } from './signaling.js';
 import { log } from './logger.js';
 import { createIceServersManager } from './ice-servers.js';
@@ -1177,13 +1178,7 @@ function createLocalStreamError(cause) {
 }
 
 function createAbortError() {
-  try {
-    return new DOMException('P2PRoom: aborted', 'AbortError');
-  } catch (_) {
-    const error = new Error('P2PRoom: aborted');
-    error.name = 'AbortError';
-    return error;
-  }
+  return createPeerAbortError('P2PRoom: aborted');
 }
 
 function stopStream(stream) {

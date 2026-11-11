@@ -31,4 +31,4 @@ export {
   watchP2PRoom,
 } from './room.js';
 
-export { Peer, PEER_STATES } from './peer.js';
+export { Peer, PEER_STATES, P2P_ERROR_CODES } from './peer.js';
