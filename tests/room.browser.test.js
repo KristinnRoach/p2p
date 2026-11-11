@@ -1667,6 +1667,54 @@ describe('P2PRoom', () => {
     await room.dispose();
   });
 
+  it('leaves and rejects join when presence lists the local peer past capacity', async () => {
+    const join = createDeferred();
+    const signaling = createTestRoomSignaling();
+    signaling.join.mockReturnValue(join.promise);
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'c',
+      memberCapacity: 2,
+    });
+
+    // b and c both passed the pre-join check against ['a'].
+    signaling.emitPeers(['a']);
+    const joinPromise = room.join();
+    await flushAsyncWork();
+    signaling.emitPeers(['a', 'b', 'c']);
+    join.resolve();
+
+    await expect(joinPromise).rejects.toBeInstanceOf(RoomFullError);
+    expect(signaling.leave).toHaveBeenCalledWith('c');
+    expect(signaling.createPeerSignaling).not.toHaveBeenCalled();
+    expect(room._state).toBe('watching');
+
+    await room.dispose();
+  });
+
+  it('joins when presence lists the local peer within capacity', async () => {
+    sessionMocks.joinP2PSession.mockResolvedValue(createResolvedSession());
+    const join = createDeferred();
+    const signaling = createTestRoomSignaling();
+    signaling.join.mockReturnValue(join.promise);
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'b',
+      memberCapacity: 2,
+    });
+
+    signaling.emitPeers(['a']);
+    const joinPromise = room.join();
+    await flushAsyncWork();
+    signaling.emitPeers(['a', 'b', 'c']);
+    join.resolve();
+
+    await joinPromise;
+    expect(room._state).toBe('active');
+
+    await room.dispose();
+  });
+
   it('still rejects with room full when cleanup leave fails during join', async () => {
     const join = createDeferred();
     const signaling = createTestRoomSignaling();
