@@ -75,7 +75,9 @@ List members in the order they called `join()`, not the order their
 connections opened, and send the same order to every subscriber. A member that
 replaces its own connection keeps its position. When more members join than
 `memberCapacity` allows, the ones listed first are admitted and a joiner listed
-past the limit rejects with `RoomFullError`.
+past the limit rejects with `RoomFullError`. That check runs when `join()`
+resolves, so emit the snapshot listing the joiner before resolving `join()`; a
+later snapshot does not undo a completed join.
 
 Presence cleanup is provider-owned. `leave(peerId)` is the explicit cleanup
 path. If an adapter implements `refreshPresence(peerId)`, `P2PRoom` calls it

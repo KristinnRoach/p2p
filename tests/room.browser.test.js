@@ -1692,6 +1692,34 @@ describe('P2PRoom', () => {
     await room.dispose();
   });
 
+  it('stays closed when disposed during overflow cleanup', async () => {
+    const join = createDeferred();
+    const leave = createDeferred();
+    const signaling = createTestRoomSignaling();
+    signaling.join.mockReturnValue(join.promise);
+    signaling.leave.mockReturnValue(leave.promise);
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'c',
+      memberCapacity: 2,
+    });
+
+    signaling.emitPeers(['a']);
+    const joinPromise = room.join();
+    joinPromise.catch(() => {});
+    await flushAsyncWork();
+    signaling.emitPeers(['a', 'b', 'c']);
+    join.resolve();
+    await flushAsyncWork();
+
+    const disposed = room.dispose();
+    leave.resolve();
+    await disposed;
+    await joinPromise.catch(() => {});
+
+    expect(room._state).toBe('closed');
+  });
+
   it('joins when presence lists the local peer within capacity', async () => {
     sessionMocks.joinP2PSession.mockResolvedValue(createResolvedSession());
     const join = createDeferred();

@@ -587,7 +587,7 @@ export class P2PRoom extends EventTarget {
       } finally {
         this._joinStarted = false;
         this._joined = false;
-        this._setState('watching');
+        if (this._state !== 'closed') this._setState('watching');
         this._releaseOwnedLocalStream();
       }
       this._emitFull();
