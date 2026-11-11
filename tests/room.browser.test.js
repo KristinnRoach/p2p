@@ -1462,6 +1462,20 @@ describe('P2PRoom', () => {
     expect(session.dispose).toHaveBeenCalled();
 
     await room.dispose();
+    expect(signaling.leave).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry signaling leave on dispose after a successful leave', async () => {
+    sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
+    const signaling = createTestRoomSignaling();
+    const room = await watchP2PRoom({ signaling, peerId: 'a' });
+
+    signaling.emitPeers(['b']);
+    await room.join();
+    await room.leave();
+    await room.dispose();
+
+    expect(signaling.leave).toHaveBeenCalledOnce();
   });
 
   describe('memberCapacity once joined', () => {
@@ -1769,8 +1783,11 @@ describe('P2PRoom', () => {
     expect(room._state).toBe('watching');
     expect(room._joinStarted).toBe(false);
     expect(room._joined).toBe(false);
+    expect(room._leavePending).toBe(true);
 
+    signaling.leave.mockResolvedValue();
     await room.dispose();
+    expect(signaling.leave).toHaveBeenCalledTimes(2);
   });
 
   it('reports startup failures without emitting peerLeft', async () => {
@@ -1845,7 +1862,9 @@ describe('P2PRoom', () => {
     expect(room._joined).toBe(false);
     expect(room._state).toBe('closed');
 
-    await expect(room.dispose()).resolves.toBeUndefined();
+    // dispose() retries the failed leave and surfaces the second failure.
+    await expect(room.dispose()).rejects.toThrow('leave failed');
+    expect(signaling.leave).toHaveBeenCalledTimes(2);
   });
 
   it('cleans up owned media when aborted after local stream resolves', async () => {
