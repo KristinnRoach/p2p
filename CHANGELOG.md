@@ -1,5 +1,12 @@
 # @kidlib/p2p
 
+## 0.5.5
+
+### Patch Changes
+
+- 8598f14: Retry `signaling.leave()` on `dispose()` when an earlier leave failed. Previously a failed leave cleared the joined state, so `dispose()` skipped the call and adapters relying on explicit removal kept a stale presence entry that counted toward `memberCapacity`.
+- 7602cb3: Add stable `error.code` values (exported as `P2P_ERROR_CODES`) to startup failures from `Peer.start()`, `startP2PSession`/`joinP2PSession`, and `P2PRoom`, including errors forwarded by the room `error` event. Covers start/connection/data-channel timeouts, connection failure/closure, data-channel closure, disposal before start, signal buffer overflow, and abort. Messages are unchanged.
+
 ## 0.5.4
 
 ### Patch Changes
