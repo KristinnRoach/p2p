@@ -1,5 +1,11 @@
 # @kidlib/p2p
 
+## 0.5.4
+
+### Patch Changes
+
+- 3145124: Reject `join()` with `RoomFullError` when presence lists the local peer past `memberCapacity`. Previously, a peer that lost a simultaneous-join race became active with no connections, since existing members refuse it.
+
 ## 0.5.3
 
 ### Patch Changes
