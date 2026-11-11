@@ -1,6 +1,7 @@
 import { server } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { startP2PSession, joinP2PSession } from '../src/session.js';
+import { P2P_ERROR_CODES } from '../src/peer.js';
 import {
   clearBrowserTabSignalingRoom,
   createBrowserTabSignaling,
@@ -650,7 +651,26 @@ describe('P2P session helpers', () => {
 
     await expect(
       joinP2PSession({ signaling: b, startTimeoutMs: 1 }),
-    ).rejects.toThrow(/timed out/);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/timed out/),
+      code: P2P_ERROR_CODES.START_TIMEOUT,
+    });
+  });
+
+  it('rejects with a code when the data channel does not open in time', async () => {
+    const { a } = createLoopbackSignaling();
+
+    await expect(
+      startP2PSession({
+        signaling: { ...a, sendOffer: async () => {} },
+        dataChannel: true,
+        rtcConfig: loopbackRtcConfig,
+        dataChannelOpenTimeoutMs: 1,
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/data channel open timed out/),
+      code: P2P_ERROR_CODES.DATA_CHANNEL_OPEN_TIMEOUT,
+    });
   });
 
   it('aborts while waiting for the data channel to open', async () => {
@@ -678,7 +698,10 @@ describe('P2P session helpers', () => {
     await Promise.resolve();
     controller.abort();
 
-    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(promise).rejects.toMatchObject({
+      name: 'AbortError',
+      code: P2P_ERROR_CODES.ABORTED,
+    });
   });
 
   it('rejects when the peer fails while waiting for data channel open', async () => {
@@ -753,9 +776,10 @@ describe('P2P session helpers', () => {
       latestPc.connectionState = 'failed';
       latestPc.dispatchEvent(new Event('connectionstatechange'));
 
-      await expect(promise).rejects.toThrow(
-        /peer failed before data channel open/,
-      );
+      await expect(promise).rejects.toMatchObject({
+        message: expect.stringMatching(/peer failed before data channel open/),
+        code: P2P_ERROR_CODES.CONNECTION_FAILED,
+      });
     } finally {
       globalThis.RTCPeerConnection = OriginalRTCPeerConnection;
     }

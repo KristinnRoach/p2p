@@ -12,10 +12,11 @@ export type {
   IceServersProviderResult,
   MessageDetail,
   LocalTrackSlot,
+  P2PErrorCode,
   PeerEvents,
   PeerState,
   RtcSignalingSource,
   StateChangeDetail,
 } from './index.js';
 
-export { PEER_STATES, Peer } from './index.js';
+export { P2P_ERROR_CODES, PEER_STATES, Peer } from './index.js';

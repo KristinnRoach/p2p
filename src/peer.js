@@ -29,6 +29,18 @@ const PEER_STATES = Object.freeze({
   FAILED: 'failed',
   CLOSED: 'closed',
 });
+// Stable `error.code` values for start/connect failures; messages may change.
+const P2P_ERROR_CODES = Object.freeze({
+  START_TIMEOUT: 'START_TIMEOUT',
+  START_CLOSED: 'START_CLOSED',
+  SIGNAL_BUFFER_LIMIT: 'SIGNAL_BUFFER_LIMIT',
+  CONNECTION_FAILED: 'CONNECTION_FAILED',
+  CONNECTION_CLOSED: 'CONNECTION_CLOSED',
+  CONNECTION_TIMEOUT: 'CONNECTION_TIMEOUT',
+  DATA_CHANNEL_OPEN_TIMEOUT: 'DATA_CHANNEL_OPEN_TIMEOUT',
+  DATA_CHANNEL_CLOSED: 'DATA_CHANNEL_CLOSED',
+  ABORTED: 'ABORTED',
+});
 // Shared admission budget while initial SDP/ICE waits for credentials.
 const INITIAL_SIGNAL_MAX_MESSAGES = 256;
 const INITIAL_SIGNAL_MAX_SIZE = 1024 * 1024; // serialized JSON length
@@ -250,7 +262,10 @@ export class Peer extends EventTarget {
       if (startTimeoutMs > 0) {
         startTimer = setTimeout(() => {
           failAndClose(
-            new Error(`Peer.start: timed out after ${startTimeoutMs}ms`),
+            createP2PError(
+              `Peer.start: timed out after ${startTimeoutMs}ms`,
+              P2P_ERROR_CODES.START_TIMEOUT,
+            ),
           );
         }, startTimeoutMs);
       }
@@ -367,7 +382,7 @@ export class Peer extends EventTarget {
     if (this._pendingStartReject) {
       const reject = this._pendingStartReject;
       this._pendingStartReject = null;
-      reject(new Error(START_CLOSED_ERROR));
+      reject(createP2PError(START_CLOSED_ERROR, P2P_ERROR_CODES.START_CLOSED));
     }
   }
 
@@ -589,7 +604,7 @@ export class Peer extends EventTarget {
 
   _throwIfClosedDuringStart() {
     if (this._closed || this._state === PEER_STATES.CLOSED) {
-      throw new Error(START_CLOSED_ERROR);
+      throw createP2PError(START_CLOSED_ERROR, P2P_ERROR_CODES.START_CLOSED);
     }
   }
 
@@ -1053,7 +1068,10 @@ export class Peer extends EventTarget {
         size + length > INITIAL_SIGNAL_MAX_SIZE
       ) {
         failStart(
-          new Error('Peer.start: initial signaling buffer limit exceeded'),
+          createP2PError(
+            'Peer.start: initial signaling buffer limit exceeded',
+            P2P_ERROR_CODES.SIGNAL_BUFFER_LIMIT,
+          ),
         );
         return false;
       }
@@ -1156,7 +1174,12 @@ export class Peer extends EventTarget {
       });
       offState = this.on('statechange', ({ state }) => {
         if (state === PEER_STATES.FAILED || state === PEER_STATES.CLOSED) {
-          fail(new Error(`Peer.start: connection ${state}`));
+          fail(
+            createP2PError(
+              `Peer.start: connection ${state}`,
+              connectionStateErrorCode(state),
+            ),
+          );
         }
       });
       timer = setTimeout(() => {
@@ -1168,7 +1191,10 @@ export class Peer extends EventTarget {
           signalingState: this._pc?.signalingState,
         });
         fail(
-          new Error(`Peer.start: connection timed out after ${timeoutMs}ms`),
+          createP2PError(
+            `Peer.start: connection timed out after ${timeoutMs}ms`,
+            P2P_ERROR_CODES.CONNECTION_TIMEOUT,
+          ),
         );
       }, timeoutMs);
     });
@@ -1187,16 +1213,29 @@ function isIceConnected(pc) {
   );
 }
 
-export { PEER_STATES };
+export { PEER_STATES, P2P_ERROR_CODES };
 
-function createAbortError() {
+export function createP2PError(message, code) {
+  return Object.assign(new Error(message), { code });
+}
+
+export function connectionStateErrorCode(state) {
+  return state === PEER_STATES.FAILED
+    ? P2P_ERROR_CODES.CONNECTION_FAILED
+    : P2P_ERROR_CODES.CONNECTION_CLOSED;
+}
+
+export function createAbortError(message = 'Peer.start: aborted') {
+  let error;
   try {
-    return new DOMException('Peer.start: aborted', 'AbortError');
+    error = new DOMException(message, 'AbortError');
   } catch (_) {
-    const error = new Error('Peer.start: aborted');
+    error = new Error(message);
     error.name = 'AbortError';
-    return error;
   }
+  // DOMException.code is a read-only legacy getter; shadow it on the instance.
+  Object.defineProperty(error, 'code', { value: P2P_ERROR_CODES.ABORTED });
+  return error;
 }
 
 function assertSignaling(signaling) {

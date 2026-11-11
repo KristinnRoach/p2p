@@ -621,6 +621,22 @@ export declare const PEER_STATES: Readonly<{
   CLOSED: 'closed';
 }>;
 
+/** Stable `error.code` values on Peer.start / P2PSession / P2PRoom startup failures. */
+export declare const P2P_ERROR_CODES: Readonly<{
+  START_TIMEOUT: 'START_TIMEOUT';
+  START_CLOSED: 'START_CLOSED';
+  SIGNAL_BUFFER_LIMIT: 'SIGNAL_BUFFER_LIMIT';
+  CONNECTION_FAILED: 'CONNECTION_FAILED';
+  CONNECTION_CLOSED: 'CONNECTION_CLOSED';
+  CONNECTION_TIMEOUT: 'CONNECTION_TIMEOUT';
+  DATA_CHANNEL_OPEN_TIMEOUT: 'DATA_CHANNEL_OPEN_TIMEOUT';
+  DATA_CHANNEL_CLOSED: 'DATA_CHANNEL_CLOSED';
+  ABORTED: 'ABORTED';
+}>;
+
+export type P2PErrorCode =
+  (typeof P2P_ERROR_CODES)[keyof typeof P2P_ERROR_CODES];
+
 export interface PeerEvents {
   statechange: StateChangeDetail;
   connected: Record<string, never>;
