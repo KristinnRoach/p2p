@@ -1464,6 +1464,68 @@ describe('P2PRoom', () => {
     await room.dispose();
   });
 
+  describe('memberCapacity once joined', () => {
+    async function joinWithCapacity(peerId, memberCapacity) {
+      sessionMocks.startP2PSession.mockImplementation(async () =>
+        createResolvedSession(),
+      );
+      sessionMocks.joinP2PSession.mockImplementation(async () =>
+        createResolvedSession(),
+      );
+      const signaling = createTestRoomSignaling();
+      const room = await watchP2PRoom({ signaling, peerId, memberCapacity });
+      signaling.emitPeers([]);
+      await room.join();
+      const connectedTo = () =>
+        signaling.createPeerSignaling.mock.calls.map(
+          ([{ remotePeerId }]) => remotePeerId,
+        );
+      return { room, signaling, connectedTo };
+    }
+
+    it('refuses overflow members when presence includes the local peer', async () => {
+      const { room, signaling, connectedTo } = await joinWithCapacity('a', 2);
+
+      signaling.emitPeers(['a', 'b', 'c']);
+      await flushAsyncWork();
+
+      expect(connectedTo()).toEqual(['b']);
+
+      await room.dispose();
+    });
+
+    it('keeps an admitted member when a newcomer sorts ahead of it', async () => {
+      const { room, signaling, connectedTo } = await joinWithCapacity('b', 2);
+      const left = vi.fn();
+      room.on('memberLeft', left);
+
+      signaling.emitPeers(['b', 'c']);
+      await flushAsyncWork();
+      signaling.emitPeers(['a', 'b', 'c']);
+      await flushAsyncWork();
+
+      expect(connectedTo()).toEqual(['c']);
+      expect(left).not.toHaveBeenCalled();
+
+      await room.dispose();
+    });
+
+    it('admits a refused member once a slot frees up', async () => {
+      const { room, signaling, connectedTo } = await joinWithCapacity('b', 2);
+
+      signaling.emitPeers(['b', 'c']);
+      await flushAsyncWork();
+      signaling.emitPeers(['a', 'b', 'c']);
+      await flushAsyncWork();
+      signaling.emitPeers(['a', 'b']);
+      await flushAsyncWork();
+
+      expect(connectedTo()).toEqual(['c', 'a']);
+
+      await room.dispose();
+    });
+  });
+
   it('emits full while watching and rejects join when memberCapacity is reached', async () => {
     const signaling = createTestRoomSignaling();
     const full = [];
