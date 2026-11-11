@@ -587,7 +587,7 @@ export class P2PRoom extends EventTarget {
       } finally {
         this._joinStarted = false;
         this._joined = false;
-        this._setState('watching');
+        if (this._state !== 'closed') this._setState('watching');
         this._releaseOwnedLocalStream();
       }
       this._emitFull();
@@ -1091,7 +1091,10 @@ export class P2PRoom extends EventTarget {
 
   _isFull(memberIds = this._memberIds) {
     if (!Number.isFinite(this.memberCapacity)) return false;
-    if (memberIds.includes(this.peerId)) return false;
+    // Members admit newcomers in presence order, so a local peer listed past
+    // the limit is overflow that no one will connect to.
+    const index = memberIds.indexOf(this.peerId);
+    if (index !== -1) return index >= this.memberCapacity;
     return memberIds.length >= this.memberCapacity;
   }
 
