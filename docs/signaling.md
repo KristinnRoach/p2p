@@ -122,7 +122,9 @@ session is built — a stale connection is never reused.
 Two independent mechanisms remove a peer that goes away:
 
 - **`leave(peerId)`** — explicit, immediate departure. Called and awaited by
-  `room.leave()` and `room.dispose()`.
+  `room.leave()` and `room.dispose()`. Must be idempotent: after a rejected
+  attempt, `dispose()` calls it again, possibly for a peer the backend already
+  removed.
 - **`refreshPresence(peerId)` + TTL** — for peers that vanish without a clean
   `leave()`. While joined, the room calls `refreshPresence` on a short interval;
   the adapter or backend expires any peer whose presence record is older than a

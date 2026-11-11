@@ -206,6 +206,8 @@ export class P2PRoom extends EventTarget {
     this._disposePromise = null;
     this._joinStarted = false;
     this._joined = false;
+    // Set when signaling.leave() failed; dispose() retries it once.
+    this._leavePending = false;
     this._presenceHeartbeatTimer = null;
     this._hadRemoteMembers = false;
 
@@ -308,7 +310,8 @@ export class P2PRoom extends EventTarget {
     this._disposePromise = (async () => {
       await Promise.allSettled([pendingJoin, pendingLeave].filter(Boolean));
       const signaling = this.signaling;
-      const shouldLeave = this._joinStarted || this._joined;
+      const shouldLeave =
+        this._joinStarted || this._joined || this._leavePending;
       try {
         if (shouldLeave && signaling) {
           await Promise.resolve(signaling.leave(this.peerId));
@@ -316,6 +319,7 @@ export class P2PRoom extends EventTarget {
       } finally {
         this._joinStarted = false;
         this._joined = false;
+        this._leavePending = false;
         await Promise.resolve(signaling?.close?.());
       }
     })();
@@ -568,7 +572,7 @@ export class P2PRoom extends EventTarget {
     this._joined = true;
     if (this._state === 'closed' || this.signal?.aborted) {
       try {
-        await Promise.resolve(signaling.leave(this.peerId));
+        await this._signalingLeave(signaling);
       } catch (_) {
         // Best-effort cleanup; preserve the abort outcome below.
       } finally {
@@ -582,7 +586,7 @@ export class P2PRoom extends EventTarget {
     if (this._state !== 'joining') return;
     if (this._isFull()) {
       try {
-        await Promise.resolve(signaling.leave(this.peerId));
+        await this._signalingLeave(signaling);
       } catch (_) {
         // Best-effort cleanup; preserve the room-full outcome below.
       } finally {
@@ -605,7 +609,7 @@ export class P2PRoom extends EventTarget {
     try {
       if (shouldLeave) {
         const signaling = await this._ensureSignaling();
-        await Promise.resolve(signaling.leave(this.peerId));
+        await this._signalingLeave(signaling);
       }
     } finally {
       this._closeAllPeers({ emitLeft: true, reason: 'left' });
@@ -617,6 +621,16 @@ export class P2PRoom extends EventTarget {
       this._stopPresenceHeartbeat();
       this._releaseOwnedLocalStream();
       if (this._state !== 'closed') this._setState('watching');
+    }
+  }
+
+  async _signalingLeave(signaling) {
+    try {
+      await Promise.resolve(signaling.leave(this.peerId));
+      this._leavePending = false;
+    } catch (error) {
+      this._leavePending = true;
+      throw error;
     }
   }
 
