@@ -235,6 +235,41 @@ room.on('error', ({ memberId, error }) => {
 | `SIGNAL_BUFFER_LIMIT` | Joiner's early-signal buffer overflowed |
 | `ABORTED` | `signal` aborted; `error.name` stays `'AbortError'` |
 
+## Advanced: tuning senders / reading stats
+
+For tuning the library doesn't cover, use the underlying `RTCPeerConnection`:
+`session.peerConnection`, `room.getPeerConnection(memberId)`, or
+`room.peerConnections()` (a `Map` snapshot keyed by member ID). A room emits
+`peerConnection` with `{ memberId, peerConnection }` once a member's
+connection is established and returned by `getPeerConnection()`. The entry is
+removed when the member leaves.
+
+Each connection is created once per member and is not replaced by ICE
+restarts. Senders for reserved local track slots stay the same for the
+connection's lifetime, and `setLocalTrack()` uses `replaceTrack()`, which keeps
+any parameters you set. You don't need to reapply them after a track switch.
+
+```js
+room.on('peerConnection', async ({ peerConnection }) => {
+  for (const sender of peerConnection.getSenders()) {
+    if (sender.track?.kind !== 'video') continue;
+    const params = sender.getParameters();
+    if (!params.encodings?.length) continue;
+    params.encodings[0].maxBitrate = 600_000;
+    await sender.setParameters(params);
+  }
+});
+
+for (const [memberId, pc] of room.peerConnections()) {
+  const stats = await pc.getStats();
+  stats.forEach((report) => {
+    if (report.type === 'outbound-rtp' && report.kind === 'video') {
+      console.log(memberId, report.qualityLimitationReason, report.frameHeight);
+    }
+  });
+}
+```
+
 ## Lower-level exports
 
 | Export | Description | Docs |

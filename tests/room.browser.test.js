@@ -922,6 +922,42 @@ describe('P2PRoom', () => {
     await room.dispose();
   });
 
+  it('exposes member peer connections and clears them when a member leaves', async () => {
+    const pc = new RTCPeerConnection();
+    const session = { ...createResolvedSession(), peerConnection: pc };
+    sessionMocks.startP2PSession.mockResolvedValue(session);
+    const signaling = createTestRoomSignaling();
+    const onPeerConnection = vi.fn();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onPeerConnection,
+    });
+
+    try {
+      signaling.emitPeers(['a', 'b']);
+      await room.join();
+      await flushAsyncWork();
+
+      expect(onPeerConnection).toHaveBeenCalledTimes(1);
+      expect(onPeerConnection.mock.calls[0][0]).toEqual({
+        memberId: 'b',
+        peerConnection: pc,
+      });
+      expect(room.getPeerConnection('b')).toBe(pc);
+      expect(room.peerConnections()).toEqual(new Map([['b', pc]]));
+
+      signaling.emitPeers(['a']);
+      await flushAsyncWork();
+
+      expect(room.getPeerConnection('b')).toBeNull();
+      expect(room.peerConnections().size).toBe(0);
+    } finally {
+      await room.dispose();
+      pc.close();
+    }
+  });
+
   it('emits alone when the last remote member leaves', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();

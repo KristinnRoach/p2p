@@ -133,6 +133,11 @@ class P2PSession extends EventTarget {
     return this._remoteStream;
   }
 
+  /** The underlying RTCPeerConnection, for advanced sender/stats tuning. */
+  get peerConnection() {
+    return this.peer.pc;
+  }
+
   send(data) {
     this.peer.send(data);
   }
