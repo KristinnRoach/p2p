@@ -801,6 +801,13 @@ export class P2PRoom extends EventTarget {
           pairSignaling.close?.();
           throw error;
         }
+        // The member may have left during slot catch-up; _closeMember found
+        // no pair to dispose then, so dispose it here instead of registering.
+        if (this._state !== 'active' || controller.signal.aborted) {
+          pair.dispose();
+          pairSignaling.close?.();
+          return;
+        }
         this.pairs.set(remoteMemberId, pair);
         this._controllers.delete(remoteMemberId);
         this._emit('peerConnection', {
@@ -960,7 +967,8 @@ export class P2PRoom extends EventTarget {
   }
 
   /**
-   * The RTCPeerConnection for a connected member, or null. Senders for local
+   * The RTCPeerConnection for a member with an established pair, or null. It
+   * may later be failed or closed; check connectionState. Senders for local
    * track slots are stable for the connection's lifetime: setLocalTrack uses
    * replaceTrack, which keeps sender parameters.
    */
