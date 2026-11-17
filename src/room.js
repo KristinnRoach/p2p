@@ -107,6 +107,7 @@ export class P2PRoom extends EventTarget {
       onIceReconnecting = null,
       onIceReconnected = null,
       onIceReconnectFailed = null,
+      onPeerConnection = null,
       onError = null,
     } = options;
 
@@ -237,6 +238,7 @@ export class P2PRoom extends EventTarget {
       ['iceReconnecting', onIceReconnecting],
       ['iceReconnected', onIceReconnected],
       ['iceReconnectFailed', onIceReconnectFailed],
+      ['peerConnection', onPeerConnection],
       ['error', onError],
     ];
     for (const [event, handler] of handlers) {
@@ -799,8 +801,19 @@ export class P2PRoom extends EventTarget {
           pairSignaling.close?.();
           throw error;
         }
+        // The member may have left during slot catch-up; _closeMember found
+        // no pair to dispose then, so dispose it here instead of registering.
+        if (this._state !== 'active' || controller.signal.aborted) {
+          pair.dispose();
+          pairSignaling.close?.();
+          return;
+        }
         this.pairs.set(remoteMemberId, pair);
         this._controllers.delete(remoteMemberId);
+        this._emit('peerConnection', {
+          memberId: remoteMemberId,
+          peerConnection: pair.peerConnection,
+        });
         if (pair.dataChannel) {
           this._bindDataChannel(remoteMemberId, pair.dataChannel);
         }
@@ -951,6 +964,25 @@ export class P2PRoom extends EventTarget {
     this._remoteMemberStreamEntries.delete(memberId);
     if (stream) this._emitMemberStreamRemoved(memberId, stream);
     if (emitLeft) this._emitMemberLeft(memberId, stream, reason);
+  }
+
+  /**
+   * The RTCPeerConnection for a member with an established pair, or null. It
+   * may later be failed or closed; check connectionState. Senders for local
+   * track slots are stable for the connection's lifetime: setLocalTrack uses
+   * replaceTrack, which keeps sender parameters.
+   */
+  getPeerConnection(memberId) {
+    return this.pairs.get(memberId)?.peerConnection ?? null;
+  }
+
+  /** Snapshot of connected members' RTCPeerConnections, keyed by memberId. */
+  peerConnections() {
+    const connections = new Map();
+    for (const [memberId, pair] of this.pairs) {
+      if (pair.peerConnection) connections.set(memberId, pair.peerConnection);
+    }
+    return connections;
   }
 
   send(memberId, data) {

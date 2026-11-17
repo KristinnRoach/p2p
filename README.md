@@ -235,6 +235,47 @@ room.on('error', ({ memberId, error }) => {
 | `SIGNAL_BUFFER_LIMIT` | Joiner's early-signal buffer overflowed |
 | `ABORTED` | `signal` aborted; `error.name` stays `'AbortError'` |
 
+## Advanced: tuning senders / reading stats
+
+For tuning the library doesn't cover, use the underlying `RTCPeerConnection`:
+`session.peerConnection`, `room.getPeerConnection(memberId)`, or
+`room.peerConnections()` (a `Map` snapshot keyed by member ID). A room emits
+`peerConnection` with `{ memberId, peerConnection }` once a member's
+connection is established and returned by `getPeerConnection()`. The entry is
+removed when the member leaves. A member who rejoins gets a new connection and
+a new event, so apply parameters from the event rather than once. A listed
+connection can still be `failed` or `closed` before the member leaves, so check
+`connectionState` before calling into it. The room does not catch errors from
+your handler; handle rejections from async listeners yourself.
+
+Each connection is created once per member and is not replaced by ICE
+restarts. Senders for reserved local track slots stay the same for the
+connection's lifetime, and `setLocalTrack()` uses `replaceTrack()`, which keeps
+any parameters you set. You don't need to reapply them after a track switch.
+
+```js
+room.on('peerConnection', async ({ peerConnection }) => {
+  // Select by transceiver so empty slots (sender.track === null) are included.
+  for (const { receiver, sender } of peerConnection.getTransceivers()) {
+    if (receiver.track.kind !== 'video') continue;
+    const params = sender.getParameters();
+    if (!params.encodings?.length) continue;
+    params.encodings[0].maxBitrate = 600_000;
+    await sender.setParameters(params);
+  }
+});
+
+for (const [memberId, pc] of room.peerConnections()) {
+  if (pc.connectionState === 'closed') continue;
+  const stats = await pc.getStats();
+  stats.forEach((report) => {
+    if (report.type === 'outbound-rtp' && report.kind === 'video') {
+      console.log(memberId, report.qualityLimitationReason, report.frameHeight);
+    }
+  });
+}
+```
+
 ## Lower-level exports
 
 | Export | Description | Docs |

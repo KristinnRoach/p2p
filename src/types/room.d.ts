@@ -34,6 +34,7 @@ export type {
   PeerLeftDetail,
   PeerStreamDetail,
   RoomDataChannelDetail,
+  RoomPeerConnectionDetail,
   RoomDataChannelMessageDetail,
   RtcSignalingSource,
 } from './index.js';

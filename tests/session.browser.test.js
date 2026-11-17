@@ -231,6 +231,44 @@ describe('P2P session helpers', () => {
     }
   });
 
+  it('exposes the live peer connection with slot senders stable across setLocalTrack', async () => {
+    const { a, b } = createLoopbackSignaling();
+    const slots = [{ id: 'camera', kind: 'video', track: null }];
+    const [host, guest] = await Promise.all([
+      startP2PSession({
+        signaling: a,
+        localTrackSlots: slots,
+        rtcConfig: loopbackRtcConfig,
+      }),
+      joinP2PSession({
+        signaling: b,
+        localTrackSlots: slots,
+        rtcConfig: loopbackRtcConfig,
+      }),
+    ]);
+    const track = createVideoTrack('#f00');
+
+    try {
+      const pc = host.peerConnection;
+      expect(pc).toBe(host.peer.pc);
+      expect(pc).toBeInstanceOf(RTCPeerConnection);
+
+      const [sender] = pc.getSenders();
+      const params = sender.getParameters();
+      params.encodings[0].maxBitrate = 250_000;
+      await sender.setParameters(params);
+
+      await host.setLocalTrack('camera', track);
+      expect(pc.getSenders()).toEqual([sender]);
+      expect(sender.track).toBe(track);
+      expect(sender.getParameters().encodings[0].maxBitrate).toBe(250_000);
+    } finally {
+      host.dispose();
+      guest.dispose();
+      track.stop();
+    }
+  });
+
   it('reserves nullable same-kind slots and replaces them independently', async () => {
     const { a, b } = createLoopbackSignaling();
     const hostPromise = startP2PSession({

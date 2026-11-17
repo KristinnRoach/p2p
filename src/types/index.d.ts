@@ -140,6 +140,8 @@ export interface P2PSession {
   readonly state: PeerState;
   readonly dataChannel: RTCDataChannel | null;
   readonly remoteStream: MediaStream | null;
+  /** Underlying connection for advanced tuning (sender parameters, getStats). */
+  readonly peerConnection: RTCPeerConnection | null;
   readonly ready: Promise<void>;
 
   on<K extends keyof P2PSessionEvents>(
@@ -392,6 +394,11 @@ export interface RoomDataChannelMessageDetail extends RoomDataChannelDetail {
   data: unknown;
 }
 
+export interface RoomPeerConnectionDetail {
+  memberId: string;
+  peerConnection: RTCPeerConnection;
+}
+
 export interface P2PRoomEvents {
   memberJoined: { memberId: string };
   memberLeft: MemberLeftDetail;
@@ -421,6 +428,8 @@ export interface P2PRoomEvents {
   iceReconnecting: RoomIceReconnectingDetail;
   iceReconnected: RoomIceReconnectedDetail;
   iceReconnectFailed: RoomIceReconnectFailedDetail;
+  /** A member's connection is established and listed by getPeerConnection(). */
+  peerConnection: RoomPeerConnectionDetail;
   error: PeerErrorDetail;
 }
 
@@ -510,6 +519,10 @@ export interface P2PRoomOptions {
     detail: RoomIceReconnectFailedDetail,
     event: CustomEvent,
   ) => void;
+  onPeerConnection?: (
+    detail: RoomPeerConnectionDetail,
+    event: CustomEvent,
+  ) => void;
   onError?: (detail: PeerErrorDetail, event: CustomEvent) => void;
 }
 
@@ -545,6 +558,10 @@ export declare class P2PRoom extends EventTarget {
   join(data?: P2PRoomPresenceData): Promise<void>;
   setPresenceData(data: P2PRoomPresenceData): Promise<void>;
   setLocalTrack(slotId: string, track: MediaStreamTrack | null): Promise<void>;
+  /** Connected member's RTCPeerConnection, or null. */
+  getPeerConnection(memberId: string): RTCPeerConnection | null;
+  /** Snapshot of connected members' RTCPeerConnections, keyed by memberId. */
+  peerConnections(): Map<string, RTCPeerConnection>;
   leave(): Promise<void>;
   send(memberId: string, data: unknown): void;
   broadcast(data: unknown): number;

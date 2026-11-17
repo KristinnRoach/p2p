@@ -922,6 +922,84 @@ describe('P2PRoom', () => {
     await room.dispose();
   });
 
+  it('exposes member peer connections and clears them when a member leaves', async () => {
+    const pc = new RTCPeerConnection();
+    const session = { ...createResolvedSession(), peerConnection: pc };
+    sessionMocks.startP2PSession.mockResolvedValue(session);
+    const signaling = createTestRoomSignaling();
+    const onPeerConnection = vi.fn();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      onPeerConnection,
+    });
+
+    try {
+      signaling.emitPeers(['a', 'b']);
+      await room.join();
+      await flushAsyncWork();
+
+      expect(onPeerConnection).toHaveBeenCalledTimes(1);
+      expect(onPeerConnection.mock.calls[0][0]).toEqual({
+        memberId: 'b',
+        peerConnection: pc,
+      });
+      expect(room.getPeerConnection('b')).toBe(pc);
+      expect(room.peerConnections()).toEqual(new Map([['b', pc]]));
+
+      signaling.emitPeers(['a']);
+      await flushAsyncWork();
+
+      expect(room.getPeerConnection('b')).toBeNull();
+      expect(room.peerConnections().size).toBe(0);
+    } finally {
+      await room.dispose();
+      pc.close();
+    }
+  });
+
+  it('disposes a pair whose member leaves during slot catch-up', async () => {
+    const pendingReplacement = createDeferred();
+    const session = {
+      ...createResolvedSession(),
+      peerConnection: {},
+      setLocalTrack: vi.fn(() => pendingReplacement.promise),
+    };
+    const sessionStarted = createDeferred();
+    sessionMocks.startP2PSession.mockReturnValue(sessionStarted.promise);
+    const signaling = createTestRoomSignaling();
+    const onPeerConnection = vi.fn();
+    const room = await watchP2PRoom({
+      signaling,
+      peerId: 'a',
+      localTrackSlots: [{ id: 'camera', kind: 'video', track: null }],
+      onPeerConnection,
+    });
+    const track = createVideoTrack();
+
+    try {
+      signaling.emitPeers(['a', 'b']);
+      await room.join();
+      // Change the slot before the session resolves so catch-up must run.
+      await room.setLocalTrack('camera', track);
+      sessionStarted.resolve(session);
+      await flushAsyncWork();
+      expect(session.setLocalTrack).toHaveBeenCalled();
+
+      signaling.emitPeers(['a']);
+      pendingReplacement.resolve();
+      await flushAsyncWork();
+      await flushAsyncWork();
+
+      expect(onPeerConnection).not.toHaveBeenCalled();
+      expect(room.pairs.has('b')).toBe(false);
+      expect(session.dispose).toHaveBeenCalled();
+    } finally {
+      await room.dispose();
+      track.stop();
+    }
+  });
+
   it('emits alone when the last remote member leaves', async () => {
     sessionMocks.startP2PSession.mockResolvedValue(createResolvedSession());
     const signaling = createTestRoomSignaling();
