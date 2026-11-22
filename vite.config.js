@@ -15,6 +15,8 @@ export default defineConfig({
     singleQuote: true,
   },
   lint: {
+    // Standalone example app with its own dependencies.
+    ignorePatterns: ['examples/solid/**'],
     jsPlugins: [{ name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin' }],
     rules: { 'vite-plus/prefer-vite-plus-imports': 'error' },
     options: { typeAware: true, typeCheck: true },
