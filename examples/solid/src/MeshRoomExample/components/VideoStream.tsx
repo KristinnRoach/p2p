@@ -26,7 +26,5 @@ export default function VideoStream(props: Props) {
     });
   });
 
-  return (
-    <video class='video-stream' ref={video} autoplay muted={props.muted} />
-  );
+  return <video class="video-stream" ref={video} autoplay muted={props.muted} />;
 }

@@ -19,9 +19,7 @@ export function addLocalTracks(pc, localStream, { audioOnly = false } = {}) {
     );
   }
   if (!localStream) {
-    throw new TypeError(
-      'addLocalTracks: localStream must be a MediaStream-like object',
-    );
+    throw new TypeError('addLocalTracks: localStream must be a MediaStream-like object');
   }
   if (audioOnly) {
     if (typeof localStream.getAudioTracks !== 'function') {
@@ -30,23 +28,16 @@ export function addLocalTracks(pc, localStream, { audioOnly = false } = {}) {
       );
     }
   } else if (typeof localStream.getTracks !== 'function') {
-    throw new TypeError(
-      'addLocalTracks: localStream must implement getTracks()',
-    );
+    throw new TypeError('addLocalTracks: localStream must implement getTracks()');
   }
 
   const unhealthyKinds = [];
 
-  const tracks = audioOnly
-    ? localStream.getAudioTracks()
-    : localStream.getTracks();
+  const tracks = audioOnly ? localStream.getAudioTracks() : localStream.getTracks();
 
   tracks.forEach((track) => {
     if (track.readyState !== 'live') {
-      log(
-        `[WebRTC] ${track.kind} track is not live at addLocalTracks:`,
-        track.readyState,
-      );
+      log(`[WebRTC] ${track.kind} track is not live at addLocalTracks:`, track.readyState);
       unhealthyKinds.push(track.kind);
       return;
     }

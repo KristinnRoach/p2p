@@ -15,13 +15,9 @@ export function isValidSignalingState(
   expectedType: RTCSdpType,
 ): boolean;
 
-export function createOffer(
-  pc: RTCPeerConnection,
-): Promise<RTCSessionDescriptionInit>;
+export function createOffer(pc: RTCPeerConnection): Promise<RTCSessionDescriptionInit>;
 
-export function createAnswer(
-  pc: RTCPeerConnection,
-): Promise<RTCSessionDescriptionInit>;
+export function createAnswer(pc: RTCPeerConnection): Promise<RTCSessionDescriptionInit>;
 
 export function setRemoteDescription(
   pc: RTCPeerConnection,

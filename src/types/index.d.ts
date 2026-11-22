@@ -2,27 +2,17 @@
 
 export interface IceTransport {
   sendCandidate(candidate: RTCIceCandidateInit): void | Promise<void>;
-  onRemoteCandidate(
-    callback: (candidate: RTCIceCandidateInit) => void,
-  ): void | (() => void);
+  onRemoteCandidate(callback: (candidate: RTCIceCandidateInit) => void): void | (() => void);
 }
 
 /** Raw 1:1 WebRTC signaling source: offer/answer + ICE exchange between two peers. */
 export interface RtcSignalingSource extends IceTransport {
   sendOffer(offer: RTCSessionDescriptionInit): void | Promise<void>;
   sendAnswer(answer: RTCSessionDescriptionInit): void | Promise<void>;
-  onOffer(
-    callback: (offer: RTCSessionDescriptionInit) => void,
-  ): void | (() => void);
-  onAnswer(
-    callback: (answer: RTCSessionDescriptionInit) => void,
-  ): void | (() => void);
-  sendIceRestartRequest?(
-    request: { requestId: string },
-  ): void | Promise<void>;
-  onIceRestartRequest?(
-    callback: (request: { requestId: string }) => void,
-  ): void | (() => void);
+  onOffer(callback: (offer: RTCSessionDescriptionInit) => void): void | (() => void);
+  onAnswer(callback: (answer: RTCSessionDescriptionInit) => void): void | (() => void);
+  sendIceRestartRequest?(request: { requestId: string }): void | Promise<void>;
+  onIceRestartRequest?(callback: (request: { requestId: string }) => void): void | (() => void);
 }
 
 /** Normalized pair signaling returned by {@link createPairSignaling} — close always provided. */
@@ -30,13 +20,7 @@ export interface RtcPairSignaling extends RtcSignalingSource {
   close(): void;
 }
 
-export type PeerState =
-  | 'idle'
-  | 'connecting'
-  | 'connected'
-  | 'disconnected'
-  | 'failed'
-  | 'closed';
+export type PeerState = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
 
 export interface IceRecoveryOptions {
   maxAttempts?: number;
@@ -49,10 +33,7 @@ export interface IceRecoveryOptions {
 
 export type IceRecoveryConfig = false | IceRecoveryOptions;
 
-export type IceRecoveryReason =
-  | 'failed'
-  | 'disconnected'
-  | 'remote-request';
+export type IceRecoveryReason = 'failed' | 'disconnected' | 'remote-request';
 
 export interface IceReconnectingDetail {
   attempt: number;
@@ -77,11 +58,7 @@ export interface DisconnectedDetail {
   iceRecoveryScheduled: boolean;
 }
 
-export type IceServersProviderReason =
-  | 'initial'
-  | 'scheduled-refresh'
-  | 'ice-restart'
-  | 'manual';
+export type IceServersProviderReason = 'initial' | 'scheduled-refresh' | 'ice-restart' | 'manual';
 
 export interface IceServersProviderResult {
   iceServers: RTCIceServer[];
@@ -148,19 +125,13 @@ export interface P2PSession {
     type: K,
     callback: (detail: P2PSessionEvents[K], event: CustomEvent) => void,
   ): () => void;
-  on(
-    type: string,
-    callback: (detail: unknown, event: CustomEvent) => void,
-  ): () => void;
+  on(type: string, callback: (detail: unknown, event: CustomEvent) => void): () => void;
 
   once<K extends keyof P2PSessionEvents>(
     type: K,
     callback: (detail: P2PSessionEvents[K], event: CustomEvent) => void,
   ): () => void;
-  once(
-    type: string,
-    callback: (detail: unknown, event: CustomEvent) => void,
-  ): () => void;
+  once(type: string, callback: (detail: unknown, event: CustomEvent) => void): () => void;
 
   off(type: string, callback: (...args: unknown[]) => void): void;
   send(data: unknown): void;
@@ -194,9 +165,7 @@ export interface P2PSessionOptions {
   onDataChannel?: (detail: DataChannelDetail, event: CustomEvent) => void;
 }
 
-export function startP2PSession(
-  options: P2PSessionOptions,
-): Promise<P2PSession>;
+export function startP2PSession(options: P2PSessionOptions): Promise<P2PSession>;
 export function joinP2PSession(options: P2PSessionOptions): Promise<P2PSession>;
 
 export interface P2PRoomPeerSignalingOptions {
@@ -235,36 +204,23 @@ export type RelaySignalingEnvelope =
 
 export interface RelayPeerSignalingOptions {
   remotePeerId: string;
-  send(
-    toPeerId: string,
-    message: RelaySignalingEnvelope,
-  ): void | Promise<void>;
-  onMessage(
-    callback: (fromPeerId: string, message: unknown) => void,
-  ): void | (() => void);
+  send(toPeerId: string, message: RelaySignalingEnvelope): void | Promise<void>;
+  onMessage(callback: (fromPeerId: string, message: unknown) => void): void | (() => void);
 }
 
 export interface P2PRoomSignaling {
   join(peerId: string, data?: P2PRoomPresenceData): void | Promise<void>;
   /** Explicitly remove this peer from presence. Backend record semantics are adapter-owned. */
   leave(peerId: string): void | Promise<void>;
-  refreshPresence?(
-    peerId: string,
-    data?: P2PRoomPresenceData,
-  ): void | Promise<void>;
-  updatePresenceData?(
-    peerId: string,
-    data: P2PRoomPresenceData,
-  ): void | Promise<void>;
+  refreshPresence?(peerId: string, data?: P2PRoomPresenceData): void | Promise<void>;
+  updatePresenceData?(peerId: string, data: P2PRoomPresenceData): void | Promise<void>;
   /**
    * Subscribe to room presence. MUST emit an initial snapshot to every
    * subscriber — including watchers that have not joined — and keep them
    * updated. Capacity enforcement (`memberCapacity`) and `watchP2PRoom`
    * depend on it; a backend that only notifies joined peers breaks both.
    */
-  onPeers(
-    callback: (peers: P2PRoomPresenceSnapshot) => void,
-  ): void | (() => void);
+  onPeers(callback: (peers: P2PRoomPresenceSnapshot) => void): void | (() => void);
   /** Must return synchronously — the room calls this inline during peer connection setup. */
   createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcSignalingSource;
   /**
@@ -275,12 +231,7 @@ export interface P2PRoomSignaling {
   cleanupSignaling?(): void | Promise<void>;
 }
 
-export type P2PRoomState =
-  | 'watching'
-  | 'joining'
-  | 'joined'
-  | 'leaving'
-  | 'closed';
+export type P2PRoomState = 'watching' | 'joining' | 'joined' | 'leaving' | 'closed';
 
 export interface P2PRoomStateChangeDetail {
   state: P2PRoomState;
@@ -353,8 +304,7 @@ export interface RoomIceReconnectedDetail extends IceReconnectedDetail {
   peerId: string;
 }
 
-export interface RoomIceReconnectFailedDetail
-  extends IceReconnectFailedDetail {
+export interface RoomIceReconnectFailedDetail extends IceReconnectFailedDetail {
   memberId: string;
   peerId: string;
 }
@@ -466,24 +416,12 @@ export interface P2PRoomOptions {
   signal?: AbortSignal | null;
   onMemberStream?: (detail: MemberStreamDetail, event: CustomEvent) => void;
   onMemberTrack?: (detail: MemberStreamDetail, event: CustomEvent) => void;
-  onMemberJoined?: (
-    detail: { memberId: string },
-    event: CustomEvent,
-  ) => void;
+  onMemberJoined?: (detail: { memberId: string }, event: CustomEvent) => void;
   onMemberLeft?: (detail: MemberLeftDetail, event: CustomEvent) => void;
-  onMemberStreamRemoved?: (
-    detail: MemberStreamRemovedDetail,
-    event: CustomEvent,
-  ) => void;
+  onMemberStreamRemoved?: (detail: MemberStreamRemovedDetail, event: CustomEvent) => void;
   onAlone?: (detail: AloneDetail, event: CustomEvent) => void;
-  onMembersChanged?: (
-    detail: MembersChangedDetail,
-    event: CustomEvent,
-  ) => void;
-  onStateChange?: (
-    detail: P2PRoomStateChangeDetail,
-    event: CustomEvent,
-  ) => void;
+  onMembersChanged?: (detail: MembersChangedDetail, event: CustomEvent) => void;
+  onStateChange?: (detail: P2PRoomStateChangeDetail, event: CustomEvent) => void;
   /** @deprecated Use onMemberStream. */
   onPeerStream?: (detail: PeerStreamDetail, event: CustomEvent) => void;
   /** @deprecated Use onMemberTrack. */
@@ -495,34 +433,13 @@ export interface P2PRoomOptions {
   onLocalStream?: (detail: LocalStreamDetail, event: CustomEvent) => void;
   onFull?: (detail: RoomFullDetail, event: CustomEvent) => void;
   onDataChannel?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
-  onDataChannelOpen?: (
-    detail: RoomDataChannelDetail,
-    event: CustomEvent,
-  ) => void;
-  onDataChannelMessage?: (
-    detail: RoomDataChannelMessageDetail,
-    event: CustomEvent,
-  ) => void;
-  onDataChannelClose?: (
-    detail: RoomDataChannelDetail,
-    event: CustomEvent,
-  ) => void;
-  onIceReconnecting?: (
-    detail: RoomIceReconnectingDetail,
-    event: CustomEvent,
-  ) => void;
-  onIceReconnected?: (
-    detail: RoomIceReconnectedDetail,
-    event: CustomEvent,
-  ) => void;
-  onIceReconnectFailed?: (
-    detail: RoomIceReconnectFailedDetail,
-    event: CustomEvent,
-  ) => void;
-  onPeerConnection?: (
-    detail: RoomPeerConnectionDetail,
-    event: CustomEvent,
-  ) => void;
+  onDataChannelOpen?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
+  onDataChannelMessage?: (detail: RoomDataChannelMessageDetail, event: CustomEvent) => void;
+  onDataChannelClose?: (detail: RoomDataChannelDetail, event: CustomEvent) => void;
+  onIceReconnecting?: (detail: RoomIceReconnectingDetail, event: CustomEvent) => void;
+  onIceReconnected?: (detail: RoomIceReconnectedDetail, event: CustomEvent) => void;
+  onIceReconnectFailed?: (detail: RoomIceReconnectFailedDetail, event: CustomEvent) => void;
+  onPeerConnection?: (detail: RoomPeerConnectionDetail, event: CustomEvent) => void;
   onError?: (detail: PeerErrorDetail, event: CustomEvent) => void;
 }
 
@@ -550,10 +467,7 @@ export declare class P2PRoom extends EventTarget {
     type: K,
     callback: (detail: P2PRoomEvents[K], event: CustomEvent) => void,
   ): () => void;
-  on(
-    type: string,
-    callback: (detail: unknown, event: CustomEvent) => void,
-  ): () => void;
+  on(type: string, callback: (detail: unknown, event: CustomEvent) => void): () => void;
   off(type: string, callback: (...args: unknown[]) => void): void;
   join(data?: P2PRoomPresenceData): Promise<void>;
   setPresenceData(data: P2PRoomPresenceData): Promise<void>;
@@ -596,13 +510,9 @@ export declare class LocalTrackReplacementError extends AggregateError {
 export function isRoomFullError(error: unknown): error is RoomFullError;
 export function isLocalStreamError(error: unknown): error is LocalStreamError;
 
-export function createPairSignaling(
-  source: RtcSignalingSource,
-): RtcPairSignaling;
+export function createPairSignaling(source: RtcSignalingSource): RtcPairSignaling;
 
-export function createRelayPeerSignaling(
-  options: RelayPeerSignalingOptions,
-): RtcPairSignaling;
+export function createRelayPeerSignaling(options: RelayPeerSignalingOptions): RtcPairSignaling;
 
 /**
  * Validate a room signaling source at dev time. Throws with a clear message
@@ -610,9 +520,7 @@ export function createRelayPeerSignaling(
  */
 export function validateRoomSignaling(source: unknown): void;
 
-export function createRoomSignaling(
-  source: P2PRoomSignaling,
-): P2PRoomSignaling & {
+export function createRoomSignaling(source: P2PRoomSignaling): P2PRoomSignaling & {
   createPeerSignaling(options: P2PRoomPeerSignalingOptions): RtcPairSignaling;
   close(): void | Promise<void>;
 };
@@ -623,9 +531,7 @@ export interface AttachRemoteStreamOptions {
 }
 
 export function attachRemoteStream(
-  peerOrPc:
-    | EventTarget
-    | { on?: (...args: unknown[]) => unknown; pc?: RTCPeerConnection },
+  peerOrPc: EventTarget | { on?: (...args: unknown[]) => unknown; pc?: RTCPeerConnection },
   options?: AttachRemoteStreamOptions,
 ): () => void;
 
@@ -651,8 +557,7 @@ export declare const P2P_ERROR_CODES: Readonly<{
   ABORTED: 'ABORTED';
 }>;
 
-export type P2PErrorCode =
-  (typeof P2P_ERROR_CODES)[keyof typeof P2P_ERROR_CODES];
+export type P2PErrorCode = (typeof P2P_ERROR_CODES)[keyof typeof P2P_ERROR_CODES];
 
 export interface PeerEvents {
   statechange: StateChangeDetail;
@@ -693,10 +598,7 @@ export declare class Peer extends EventTarget {
     type: K,
     callback: (detail: PeerEvents[K], event: CustomEvent) => void,
   ): () => void;
-  on(
-    type: string,
-    callback: (detail: unknown, event: CustomEvent) => void,
-  ): () => void;
+  on(type: string, callback: (detail: unknown, event: CustomEvent) => void): () => void;
 
   once<K extends keyof PeerEvents>(
     type: K,

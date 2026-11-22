@@ -210,10 +210,7 @@ class P2PSession extends EventTarget {
     ]) {
       this._cleanups.push(
         this.peer.on(type, (detail, event) => {
-          this._emit(
-            type,
-            type.startsWith('ice') ? detail : { ...detail, event },
-          );
+          this._emit(type, type.startsWith('ice') ? detail : { ...detail, event });
         }),
       );
     }
@@ -226,10 +223,7 @@ class P2PSession extends EventTarget {
   async _start(options) {
     await this.peer.start(options);
     if (options.dataChannelOpenTimeoutMs > 0) {
-      await this._waitForDataChannelOpen(
-        options.dataChannelOpenTimeoutMs,
-        options.signal,
-      );
+      await this._waitForDataChannelOpen(options.dataChannelOpenTimeoutMs, options.signal);
     }
   }
 

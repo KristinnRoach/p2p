@@ -18,12 +18,8 @@ export default function ComponentRoom(props: ComponentRoomProps) {
   });
 
   return (
-    <div class='example'>
-      <P2PRoom
-        roomId='demo-room'
-        memberCapacity={6}
-        createSignaling={props.createSignaling}
-      >
+    <div class="example">
+      <P2PRoom roomId="demo-room" memberCapacity={6} createSignaling={props.createSignaling}>
         <P2PRoomControls />
         <P2PRoomStatus />
         <P2PVideoGrid />

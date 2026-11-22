@@ -8,8 +8,7 @@ export default function Room() {
   const p2p = useP2PRoom();
   const [roomId, setRoomId] = createSignal('demo-room');
 
-  const isJoining = () =>
-    p2p.state() === 'creating' || p2p.state() === 'joining';
+  const isJoining = () => p2p.state() === 'creating' || p2p.state() === 'joining';
   const isJoined = () => p2p.state() === 'joined';
 
   async function joinRoom() {
@@ -20,8 +19,7 @@ export default function Room() {
       roomId: id,
       peerId: crypto.randomUUID(),
       createSignaling: ({ roomId }) => createBroadcastRoomSignaling(roomId),
-      getLocalStream: () =>
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
+      getLocalStream: () => navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
       memberCapacity: MAX_MEMBERS,
     });
   }
@@ -31,31 +29,27 @@ export default function Room() {
   });
 
   return (
-    <main class='room'>
+    <main class="room">
       <form
-        class='lobby-form'
+        class="lobby-form"
         onSubmit={(event) => {
           event.preventDefault();
           void joinRoom();
         }}
       >
         <input
-          class='room-id-input'
+          class="room-id-input"
           value={roomId()}
           onInput={(event) => setRoomId(event.currentTarget.value)}
-          placeholder='Room ID'
-          aria-label='Room ID'
+          placeholder="Room ID"
+          aria-label="Room ID"
           disabled={isJoining() || isJoined()}
         />
-        <button
-          class='primary-button'
-          type='submit'
-          disabled={isJoining() || isJoined()}
-        >
+        <button class="primary-button" type="submit" disabled={isJoining() || isJoined()}>
           {isJoining() ? 'Joining...' : 'Join room'}
         </button>
         <button
-          type='button'
+          type="button"
           onClick={() => void p2p.dispose().catch(console.error)}
           disabled={!isJoined()}
         >
@@ -63,20 +57,18 @@ export default function Room() {
         </button>
       </form>
 
-      <div class='room-status'>
+      <div class="room-status">
         <p>Status: {p2p.state()}</p>
         <p>
           Members: {p2p.memberCount()} / {p2p.memberCapacity() ?? MAX_MEMBERS}
         </p>
-        <Show when={p2p.errorKind()}>
-          {(kind) => <p>Room error: {kind()}</p>}
-        </Show>
+        <Show when={p2p.errorKind()}>{(kind) => <p>Room error: {kind()}</p>}</Show>
       </div>
 
-      <div class='video-grid'>
+      <div class="video-grid">
         <Show when={p2p.localStream()}>
           {(stream) => (
-            <section class='peer-tile'>
+            <section class="peer-tile">
               <h2>Local</h2>
               <Video stream={stream()} muted />
             </section>
@@ -85,7 +77,7 @@ export default function Room() {
 
         <For each={p2p.remoteMemberStreams()}>
           {(remote) => (
-            <section class='peer-tile'>
+            <section class="peer-tile">
               <h2>Remote {remote.memberId.slice(0, 8)}</h2>
               <Video stream={remote.stream} />
             </section>
@@ -108,13 +100,5 @@ function Video(props: { stream: MediaStream; muted?: boolean }) {
     video.srcObject = null;
   });
 
-  return (
-    <video
-      class='video-stream'
-      ref={video}
-      autoplay
-      muted={props.muted}
-      playsinline
-    />
-  );
+  return <video class="video-stream" ref={video} autoplay muted={props.muted} playsinline />;
 }

@@ -62,8 +62,7 @@ export function App() {
         role: roleToStart,
       });
 
-      const createSession =
-        roleToStart === 'host' ? startP2PSession : joinP2PSession;
+      const createSession = roleToStart === 'host' ? startP2PSession : joinP2PSession;
 
       const nextSession = await createSession({
         signaling,
@@ -98,15 +97,9 @@ export function App() {
       setDataChannelOpen(nextSession.dataChannel?.readyState === 'open');
       setLog((items) => [
         ...items,
-        roleToStart === 'host'
-          ? `created room ${roomId}`
-          : `joined room ${roomId}`,
+        roleToStart === 'host' ? `created room ${roomId}` : `joined room ${roomId}`,
       ]);
-      window.history.replaceState(
-        null,
-        '',
-        `?room=${roomId}&role=${roleToStart}`,
-      );
+      window.history.replaceState(null, '', `?room=${roomId}&role=${roleToStart}`);
     } catch (error) {
       closeCurrentSession({ session: null, signaling, localStream: stream });
       setLog((items) => [...items, `start failed: ${error.message}`]);
@@ -154,21 +147,15 @@ export function App() {
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input
-          aria-label='Room id'
+          aria-label="Room id"
           value={roomId}
           disabled={Boolean(session) || isStarting}
           onChange={(event) => setRoomId(event.target.value)}
         />
-        <button
-          onClick={() => start('host')}
-          disabled={Boolean(session) || isStarting}
-        >
+        <button onClick={() => start('host')} disabled={Boolean(session) || isStarting}>
           Create room
         </button>
-        <button
-          onClick={() => start('guest')}
-          disabled={Boolean(session) || isStarting}
-        >
+        <button onClick={() => start('guest')} disabled={Boolean(session) || isStarting}>
           Join room
         </button>
         <button onClick={disconnect} disabled={!session}>
@@ -178,7 +165,7 @@ export function App() {
 
       <p>
         Role: {role}. Guest link:{' '}
-        <a href={joinUrl} target='_blank' rel='noreferrer'>
+        <a href={joinUrl} target="_blank" rel="noreferrer">
           open another tab
         </a>
       </p>
@@ -191,15 +178,12 @@ export function App() {
           marginTop: 16,
         }}
       >
-        <Video title='Local camera' stream={localStream} muted />
-        <Video title='Remote video' stream={remoteStream} />
+        <Video title="Local camera" stream={localStream} muted />
+        <Video title="Remote video" stream={remoteStream} />
       </section>
 
       <div style={{ marginTop: 16 }}>
-        <input
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-        />
+        <input value={message} onChange={(event) => setMessage(event.target.value)} />
 
         <button onClick={send} disabled={!dataChannelOpen}>
           Send

@@ -38,12 +38,7 @@ const REQUIRED_METHODS = [
   'sendCandidate',
   'onRemoteCandidate',
 ];
-const ROOM_REQUIRED_METHODS = [
-  'join',
-  'leave',
-  'onPeers',
-  'createPeerSignaling',
-];
+const ROOM_REQUIRED_METHODS = ['join', 'leave', 'onPeers', 'createPeerSignaling'];
 const RELAY_ENVELOPE_KINDS = {
   offer: 'offer',
   answer: 'answer',
@@ -69,14 +64,10 @@ export function createPairSignaling(source) {
 
   const subscribe = (methodName, callback) => {
     if (closed) {
-      throw new Error(
-        `createPairSignaling: cannot call ${methodName}() after close()`,
-      );
+      throw new Error(`createPairSignaling: cannot call ${methodName}() after close()`);
     }
     if (typeof callback !== 'function') {
-      throw new TypeError(
-        `createPairSignaling: ${methodName} callback must be a function`,
-      );
+      throw new TypeError(`createPairSignaling: ${methodName} callback must be a function`);
     }
 
     let active = true;
@@ -133,10 +124,8 @@ export function createPairSignaling(source) {
     typeof source.sendIceRestartRequest === 'function' &&
     typeof source.onIceRestartRequest === 'function'
   ) {
-    signaling.sendIceRestartRequest = (request) =>
-      source.sendIceRestartRequest(request);
-    signaling.onIceRestartRequest = (callback) =>
-      subscribe('onIceRestartRequest', callback);
+    signaling.sendIceRestartRequest = (request) => source.sendIceRestartRequest(request);
+    signaling.onIceRestartRequest = (callback) => subscribe('onIceRestartRequest', callback);
   }
   return signaling;
 }
@@ -212,8 +201,7 @@ export function createRelayPeerSignaling(options) {
         kind: 'ice-restart-request',
         iceRestartRequest,
       }),
-    onIceRestartRequest: (callback) =>
-      subscribe('iceRestartRequest', callback),
+    onIceRestartRequest: (callback) => subscribe('iceRestartRequest', callback),
   });
   const closePairSignaling = pairSignaling.close;
 
@@ -281,18 +269,14 @@ export function createRoomSignaling(source) {
 
   const assertOpen = (methodName) => {
     if (closed) {
-      throw new Error(
-        `createRoomSignaling: cannot call ${methodName}() after close()`,
-      );
+      throw new Error(`createRoomSignaling: cannot call ${methodName}() after close()`);
     }
   };
 
   const subscribe = (callback) => {
     assertOpen('onPeers');
     if (typeof callback !== 'function') {
-      throw new TypeError(
-        'createRoomSignaling: onPeers callback must be a function',
-      );
+      throw new TypeError('createRoomSignaling: onPeers callback must be a function');
     }
 
     let active = true;
@@ -336,9 +320,7 @@ export function createRoomSignaling(source) {
   return {
     join: (peerId, data) => {
       assertOpen('join');
-      return data === undefined
-        ? source.join(peerId)
-        : source.join(peerId, data);
+      return data === undefined ? source.join(peerId) : source.join(peerId, data);
     },
     leave: (peerId) => {
       assertOpen('leave');
@@ -422,9 +404,7 @@ function assertSignalingSource(source) {
 
   for (const methodName of REQUIRED_METHODS) {
     if (typeof source[methodName] !== 'function') {
-      throw new Error(
-        `createPairSignaling: source missing method "${methodName}"`,
-      );
+      throw new Error(`createPairSignaling: source missing method "${methodName}"`);
     }
   }
 }
@@ -434,9 +414,7 @@ function assertRelayPeerSignalingOptions(options) {
     throw new Error('createRelayPeerSignaling: options are required');
   }
   if (typeof options.remotePeerId !== 'string' || !options.remotePeerId) {
-    throw new Error(
-      'createRelayPeerSignaling: remotePeerId must be a non-empty string',
-    );
+    throw new Error('createRelayPeerSignaling: remotePeerId must be a non-empty string');
   }
   if (typeof options.send !== 'function') {
     throw new Error('createRelayPeerSignaling: send must be a function');
@@ -468,34 +446,17 @@ function assertRoomSignalingSource(source) {
 
   for (const methodName of ROOM_REQUIRED_METHODS) {
     if (typeof source[methodName] !== 'function') {
-      throw new Error(
-        `createRoomSignaling: source missing method "${methodName}"`,
-      );
+      throw new Error(`createRoomSignaling: source missing method "${methodName}"`);
     }
   }
-  if (
-    source.refreshPresence != null &&
-    typeof source.refreshPresence !== 'function'
-  ) {
-    throw new Error(
-      'createRoomSignaling: source refreshPresence must be a function',
-    );
+  if (source.refreshPresence != null && typeof source.refreshPresence !== 'function') {
+    throw new Error('createRoomSignaling: source refreshPresence must be a function');
   }
-  if (
-    source.updatePresenceData != null &&
-    typeof source.updatePresenceData !== 'function'
-  ) {
-    throw new Error(
-      'createRoomSignaling: source updatePresenceData must be a function',
-    );
+  if (source.updatePresenceData != null && typeof source.updatePresenceData !== 'function') {
+    throw new Error('createRoomSignaling: source updatePresenceData must be a function');
   }
-  if (
-    source.cleanupSignaling != null &&
-    typeof source.cleanupSignaling !== 'function'
-  ) {
-    throw new Error(
-      'createRoomSignaling: source cleanupSignaling must be a function',
-    );
+  if (source.cleanupSignaling != null && typeof source.cleanupSignaling !== 'function') {
+    throw new Error('createRoomSignaling: source cleanupSignaling must be a function');
   }
 }
 

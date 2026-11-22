@@ -116,9 +116,7 @@ export class P2PRoomElement extends HTMLElement {
 
   get memberCapacity() {
     const value = Number(this.getAttribute('member-capacity'));
-    return Number.isFinite(value) && value > 0
-      ? value
-      : DEFAULT_MEMBER_CAPACITY;
+    return Number.isFinite(value) && value > 0 ? value : DEFAULT_MEMBER_CAPACITY;
   }
 
   set memberCapacity(value) {
@@ -169,12 +167,9 @@ export class P2PRoomElement extends HTMLElement {
     const roomId = this.roomId.trim();
     if (!roomId) return;
 
-    const createSignaling =
-      this.createSignaling || componentDefaults.createSignaling;
+    const createSignaling = this.createSignaling || componentDefaults.createSignaling;
     if (typeof createSignaling !== 'function') {
-      this.setError(
-        'p2p-room requires a createSignaling function before joining',
-      );
+      this.setError('p2p-room requires a createSignaling function before joining');
       return;
     }
 
@@ -312,9 +307,7 @@ export class P2PRoomElement extends HTMLElement {
   notify() {
     const detail = this.snapshot();
     for (const subscriber of this.subscribers) subscriber(detail);
-    this.dispatchEvent(
-      new CustomEvent('p2p-room-change', { detail, bubbles: true }),
-    );
+    this.dispatchEvent(new CustomEvent('p2p-room-change', { detail, bubbles: true }));
   }
 
   setError(message) {
@@ -369,10 +362,7 @@ export class P2PRoomControlsElement extends HTMLElement {
     if (!this.form) return;
     const isJoined = state.state === 'joined';
     const isJoining = state.state === 'joining';
-    if (
-      this.shadowRoot.activeElement !== this.input &&
-      this.input.value !== state.roomId
-    ) {
+    if (this.shadowRoot.activeElement !== this.input && this.input.value !== state.roomId) {
       this.input.value = state.roomId;
     }
     this.input.disabled = isJoined || isJoining;
@@ -507,9 +497,7 @@ export class P2PChatElement extends HTMLElement {
 
   get maxMessages() {
     const value = Number(this.getAttribute('max-messages'));
-    return Number.isFinite(value) && value > 0
-      ? value
-      : DEFAULT_CHAT_HISTORY_LIMIT;
+    return Number.isFinite(value) && value > 0 ? value : DEFAULT_CHAT_HISTORY_LIMIT;
   }
 
   set maxMessages(value) {
@@ -548,15 +536,13 @@ export class P2PChatElement extends HTMLElement {
     this.input = this.shadowRoot.querySelector('input[name="message"]');
     this.sendBtn = this.shadowRoot.querySelector('button[type="submit"]');
 
-    this.shadowRoot
-      .querySelector('form')
-      .addEventListener('submit', (event) => {
-        event.preventDefault();
-        const text = this.input.value.trim();
-        if (!text) return;
-        this.roomElement.sendChat(text);
-        this.input.value = '';
-      });
+    this.shadowRoot.querySelector('form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const text = this.input.value.trim();
+      if (!text) return;
+      this.roomElement.sendChat(text);
+      this.input.value = '';
+    });
 
     this.unsubscribe = this.roomElement.subscribe((state) => {
       this.state = state;
@@ -663,9 +649,7 @@ function createChatMessageNode(message) {
 }
 
 function getOrCreateVideoFigure(grid, id) {
-  const existing = grid.querySelector(
-    `figure[data-stream-id="${CSS.escape(id)}"]`,
-  );
+  const existing = grid.querySelector(`figure[data-stream-id="${CSS.escape(id)}"]`);
   if (existing) return { figure: existing, created: false };
 
   const figure = document.createElement('figure');

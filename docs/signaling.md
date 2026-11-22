@@ -15,9 +15,7 @@ interface RtcSignalingSource {
   sendCandidate(candidate: RTCIceCandidateInit): void | Promise<void>;
   onRemoteCandidate(callback: (candidate: RTCIceCandidateInit) => void): void | (() => void);
   sendIceRestartRequest?(request: { requestId: string }): void | Promise<void>;
-  onIceRestartRequest?(
-    callback: (request: { requestId: string }) => void,
-  ): void | (() => void);
+  onIceRestartRequest?(callback: (request: { requestId: string }) => void): void | (() => void);
 }
 ```
 
@@ -38,14 +36,8 @@ The room-level contract required by `joinP2PRoom`. Manages presence and creates 
 interface P2PRoomSignaling {
   join(peerId: string, data?: Record<string, unknown>): void | Promise<void>;
   leave(peerId: string): void | Promise<void>;
-  refreshPresence?(
-    peerId: string,
-    data?: Record<string, unknown>,
-  ): void | Promise<void>;
-  updatePresenceData?(
-    peerId: string,
-    data: Record<string, unknown>,
-  ): void | Promise<void>;
+  refreshPresence?(peerId: string, data?: Record<string, unknown>): void | Promise<void>;
+  updatePresenceData?(peerId: string, data: Record<string, unknown>): void | Promise<void>;
   onPeers(
     callback: (snapshot: {
       members: Array<{
@@ -55,10 +47,7 @@ interface P2PRoomSignaling {
       departed?: Array<{ memberId: string; reason: 'left' }>;
     }) => void,
   ): void | (() => void);
-  createPeerSignaling(options: {
-    localPeerId: string;
-    remotePeerId: string;
-  }): RtcSignalingSource;
+  createPeerSignaling(options: { localPeerId: string; remotePeerId: string }): RtcSignalingSource;
   cleanupSignaling?(): void | Promise<void>;
 }
 ```
@@ -241,12 +230,21 @@ function relayTo(peerId, envelope) {
 import { createPairSignaling, createRoomSignaling } from '@kidlib/p2p';
 
 const pairSignaling = createPairSignaling({
-  sendOffer, sendAnswer, onOffer, onAnswer, sendCandidate, onRemoteCandidate,
+  sendOffer,
+  sendAnswer,
+  onOffer,
+  onAnswer,
+  sendCandidate,
+  onRemoteCandidate,
 });
 // pairSignaling.close() unsubscribes active listeners
 
 const roomSignaling = createRoomSignaling({
-  join, leave, onPeers, createPeerSignaling, cleanupSignaling,
+  join,
+  leave,
+  onPeers,
+  createPeerSignaling,
+  cleanupSignaling,
 });
 // roomSignaling.close() closes pair signalings, the room subscription, and cleanupSignaling()
 ```
@@ -292,12 +290,14 @@ const roomSignaling = {
     return createRelayPeerSignaling({
       remotePeerId,
       send: (toPeerId, envelope) =>
-        socket.send(JSON.stringify({
-          type: 'signal',
-          from: localPeerId,
-          to: toPeerId,
-          envelope,
-        })),
+        socket.send(
+          JSON.stringify({
+            type: 'signal',
+            from: localPeerId,
+            to: toPeerId,
+            envelope,
+          }),
+        ),
       onMessage(callback) {
         messageListeners.add(callback);
         return () => messageListeners.delete(callback);

@@ -24,8 +24,7 @@ const room = await joinP2PRoom({
   presenceData: { displayName: 'Ada', callState: 'joined' },
   roomId,
   createSignaling: ({ roomId }) => createRoomSignalingForApp(roomId),
-  getLocalStream: () =>
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
+  getLocalStream: () => navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
   onLocalStream: ({ stream }) => renderLocalPreview(stream),
 });
 
@@ -75,8 +74,7 @@ import { watchP2PRoom } from '@kidlib/p2p';
 const room = await watchP2PRoom({
   roomId,
   createSignaling: ({ roomId }) => createRoomSignalingForApp(roomId),
-  getLocalStream: () =>
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
+  getLocalStream: () => navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
   peerId: crypto.randomUUID(),
   memberCapacity: 2,
 });
@@ -93,8 +91,8 @@ room.on('alone', () => endCall());
 // connection closed, failed, or aborted). `memberLeft` is unchanged.
 room.on('memberStreamRemoved', ({ memberId }) => removeRemoteTile(memberId));
 
-await room.join();  // enter presence and connect
-await room.leave();   // leave presence, close sessions, keep watching
+await room.join(); // enter presence and connect
+await room.leave(); // leave presence, close sessions, keep watching
 await room.dispose(); // leave presence and permanently tear down the room
 ```
 
@@ -223,17 +221,17 @@ room.on('error', ({ memberId, error }) => {
 });
 ```
 
-| Code | Cause |
-|------|-------|
-| `START_TIMEOUT` | `startTimeoutMs` elapsed |
-| `CONNECTION_TIMEOUT` | `connectedTimeoutMs` elapsed |
-| `CONNECTION_FAILED` | Connection failed before start/data channel open completed |
-| `CONNECTION_CLOSED` | Connection closed before start/data channel open completed |
-| `DATA_CHANNEL_OPEN_TIMEOUT` | `dataChannelOpenTimeoutMs` elapsed |
-| `DATA_CHANNEL_CLOSED` | Data channel closed before opening |
-| `START_CLOSED` | Peer was disposed before start completed |
-| `SIGNAL_BUFFER_LIMIT` | Joiner's early-signal buffer overflowed |
-| `ABORTED` | `signal` aborted; `error.name` stays `'AbortError'` |
+| Code                        | Cause                                                      |
+| --------------------------- | ---------------------------------------------------------- |
+| `START_TIMEOUT`             | `startTimeoutMs` elapsed                                   |
+| `CONNECTION_TIMEOUT`        | `connectedTimeoutMs` elapsed                               |
+| `CONNECTION_FAILED`         | Connection failed before start/data channel open completed |
+| `CONNECTION_CLOSED`         | Connection closed before start/data channel open completed |
+| `DATA_CHANNEL_OPEN_TIMEOUT` | `dataChannelOpenTimeoutMs` elapsed                         |
+| `DATA_CHANNEL_CLOSED`       | Data channel closed before opening                         |
+| `START_CLOSED`              | Peer was disposed before start completed                   |
+| `SIGNAL_BUFFER_LIMIT`       | Joiner's early-signal buffer overflowed                    |
+| `ABORTED`                   | `signal` aborted; `error.name` stays `'AbortError'`        |
 
 ## Advanced: tuning senders / reading stats
 
@@ -278,16 +276,16 @@ for (const [memberId, pc] of room.peerConnections()) {
 
 ## Lower-level exports
 
-| Export | Description | Docs |
-|--------|-------------|------|
-| `createPairSignaling` | Normalize a 1:1 signaling source | [docs/signaling.md](docs/signaling.md) |
-| `createRelayPeerSignaling` | Adapt a peer-addressed relay stream into 1:1 signaling | [docs/signaling.md](docs/signaling.md) |
-| `createRoomSignaling` | Normalize a room signaling source | [docs/signaling.md](docs/signaling.md) |
-| `validateRoomSignaling` | Validate a room signaling source | [docs/signaling.md](docs/signaling.md) |
-| `Peer` | Direct `RTCPeerConnection` control | [docs/peer.md](docs/peer.md) |
-| `P2P_ERROR_CODES` | Stable startup `error.code` values | [Startup error codes](#startup-error-codes) |
-| `attachRemoteStream` | Assemble remote tracks into a `MediaStream` | [docs/peer.md](docs/peer.md) |
-| `setLogger` | Wire a custom logger | [docs/peer.md](docs/peer.md) |
+| Export                     | Description                                            | Docs                                        |
+| -------------------------- | ------------------------------------------------------ | ------------------------------------------- |
+| `createPairSignaling`      | Normalize a 1:1 signaling source                       | [docs/signaling.md](docs/signaling.md)      |
+| `createRelayPeerSignaling` | Adapt a peer-addressed relay stream into 1:1 signaling | [docs/signaling.md](docs/signaling.md)      |
+| `createRoomSignaling`      | Normalize a room signaling source                      | [docs/signaling.md](docs/signaling.md)      |
+| `validateRoomSignaling`    | Validate a room signaling source                       | [docs/signaling.md](docs/signaling.md)      |
+| `Peer`                     | Direct `RTCPeerConnection` control                     | [docs/peer.md](docs/peer.md)                |
+| `P2P_ERROR_CODES`          | Stable startup `error.code` values                     | [Startup error codes](#startup-error-codes) |
+| `attachRemoteStream`       | Assemble remote tracks into a `MediaStream`            | [docs/peer.md](docs/peer.md)                |
+| `setLogger`                | Wire a custom logger                                   | [docs/peer.md](docs/peer.md)                |
 
 ## Development
 

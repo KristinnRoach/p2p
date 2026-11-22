@@ -13,13 +13,7 @@ function logTeardown(cause) {
 }
 
 export function attachMediaStream(video, stream, options = {}) {
-  const {
-    autoplay = true,
-    muted,
-    playsInline,
-    onPlaybackBlocked,
-    onPlaybackStarted,
-  } = options;
+  const { autoplay = true, muted, playsInline, onPlaybackBlocked, onPlaybackStarted } = options;
   let blockedError;
   let disposed = false;
 
@@ -145,13 +139,7 @@ export function useP2PRoom() {
   function setRoomError(cause) {
     const roomFull = isRoomFullError(cause);
     setError(cause);
-    setErrorKind(
-      roomFull
-        ? 'room-full'
-        : isLocalStreamError(cause)
-          ? 'local-stream'
-          : 'room',
-    );
+    setErrorKind(roomFull ? 'room-full' : isLocalStreamError(cause) ? 'local-stream' : 'room');
     setIsFull(roomFull);
     if (roomFull) {
       setState('full');
@@ -215,8 +203,7 @@ export function useP2PRoom() {
   }
 
   function bindRoomEvents(nextRoom) {
-    const updateRemoteStreams = () =>
-      setRemoteMemberStreams(nextRoom.remoteMemberStreams);
+    const updateRemoteStreams = () => setRemoteMemberStreams(nextRoom.remoteMemberStreams);
 
     const cleanups = [
       nextRoom.on('statechange', ({ state }) => setState(state)),
@@ -235,9 +222,7 @@ export function useP2PRoom() {
         setError(error);
         setErrorKind('peer');
       }),
-      nextRoom.on('dataChannel', () =>
-        setDataChannels(new Map(nextRoom.dataChannels)),
-      ),
+      nextRoom.on('dataChannel', () => setDataChannels(new Map(nextRoom.dataChannels))),
       nextRoom.on('dataChannelClose', ({ memberId }) =>
         setDataChannels((prev) => {
           const next = new Map(prev);
@@ -245,9 +230,7 @@ export function useP2PRoom() {
           return next;
         }),
       ),
-      nextRoom.on('memberLeft', () =>
-        setDataChannels(new Map(nextRoom.dataChannels)),
-      ),
+      nextRoom.on('memberLeft', () => setDataChannels(new Map(nextRoom.dataChannels))),
     ];
 
     return () => cleanups.forEach((cleanup) => cleanup());

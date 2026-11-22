@@ -19,8 +19,7 @@ export default function Room() {
       roomId,
       peerId: crypto.randomUUID(),
       createSignaling: createBroadcastRoomSignaling,
-      getLocalStream: () =>
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
+      getLocalStream: () => navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
       memberCapacity: MAX_MEMBERS,
     });
   }
@@ -45,16 +44,14 @@ export default function Room() {
   }
 
   onMount(async () => {
-    const roomId = new URL(window.location.href).searchParams
-      .get('room')
-      ?.trim();
+    const roomId = new URL(window.location.href).searchParams.get('room')?.trim();
     if (roomId) await enterRoom(roomId).catch(console.error);
   });
 
   onCleanup(disposeRoom);
 
   return (
-    <main class='room'>
+    <main class="room">
       <LobbyForm
         isEntering={p2p.state() === 'creating' || p2p.state() === 'joining'}
         isInRoom={p2p.state() === 'joined'}
@@ -69,10 +66,7 @@ export default function Room() {
         status={p2p.state()}
         error={errorMessage()}
       />
-      <VideoGrid
-        localStream={p2p.localStream()}
-        remoteStreams={p2p.remoteMemberStreams()}
-      />
+      <VideoGrid localStream={p2p.localStream()} remoteStreams={p2p.remoteMemberStreams()} />
     </main>
   );
 }

@@ -45,8 +45,7 @@ You can also configure a single room element:
 const room = document.querySelector('p2p-room');
 
 room.createSignaling = ({ roomId }) => createRoomSignalingForApp(roomId);
-room.getLocalStream = () =>
-  navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+room.getLocalStream = () => navigator.mediaDevices.getUserMedia({ video: true, audio: false });
 room.roomOptions = {
   rtcConfig: {
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],

@@ -22,11 +22,7 @@ export async function getRTT(pc) {
       }
     }
   } catch (e) {
-    log(
-      '[RTTMonitor] Failed to get RTT:',
-      e instanceof Error ? e.message : String(e),
-      e,
-    );
+    log('[RTTMonitor] Failed to get RTT:', e instanceof Error ? e.message : String(e), e);
   }
   return null;
 }
@@ -51,9 +47,7 @@ export async function checkAndWarnRTT(
       `[RTTMonitor] ⚠️ ${label} has high latency. WebRTC peerConnection round trip time (RTT): ${rtt}ms. File transfers may be slow.`,
     );
   } else {
-    log(
-      `[RTTMonitor] ${label} WebRTC peerConnection round trip time (RTT): ${rtt}ms (OK)`,
-    );
+    log(`[RTTMonitor] ${label} WebRTC peerConnection round trip time (RTT): ${rtt}ms (OK)`);
   }
   return rtt;
 }

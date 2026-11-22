@@ -9,18 +9,9 @@ import type {
 
 export { setLogger } from './index.js';
 
-export type SolidP2PRoomState =
-  | P2PRoomState
-  | 'idle'
-  | 'creating'
-  | 'full'
-  | 'error';
+export type SolidP2PRoomState = P2PRoomState | 'idle' | 'creating' | 'full' | 'error';
 
-export type SolidP2PRoomErrorKind =
-  | 'room'
-  | 'room-full'
-  | 'local-stream'
-  | 'peer';
+export type SolidP2PRoomErrorKind = 'room' | 'room-full' | 'local-stream' | 'peer';
 
 export interface SolidP2PRoom {
   readonly room: Accessor<P2PRoom | undefined>;
@@ -77,8 +68,6 @@ export function attachMediaStream(
   options?: AttachMediaStreamOptions,
 ): MediaStreamAttachment;
 
-export function createMediaPlayback(
-  options?: AttachMediaStreamOptions,
-): SolidMediaPlayback;
+export function createMediaPlayback(options?: AttachMediaStreamOptions): SolidMediaPlayback;
 
 export function useP2PRoom(): SolidP2PRoom;
