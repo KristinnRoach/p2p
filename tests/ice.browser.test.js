@@ -3,7 +3,7 @@
 // Unit tests for the signaling-agnostic ICE helper. The lib takes an
 // IceTransport, so the tests stub one by hand — no Firebase mocks needed.
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { setupIceCandidates, drainIceCandidateQueue } from '../src/ice.js';
 
 /**
@@ -69,9 +69,9 @@ describe('ICE Candidate Queuing', () => {
 
     it('throws when transport is missing or incomplete', () => {
       expect(() => setupIceCandidates(mockPc, null)).toThrow(/transport/);
-      expect(() =>
-        setupIceCandidates(mockPc, { sendCandidate: () => {} }),
-      ).toThrow(/onRemoteCandidate/);
+      expect(() => setupIceCandidates(mockPc, { sendCandidate: () => {} })).toThrow(
+        /onRemoteCandidate/,
+      );
     });
   });
 

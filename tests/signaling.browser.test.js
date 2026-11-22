@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import {
   createPairSignaling,
   createRelayPeerSignaling,
@@ -22,9 +22,7 @@ describe('createPairSignaling', () => {
     const source = createSource();
     delete source.onAnswer;
 
-    expect(() => createPairSignaling(source)).toThrow(
-      /missing method "onAnswer"/,
-    );
+    expect(() => createPairSignaling(source)).toThrow(/missing method "onAnswer"/);
   });
 
   it('forwards send methods to the wrapped source', async () => {
@@ -59,9 +57,7 @@ describe('createPairSignaling', () => {
     expect(source.sendIceRestartRequest).toHaveBeenCalledWith(request);
     expect(onIceIceRestartRequest).toHaveBeenCalledWith(expect.any(Function));
 
-    const incomplete = createPairSignaling(
-      createSource({ sendIceRestartRequest: vi.fn() }),
-    );
+    const incomplete = createPairSignaling(createSource({ sendIceRestartRequest: vi.fn() }));
     expect(incomplete.sendIceRestartRequest).toBeUndefined();
     expect(incomplete.onIceRestartRequest).toBeUndefined();
   });
@@ -352,9 +348,7 @@ describe('createRoomSignaling', () => {
     const source = createRoomSource();
     delete source.createPeerSignaling;
 
-    expect(() => createRoomSignaling(source)).toThrow(
-      /missing method "createPeerSignaling"/,
-    );
+    expect(() => createRoomSignaling(source)).toThrow(/missing method "createPeerSignaling"/);
   });
 
   it('forwards join and leave to the wrapped source', async () => {
@@ -461,10 +455,12 @@ describe('createRoomSignaling', () => {
     signaling.close();
 
     expect(pairUnsubscribe).toHaveBeenCalledTimes(1);
-    expect(() => signaling.createPeerSignaling({
-      localPeerId: 'peer-a',
-      remotePeerId: 'peer-c',
-    })).toThrow(/after close/);
+    expect(() =>
+      signaling.createPeerSignaling({
+        localPeerId: 'peer-a',
+        remotePeerId: 'peer-c',
+      }),
+    ).toThrow(/after close/);
   });
 
   it('calls optional room source cleanupSignaling and returns async cleanup failures', async () => {

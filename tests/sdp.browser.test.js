@@ -1,9 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import {
-  isDuplicateSdp,
-  markSdpApplied,
-  setRemoteDescription,
-} from '../src/sdp.js';
+import { describe, expect, it } from 'vite-plus/test';
+import { isDuplicateSdp, markSdpApplied, setRemoteDescription } from '../src/sdp.js';
 
 function createPeerConnection({
   signalingState = 'stable',

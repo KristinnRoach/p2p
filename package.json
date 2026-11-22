@@ -2,7 +2,22 @@
   "name": "@kidlib/p2p",
   "version": "0.5.6",
   "description": "Signaling-agnostic WebRTC helpers.",
+  "keywords": [
+    "datachannel",
+    "peer-to-peer",
+    "webrtc"
+  ],
+  "homepage": "https://github.com/KristinnRoach/p2p#readme",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KristinnRoach/p2p.git"
+  },
+  "files": [
+    "src"
+  ],
   "type": "module",
+  "sideEffects": false,
   "types": "./src/types/index.d.ts",
   "exports": {
     ".": {
@@ -82,25 +97,8 @@
       "default": "./src/tracks.js"
     }
   },
-  "files": [
-    "src"
-  ],
-  "sideEffects": false,
   "publishConfig": {
     "access": "public"
-  },
-  "keywords": [
-    "webrtc",
-    "peer-to-peer",
-    "datachannel"
-  ],
-  "peerDependencies": {
-    "solid-js": ">=1.8.0"
-  },
-  "peerDependenciesMeta": {
-    "solid-js": {
-      "optional": true
-    }
   },
   "scripts": {
     "dev:van": "pnpm --dir examples/web-components dev",
@@ -109,25 +107,29 @@
     "dev:solid": "pnpm --dir examples/solid dev",
     "server:ws": "node examples/shared/server/ws-server.js",
     "kill": "pkill -f vite",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vp test run",
+    "test:watch": "vp test",
     "changeset": "EDITOR='code --wait' changeset",
     "bump": "changeset version",
     "release": "pnpm test && npm login && changeset publish && git push --follow-tags"
   },
-  "homepage": "https://github.com/KristinnRoach/p2p#readme",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/KristinnRoach/p2p.git"
-  },
   "devDependencies": {
     "@changesets/cli": "2.31.1",
-    "@vitest/browser-playwright": "4.1.10",
+    "@vitest/browser-playwright": "catalog:",
     "fallow": "^2.101.0",
     "playwright": "1.61.1",
     "solid-js": "1.9.14",
-    "vitest": "4.1.10",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
     "ws": "8.21.1"
-  }
+  },
+  "peerDependencies": {
+    "solid-js": ">=1.8.0"
+  },
+  "peerDependenciesMeta": {
+    "solid-js": {
+      "optional": true
+    }
+  },
+  "packageManager": "pnpm@12.21.0"
 }
