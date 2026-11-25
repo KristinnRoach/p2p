@@ -4,8 +4,8 @@
 // Two Peer instances are wired through an in-memory loopback signaling
 // channel so offers/answers/ICE candidates flow between them end-to-end.
 
-import { server } from 'vitest/browser';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { server } from 'vite-plus/test/browser';
+import { describe, it, expect, vi, afterEach } from 'vite-plus/test';
 import { P2P_ERROR_CODES, Peer, PEER_STATES } from '../src/peer.js';
 import { setLogger } from '../src/logger.js';
 import { createLoopbackSignaling as createSharedLoopbackSignaling } from '../examples/shared/index.js';
@@ -45,15 +45,11 @@ describe('Peer', () => {
   describe('construction', () => {
     it('throws on invalid role', () => {
       const { a } = createLoopbackSignaling();
-      expect(() => new Peer({ role: 'observer', signaling: a })).toThrow(
-        /invalid role/,
-      );
+      expect(() => new Peer({ role: 'observer', signaling: a })).toThrow(/invalid role/);
     });
 
     it('throws when signaling is missing', () => {
-      expect(() => new Peer({ role: 'initiator' })).toThrow(
-        /signaling channel is required/,
-      );
+      expect(() => new Peer({ role: 'initiator' })).toThrow(/signaling channel is required/);
     });
 
     it('throws when signaling is incomplete', () => {
@@ -144,15 +140,8 @@ describe('Peer', () => {
         const connected = vi.fn();
         initiator.on('connected', connected);
 
-        await withTimeout(
-          Promise.all([initiator.start(), joiner.start()]),
-          5000,
-          'initial SDP',
-        );
-        await Promise.all([
-          waitForIceConnected(initiator.pc),
-          waitForIceConnected(joiner.pc),
-        ]);
+        await withTimeout(Promise.all([initiator.start(), joiner.start()]), 5000, 'initial SDP');
+        await Promise.all([waitForIceConnected(initiator.pc), waitForIceConnected(joiner.pc)]);
         if (initiator.state !== PEER_STATES.CONNECTED) {
           await withTimeout(
             new Promise((resolve) => initiator.once('connected', resolve)),
@@ -170,12 +159,8 @@ describe('Peer', () => {
         const pc = initiator.pc;
         const initialUfrag = getIceUfrag(pc.localDescription?.sdp);
         const recoveryResult = new Promise((resolve) => {
-          initiator.once('iceReconnected', (detail) =>
-            resolve({ type: 'reconnected', detail }),
-          );
-          initiator.once('iceReconnectFailed', (detail) =>
-            resolve({ type: 'failed', detail }),
-          );
+          initiator.once('iceReconnected', (detail) => resolve({ type: 'reconnected', detail }));
+          initiator.once('iceReconnectFailed', (detail) => resolve({ type: 'failed', detail }));
         });
         const joinerRecovery = new Promise((resolve) => {
           joiner.once('iceReconnected', resolve);
@@ -194,9 +179,7 @@ describe('Peer', () => {
         expect(b.sendAnswer).toHaveBeenCalledTimes(2);
         expect(connected).toHaveBeenCalledTimes(1);
         expect(['connected', 'completed']).toContain(pc.iceConnectionState);
-        expect(['connected', 'completed']).toContain(
-          joiner.pc.iceConnectionState,
-        );
+        expect(['connected', 'completed']).toContain(joiner.pc.iceConnectionState);
         const restartedUfrag = getIceUfrag(pc.localDescription?.sdp);
         if (initialUfrag && restartedUfrag) {
           expect(restartedUfrag).not.toBe(initialUfrag);
@@ -213,110 +196,101 @@ describe('Peer', () => {
       },
     );
 
-    itNeedsDataChannelLoopback(
-      'exchanges offer/answer and opens a data channel',
-      async () => {
-        const { a, b } = createLoopbackSignaling();
+    itNeedsDataChannelLoopback('exchanges offer/answer and opens a data channel', async () => {
+      const { a, b } = createLoopbackSignaling();
 
-        const initiator = new Peer({
-          role: 'initiator',
-          signaling: a,
-          dataChannel: true,
-          rtcConfig: loopbackRtcConfig,
-        });
-        const joiner = new Peer({
-          role: 'joiner',
-          signaling: b,
-          rtcConfig: loopbackRtcConfig,
-        });
-        peers = [initiator, joiner];
+      const initiator = new Peer({
+        role: 'initiator',
+        signaling: a,
+        dataChannel: true,
+        rtcConfig: loopbackRtcConfig,
+      });
+      const joiner = new Peer({
+        role: 'joiner',
+        signaling: b,
+        rtcConfig: loopbackRtcConfig,
+      });
+      peers = [initiator, joiner];
 
-        const joinerChannel = new Promise((resolve) => {
-          joiner.once('datachannel', ({ channel }) => resolve(channel));
-        });
-        const initiatorOpen = new Promise((resolve) => {
-          initiator.once('open', () => resolve());
-        });
+      const joinerChannel = new Promise((resolve) => {
+        joiner.once('datachannel', ({ channel }) => resolve(channel));
+      });
+      const initiatorOpen = new Promise((resolve) => {
+        initiator.once('open', () => resolve());
+      });
 
-        await Promise.all([initiator.start(), joiner.start()]);
+      await Promise.all([initiator.start(), joiner.start()]);
 
-        const channel = await joinerChannel;
-        expect(channel).toBeDefined();
-        expect(channel.label).toBe('data');
+      const channel = await joinerChannel;
+      expect(channel).toBeDefined();
+      expect(channel.label).toBe('data');
 
-        await initiatorOpen;
-        expect(initiator.dataChannel).toBeDefined();
-        expect(initiator.dataChannel.readyState).toBe('open');
-      },
-    );
+      await initiatorOpen;
+      expect(initiator.dataChannel).toBeDefined();
+      expect(initiator.dataChannel.readyState).toBe('open');
+    });
 
-    itNeedsDataChannelLoopback(
-      'delivers messages from initiator to joiner',
-      async () => {
-        const { a, b } = createLoopbackSignaling();
+    itNeedsDataChannelLoopback('delivers messages from initiator to joiner', async () => {
+      const { a, b } = createLoopbackSignaling();
 
-        const initiator = new Peer({
-          role: 'initiator',
-          signaling: a,
-          dataChannel: true,
-          rtcConfig: loopbackRtcConfig,
-        });
-        const joiner = new Peer({
-          role: 'joiner',
-          signaling: b,
-          rtcConfig: loopbackRtcConfig,
-        });
-        peers = [initiator, joiner];
+      const initiator = new Peer({
+        role: 'initiator',
+        signaling: a,
+        dataChannel: true,
+        rtcConfig: loopbackRtcConfig,
+      });
+      const joiner = new Peer({
+        role: 'joiner',
+        signaling: b,
+        rtcConfig: loopbackRtcConfig,
+      });
+      peers = [initiator, joiner];
 
-        const received = new Promise((resolve) => {
-          joiner.once('message', ({ data }) => resolve(data));
-        });
-        const initiatorOpen = new Promise((resolve) => {
-          initiator.once('open', () => resolve());
-        });
+      const received = new Promise((resolve) => {
+        joiner.once('message', ({ data }) => resolve(data));
+      });
+      const initiatorOpen = new Promise((resolve) => {
+        initiator.once('open', () => resolve());
+      });
 
-        await Promise.all([initiator.start(), joiner.start()]);
-        await initiatorOpen;
+      await Promise.all([initiator.start(), joiner.start()]);
+      await initiatorOpen;
 
-        initiator.send('hello from initiator');
+      initiator.send('hello from initiator');
 
-        expect(await received).toBe('hello from initiator');
-      },
-    );
+      expect(await received).toBe('hello from initiator');
+    });
 
-    itNeedsDataChannelLoopback(
-      'emits statechange and connected events',
-      async () => {
-        const { a, b } = createLoopbackSignaling();
+    itNeedsDataChannelLoopback('emits statechange and connected events', async () => {
+      const { a, b } = createLoopbackSignaling();
 
-        const initiator = new Peer({
-          role: 'initiator',
-          signaling: a,
-          dataChannel: true,
-          rtcConfig: loopbackRtcConfig,
-        });
-        const joiner = new Peer({
-          role: 'joiner',
-          signaling: b,
-          rtcConfig: loopbackRtcConfig,
-        });
-        peers = [initiator, joiner];
+      const initiator = new Peer({
+        role: 'initiator',
+        signaling: a,
+        dataChannel: true,
+        rtcConfig: loopbackRtcConfig,
+      });
+      const joiner = new Peer({
+        role: 'joiner',
+        signaling: b,
+        rtcConfig: loopbackRtcConfig,
+      });
+      peers = [initiator, joiner];
 
-        const stateChanges = [];
-        initiator.on('statechange', ({ state }) => stateChanges.push(state));
+      const stateChanges = [];
+      initiator.on('statechange', ({ state }) => stateChanges.push(state));
 
-        const connected = new Promise((resolve) => {
-          initiator.once('connected', () => resolve());
-        });
+      const connected = new Promise((resolve) => {
+        initiator.once('connected', () => resolve());
+      });
 
-        await Promise.all([initiator.start(), joiner.start()]);
-        await connected;
+      await Promise.all([initiator.start(), joiner.start()]);
+      await connected;
 
-        expect(stateChanges).toContain(PEER_STATES.CONNECTING);
-        expect(stateChanges).toContain(PEER_STATES.CONNECTED);
-        expect(initiator.state).toBe(PEER_STATES.CONNECTED);
-      },
-    );
+      expect(stateChanges).toContain(PEER_STATES.CONNECTING);
+      expect(stateChanges).toContain(PEER_STATES.CONNECTED);
+      expect(initiator.state).toBe(PEER_STATES.CONNECTED);
+    });
 
     it('start() is idempotent — returns the same promise on repeat calls', () => {
       const { a } = createLoopbackSignaling();
@@ -375,9 +349,7 @@ describe('Peer', () => {
         { error: expect.any(Error), phase: 'start' },
         expect.any(CustomEvent),
       );
-      expect(onError.mock.calls[0][0].error.message).toMatch(
-        /closed before start/,
-      );
+      expect(onError.mock.calls[0][0].error.message).toMatch(/closed before start/);
       expect(peer.state).toBe(PEER_STATES.CLOSED);
     });
 
@@ -434,9 +406,7 @@ describe('Peer', () => {
       });
       peers = [initiator];
 
-      await expect(
-        initiator.start({ connectedTimeoutMs: 1 }),
-      ).rejects.toMatchObject({
+      await expect(initiator.start({ connectedTimeoutMs: 1 })).rejects.toMatchObject({
         message: expect.stringMatching(/connection timed out/),
         code: P2P_ERROR_CODES.CONNECTION_TIMEOUT,
       });
@@ -599,10 +569,7 @@ describe('Peer', () => {
       await vi.runAllTimersAsync();
 
       expect(restartIce).toHaveBeenCalledTimes(2);
-      expect(reconnecting.mock.calls.map(([detail]) => detail.nextDelayMs)).toEqual([
-        0,
-        5,
-      ]);
+      expect(reconnecting.mock.calls.map(([detail]) => detail.nextDelayMs)).toEqual([0, 5]);
       expect(failed).toHaveBeenCalledTimes(1);
       expect(failed.mock.calls[0][0]).toMatchObject({
         attempts: 2,
@@ -941,10 +908,7 @@ function withTimeout(promise, timeoutMs, label) {
   return Promise.race([
     promise,
     new Promise((_, reject) => {
-      setTimeout(
-        () => reject(new Error(`Timed out waiting for ${label}`)),
-        timeoutMs,
-      );
+      setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), timeoutMs);
     }),
   ]);
 }

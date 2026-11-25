@@ -9,8 +9,7 @@ type Props = {
 };
 
 export default function LobbyForm(props: Props) {
-  const initialRoomId =
-    new URL(window.location.href).searchParams.get('room')?.trim() ?? '';
+  const initialRoomId = new URL(window.location.href).searchParams.get('room')?.trim() ?? '';
   const [roomId, setRoomId] = createSignal(initialRoomId);
   const isLoading = () => props.isEntering || props.isInRoom || props.isExiting;
   const enteredRoomId = () => roomId().trim();
@@ -52,28 +51,28 @@ export default function LobbyForm(props: Props) {
 
   return (
     <form
-      class='lobby-form'
+      class="lobby-form"
       onSubmit={(e) => {
         e.preventDefault();
         void enterRoomAndUpdateURL();
       }}
     >
       <input
-        class='room-id-input'
+        class="room-id-input"
         value={roomId()}
         onInput={(event) => setRoomId(event.currentTarget.value)}
-        placeholder='Room ID'
-        aria-label='Room ID'
+        placeholder="Room ID"
+        aria-label="Room ID"
         disabled={isLoading()}
       />
-      <button type='submit' class='primary-button' disabled={!canUseRoom()}>
+      <button type="submit" class="primary-button" disabled={!canUseRoom()}>
         {props.isEntering ? 'Entering...' : 'Enter room'}
       </button>
-      <button type='button' onClick={copyLink} disabled={!canCopyLink()}>
+      <button type="button" onClick={copyLink} disabled={!canCopyLink()}>
         Copy link
       </button>
       <button
-        type='button'
+        type="button"
         onClick={exitRoomAndUpdateURL}
         disabled={!props.isInRoom || props.isExiting}
       >

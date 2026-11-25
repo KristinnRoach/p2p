@@ -10,14 +10,10 @@ type Props = {
 
 export default function VideoGrid(props: Props) {
   return (
-    <div class='video-grid'>
-      <Show when={props.localStream}>
-        {(stream) => <LocalPreview stream={stream()} />}
-      </Show>
+    <div class="video-grid">
+      <Show when={props.localStream}>{(stream) => <LocalPreview stream={stream()} />}</Show>
       <For each={props.remoteStreams}>
-        {(remote) => (
-          <MemberTile memberId={remote.memberId} stream={remote.stream} />
-        )}
+        {(remote) => <MemberTile memberId={remote.memberId} stream={remote.stream} />}
       </For>
     </div>
   );

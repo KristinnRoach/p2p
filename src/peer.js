@@ -12,10 +12,7 @@ import { rtcConfig as defaultRtcConfig } from './config.js';
 import { createOffer, createAnswer, setRemoteDescription } from './sdp.js';
 import { setupIceCandidates, drainIceCandidateQueue } from './ice.js';
 import { addLocalTracks } from './tracks.js';
-import {
-  assertLocalTrackKind,
-  normalizeLocalTrackSlots,
-} from './local-track-slots.js';
+import { assertLocalTrackKind, normalizeLocalTrackSlots } from './local-track-slots.js';
 import { log } from './logger.js';
 import { createIceServersManager } from './ice-servers.js';
 
@@ -116,10 +113,7 @@ export class Peer extends EventTarget {
     this._signaling = signaling;
     this._localStream = localStream;
     this._localTrackSlots = new Map(
-      normalizeLocalTrackSlots(localTrackSlots, 'Peer').map((slot) => [
-        slot.id,
-        slot,
-      ]),
+      normalizeLocalTrackSlots(localTrackSlots, 'Peer').map((slot) => [slot.id, slot]),
     );
     this._localTrackSenders = new Map();
     this._audioOnly = audioOnly;
@@ -133,8 +127,7 @@ export class Peer extends EventTarget {
         rtcConfig,
         provider: iceServersProvider,
         refreshMarginMs: iceServersRefreshMarginMs,
-        onError: (error) =>
-          this._emit('error', { error, phase: 'ice-servers-refresh' }),
+        onError: (error) => this._emit('error', { error, phase: 'ice-servers-refresh' }),
       });
     this._startingIceServers = false;
 
@@ -205,11 +198,7 @@ export class Peer extends EventTarget {
     if (this._started) return this._startPromise;
     this._started = true;
 
-    const {
-      startTimeoutMs = 0,
-      connectedTimeoutMs = 0,
-      signal = null,
-    } = options ?? {};
+    const { startTimeoutMs = 0, connectedTimeoutMs = 0, signal = null } = options ?? {};
 
     this._startPromise = new Promise((resolve, reject) => {
       this._pendingStartReject = reject;
@@ -276,9 +265,7 @@ export class Peer extends EventTarget {
         // Unbuffered transports may deliver the offer and trickled ICE while
         // credentials are loading. Subscribe now; create the PC only once ready.
         const initialSignals =
-          this._role === 'joiner'
-            ? this._bufferInitialJoinerSignals(failAndClose)
-            : null;
+          this._role === 'joiner' ? this._bufferInitialJoinerSignals(failAndClose) : null;
         this._throwIfClosedDuringStart();
         if (this._iceServersManager.hasProvider) {
           this._startingIceServers = true;
@@ -333,9 +320,7 @@ export class Peer extends EventTarget {
       throw new Error('Peer.send: no data channel');
     }
     if (this._dataChannel.readyState !== 'open') {
-      throw new Error(
-        `Peer.send: data channel not open (state=${this._dataChannel.readyState})`,
-      );
+      throw new Error(`Peer.send: data channel not open (state=${this._dataChannel.readyState})`);
     }
     this._dataChannel.send(data);
   }
@@ -482,11 +467,7 @@ export class Peer extends EventTarget {
       this._signaling.onAnswer(async (answer) => {
         if (!answer || this._closed) return;
         try {
-          const applied = await setRemoteDescription(
-            this._pc,
-            answer,
-            drainIceCandidateQueue,
-          );
+          const applied = await setRemoteDescription(this._pc, answer, drainIceCandidateQueue);
           if (!applied) return;
           this._emitReceiverTracks();
           if (this._iceRecovery.running) {
@@ -554,11 +535,7 @@ export class Peer extends EventTarget {
     if (!offer || this._closed || this._pc.signalingState !== 'stable') {
       return false;
     }
-    const applied = await setRemoteDescription(
-      this._pc,
-      offer,
-      drainIceCandidateQueue,
-    );
+    const applied = await setRemoteDescription(this._pc, offer, drainIceCandidateQueue);
     if (!applied || this._closed) return false;
     this._emitReceiverTracks();
 
@@ -630,9 +607,7 @@ export class Peer extends EventTarget {
       });
       if (!health.allHealthy) {
         this._emit('error', {
-          error: new Error(
-            `Unhealthy local tracks: ${health.unhealthyKinds.join(', ')}`,
-          ),
+          error: new Error(`Unhealthy local tracks: ${health.unhealthyKinds.join(', ')}`),
           phase: 'tracks',
         });
       }
@@ -642,8 +617,7 @@ export class Peer extends EventTarget {
       setupIceCandidates(pc, {
         sendCandidate: (candidate) => this._signaling.sendCandidate(candidate),
         onRemoteCandidate:
-          onRemoteCandidate ??
-          ((callback) => this._signaling.onRemoteCandidate(callback)),
+          onRemoteCandidate ?? ((callback) => this._signaling.onRemoteCandidate(callback)),
       }),
     );
 
@@ -724,10 +698,7 @@ export class Peer extends EventTarget {
     ) {
       this._iceRecovery.graceTimer = setTimeout(() => {
         this._iceRecovery.graceTimer = null;
-        if (
-          !this._closed &&
-          this._pc?.iceConnectionState === 'disconnected'
-        ) {
+        if (!this._closed && this._pc?.iceConnectionState === 'disconnected') {
           this._startIceRecovery('disconnected');
         }
       }, this._iceRecovery.options.disconnectedGraceMs);
@@ -774,12 +745,7 @@ export class Peer extends EventTarget {
 
   _startIceRecovery(reason) {
     const recovery = this._iceRecovery;
-    if (
-      !recovery.options ||
-      !recovery.initiallyConnected ||
-      recovery.running ||
-      this._closed
-    ) {
+    if (!recovery.options || !recovery.initiallyConnected || recovery.running || this._closed) {
       return;
     }
     recovery.running = true;
@@ -791,13 +757,8 @@ export class Peer extends EventTarget {
     recovery.iceConnected = false;
     recovery.reportedError = null;
 
-    if (
-      this._role === 'joiner' &&
-      typeof this._signaling.sendIceRestartRequest !== 'function'
-    ) {
-      const error = new Error(
-        'Peer: signaling does not support ICE restart requests',
-      );
+    if (this._role === 'joiner' && typeof this._signaling.sendIceRestartRequest !== 'function') {
+      const error = new Error('Peer: signaling does not support ICE restart requests');
       this._emit('error', { error, phase: 'ice-restart-request' });
       this._failIceRecovery(error);
       return;
@@ -807,17 +768,13 @@ export class Peer extends EventTarget {
 
   async _runIceRecovery() {
     const recovery = this._iceRecovery;
-    while (
-      recovery.running &&
-      recovery.attempt < recovery.options.maxAttempts
-    ) {
+    while (recovery.running && recovery.attempt < recovery.options.maxAttempts) {
       const attempt = recovery.attempt + 1;
       const nextDelayMs =
         attempt === 1
           ? 0
           : Math.min(
-              recovery.options.initialBackoffMs *
-                recovery.options.backoffFactor ** (attempt - 2),
+              recovery.options.initialBackoffMs * recovery.options.backoffFactor ** (attempt - 2),
               recovery.options.maxBackoffMs,
             );
       recovery.attempt = attempt;
@@ -844,10 +801,7 @@ export class Peer extends EventTarget {
         if (recovery.reportedError !== error) {
           this._emit('error', {
             error,
-            phase:
-              this._role === 'initiator'
-                ? 'ice-restart'
-                : 'ice-restart-request',
+            phase: this._role === 'initiator' ? 'ice-restart' : 'ice-restart-request',
           });
         }
         if (recovery.attempt >= recovery.options.maxAttempts) {
@@ -1006,10 +960,7 @@ export class Peer extends EventTarget {
   }
 
   _emitReceiverTracks() {
-    const receivers =
-      typeof this._pc?.getReceivers === 'function'
-        ? this._pc.getReceivers()
-        : [];
+    const receivers = typeof this._pc?.getReceivers === 'function' ? this._pc.getReceivers() : [];
     for (const receiver of receivers) {
       const track = receiver?.track;
       if (track && track.readyState !== 'ended') {
@@ -1024,8 +975,7 @@ export class Peer extends EventTarget {
     const previous = this._remoteTrackInfo.get(track);
     if (
       previous &&
-      (previous.emittedFrom === 'native' ||
-        sameStreams(previous.streams, normalizedStreams))
+      (previous.emittedFrom === 'native' || sameStreams(previous.streams, normalizedStreams))
     ) {
       return;
     }
@@ -1063,10 +1013,7 @@ export class Peer extends EventTarget {
       } catch {
         // Unserializable: count only; _handleOffer validates the value.
       }
-      if (
-        count >= INITIAL_SIGNAL_MAX_MESSAGES ||
-        size + length > INITIAL_SIGNAL_MAX_SIZE
-      ) {
+      if (count >= INITIAL_SIGNAL_MAX_MESSAGES || size + length > INITIAL_SIGNAL_MAX_SIZE) {
         failStart(
           createP2PError(
             'Peer.start: initial signaling buffer limit exceeded',
@@ -1174,12 +1121,7 @@ export class Peer extends EventTarget {
       });
       offState = this.on('statechange', ({ state }) => {
         if (state === PEER_STATES.FAILED || state === PEER_STATES.CLOSED) {
-          fail(
-            createP2PError(
-              `Peer.start: connection ${state}`,
-              connectionStateErrorCode(state),
-            ),
-          );
+          fail(createP2PError(`Peer.start: connection ${state}`, connectionStateErrorCode(state)));
         }
       });
       timer = setTimeout(() => {
@@ -1207,10 +1149,7 @@ function sameStreams(left, right) {
 }
 
 function isIceConnected(pc) {
-  return (
-    pc?.iceConnectionState === 'connected' ||
-    pc?.iceConnectionState === 'completed'
-  );
+  return pc?.iceConnectionState === 'connected' || pc?.iceConnectionState === 'completed';
 }
 
 export { PEER_STATES, P2P_ERROR_CODES };
@@ -1276,23 +1215,15 @@ function normalizeIceRecoveryOptions(value) {
     }
   }
   if (!Number.isInteger(options.maxAttempts) || options.maxAttempts <= 0) {
-    throw new TypeError(
-      'Peer: iceRecovery.maxAttempts must be a positive integer',
-    );
+    throw new TypeError('Peer: iceRecovery.maxAttempts must be a positive integer');
   }
-  for (const name of [
-    'disconnectedGraceMs',
-    'initialBackoffMs',
-    'maxBackoffMs',
-  ]) {
+  for (const name of ['disconnectedGraceMs', 'initialBackoffMs', 'maxBackoffMs']) {
     if (options[name] < 0) {
       throw new TypeError(`Peer: iceRecovery.${name} must be non-negative`);
     }
   }
   if (options.attemptTimeoutMs <= 0) {
-    throw new TypeError(
-      'Peer: iceRecovery.attemptTimeoutMs must be a positive number',
-    );
+    throw new TypeError('Peer: iceRecovery.attemptTimeoutMs must be a positive number');
   }
   if (options.backoffFactor < 1) {
     throw new TypeError('Peer: iceRecovery.backoffFactor must be at least 1');

@@ -9,20 +9,13 @@ export function createIceServersManager({
   if (provider !== undefined && typeof provider !== 'function') {
     throw new TypeError('iceServersProvider must be a function');
   }
-  if (
-    refreshMarginMs !== undefined &&
-    (!Number.isFinite(refreshMarginMs) || refreshMarginMs < 0)
-  ) {
-    throw new TypeError(
-      'iceServersRefreshMarginMs must be finite and non-negative',
-    );
+  if (refreshMarginMs !== undefined && (!Number.isFinite(refreshMarginMs) || refreshMarginMs < 0)) {
+    throw new TypeError('iceServersRefreshMarginMs must be finite and non-negative');
   }
 
   const baseRtcConfig = {
     ...rtcConfig,
-    ...(rtcConfig.iceServers
-      ? { iceServers: [...rtcConfig.iceServers] }
-      : {}),
+    ...(rtcConfig.iceServers ? { iceServers: [...rtcConfig.iceServers] } : {}),
   };
   const controller = new AbortController();
   const peerConnections = new Set();
@@ -65,9 +58,7 @@ export function createIceServersManager({
       return;
     }
     const delay =
-      REFRESH_RETRY_DELAYS_MS[
-        Math.min(retryIndex++, REFRESH_RETRY_DELAYS_MS.length - 1)
-      ];
+      REFRESH_RETRY_DELAYS_MS[Math.min(retryIndex++, REFRESH_RETRY_DELAYS_MS.length - 1)];
     retryTimer = setTimeout(
       () => {
         retryTimer = null;
@@ -83,9 +74,7 @@ export function createIceServersManager({
     if (!current?.expiresAt || disposed) return;
     const lifetime = current.expiresAt - fetchedAt;
     const requestedMargin =
-      refreshMarginMs === undefined
-        ? Math.min(60000, lifetime * 0.1)
-        : refreshMarginMs;
+      refreshMarginMs === undefined ? Math.min(60000, lifetime * 0.1) : refreshMarginMs;
     // Keep at least 10% of the observed lifetime between successful fetches.
     const margin = Math.min(requestedMargin, lifetime * 0.9);
     refreshTimer = setTimeout(
@@ -178,9 +167,7 @@ function validateResult(result, fetchedAt) {
     result.expiresAt !== undefined &&
     (!Number.isFinite(result.expiresAt) || result.expiresAt <= fetchedAt)
   ) {
-    throw new TypeError(
-      'expiresAt must be a finite epoch-millisecond value in the future',
-    );
+    throw new TypeError('expiresAt must be a finite epoch-millisecond value in the future');
   }
 }
 

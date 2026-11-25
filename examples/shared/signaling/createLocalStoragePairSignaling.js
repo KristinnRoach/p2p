@@ -22,16 +22,11 @@ export function createLocalStoragePairSignaling({ roomId, role }) {
     hostRestartRequest: `${key}:host-restart-request`,
     guestRestartRequest: `${key}:guest-restart-request`,
   };
-  const broadcast =
-    'BroadcastChannel' in globalThis ? new BroadcastChannel(channelName) : null;
-  const localCandidates =
-    role === 'host' ? 'hostCandidates' : 'guestCandidates';
-  const remoteCandidates =
-    role === 'host' ? 'guestCandidates' : 'hostCandidates';
-  const localRestartRequest =
-    role === 'host' ? 'hostRestartRequest' : 'guestRestartRequest';
-  const remoteRestartRequest =
-    role === 'host' ? 'guestRestartRequest' : 'hostRestartRequest';
+  const broadcast = 'BroadcastChannel' in globalThis ? new BroadcastChannel(channelName) : null;
+  const localCandidates = role === 'host' ? 'hostCandidates' : 'guestCandidates';
+  const remoteCandidates = role === 'host' ? 'guestCandidates' : 'hostCandidates';
+  const localRestartRequest = role === 'host' ? 'hostRestartRequest' : 'guestRestartRequest';
+  const remoteRestartRequest = role === 'host' ? 'guestRestartRequest' : 'hostRestartRequest';
 
   const readJson = (storageKey, fallback) => {
     const raw = localStorage.getItem(storageKey);
@@ -74,8 +69,7 @@ export function createLocalStoragePairSignaling({ roomId, role }) {
     writeJson(storageKey, candidates);
   };
 
-  const isRoomStorageKey = (storageKey) =>
-    Object.values(keys).includes(storageKey);
+  const isRoomStorageKey = (storageKey) => Object.values(keys).includes(storageKey);
 
   const readLegacyRoom = () => {
     const raw = localStorage.getItem(key);
@@ -161,8 +155,7 @@ export function createLocalStoragePairSignaling({ roomId, role }) {
     sendIceRestartRequest: async (request) => {
       writeJson(keys[localRestartRequest], request);
     },
-    onIceRestartRequest: (callback) =>
-      subscribe((room) => room[remoteRestartRequest], callback),
+    onIceRestartRequest: (callback) => subscribe((room) => room[remoteRestartRequest], callback),
   };
 
   const signaling = createPairSignaling(source);
@@ -200,7 +193,5 @@ function createEmptyRoom() {
 }
 
 function definedFields(room) {
-  return Object.fromEntries(
-    Object.entries(room).filter(([, value]) => value !== undefined),
-  );
+  return Object.fromEntries(Object.entries(room).filter(([, value]) => value !== undefined));
 }

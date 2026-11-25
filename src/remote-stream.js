@@ -53,10 +53,7 @@ export function attachRemoteStream(peerOrPc, options = {}) {
 
 function resolveTrackTarget(peerOrPc) {
   if (!peerOrPc) return null;
-  if (
-    typeof peerOrPc.addEventListener === 'function' ||
-    typeof peerOrPc.on === 'function'
-  ) {
+  if (typeof peerOrPc.addEventListener === 'function' || typeof peerOrPc.on === 'function') {
     return peerOrPc;
   }
   return peerOrPc.pc ?? null;
@@ -67,8 +64,7 @@ function attachTrackListener(target, handleTrack, onCleanup) {
 
   if (typeof target.on === 'function') {
     const rawUnsubscribe = target.on('track', handleTrack);
-    const unsubscribe =
-      typeof rawUnsubscribe === 'function' ? rawUnsubscribe : () => {};
+    const unsubscribe = typeof rawUnsubscribe === 'function' ? rawUnsubscribe : () => {};
 
     return () => {
       if (detached) return;

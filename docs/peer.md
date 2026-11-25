@@ -9,7 +9,7 @@ import { Peer, PEER_STATES } from '@kidlib/p2p';
 
 const peer = new Peer({
   role: 'initiator', // or 'joiner'
-  signaling,         // RtcSignalingSource
+  signaling, // RtcSignalingSource
   localStream,
   dataChannel: true,
 });
@@ -162,8 +162,12 @@ Assembles incoming tracks into a `MediaStream` without touching the DOM:
 import { attachRemoteStream } from '@kidlib/p2p';
 
 const detach = attachRemoteStream(peer, {
-  onStream({ stream }) { /* full MediaStream ready */ },
-  onTrack({ track, stream }) { /* individual track arrived */ },
+  onStream({ stream }) {
+    /* full MediaStream ready */
+  },
+  onTrack({ track, stream }) {
+    /* individual track arrived */
+  },
 });
 
 detach(); // unsubscribe

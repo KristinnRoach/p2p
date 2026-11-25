@@ -55,9 +55,7 @@ function setupLocalCandidateSender(pc, transport) {
       try {
         const result = transport.sendCandidate(event.candidate.toJSON());
         if (result && typeof result.catch === 'function') {
-          result.catch((err) =>
-            log('Failed to send ICE candidate:', err),
-          );
+          result.catch((err) => log('Failed to send ICE candidate:', err));
         }
       } catch (err) {
         log('Failed to send ICE candidate:', err);
@@ -124,8 +122,7 @@ function setupRemoteCandidateListener(pc, transport) {
       }
     }
   });
-  const unsubscribe =
-    typeof rawUnsubscribe === 'function' ? rawUnsubscribe : () => {};
+  const unsubscribe = typeof rawUnsubscribe === 'function' ? rawUnsubscribe : () => {};
 
   return () => {
     unsubscribe();

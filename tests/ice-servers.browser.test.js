@@ -1,10 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createIceServersManager } from '../src/ice-servers.js';
 import { Peer } from '../src/peer.js';
 
-const servers = (host) => [
-  { urls: `turn:${host}`, username: 'u', credential: 'p' },
-];
+const servers = (host) => [{ urls: `turn:${host}`, username: 'u', credential: 'p' }];
 
 describe('ICE servers manager', () => {
   afterEach(() => vi.useRealTimers());
@@ -166,15 +164,11 @@ describe('ICE servers manager', () => {
 
     await manager.ensureFresh('initial');
     await vi.advanceTimersByTimeAsync(8000);
-    expect(manager.getRtcConfig().iceServers).toEqual(
-      servers('current.example'),
-    );
+    expect(manager.getRtcConfig().iceServers).toEqual(servers('current.example'));
     expect(onError).toHaveBeenCalledOnce();
 
     await vi.advanceTimersByTimeAsync(1000);
-    expect(manager.getRtcConfig().iceServers).toEqual(
-      servers('recovered.example'),
-    );
+    expect(manager.getRtcConfig().iceServers).toEqual(servers('recovered.example'));
     manager.dispose();
   });
 
@@ -212,9 +206,7 @@ describe('Peer ICE server lifecycle', () => {
     expect(peer.pc).toBeNull();
     resolveProvider({ iceServers: servers('initial.example') });
     await started;
-    expect(peer.pc.getConfiguration().iceServers[0].urls).toContain(
-      'turn:initial.example',
-    );
+    expect(peer.pc.getConfiguration().iceServers[0].urls).toContain('turn:initial.example');
     peer.dispose();
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vite-plus/test';
 
 const sessionMocks = vi.hoisted(() => ({
   startP2PSession: vi.fn(),
@@ -193,11 +193,8 @@ describe('P2PRoom', () => {
     signaling.emitPeers(['b', 'c']);
     await flushAsyncWork();
 
-    const firstManager =
-      sessionMocks.startP2PSession.mock.calls[0][0]._iceServersManager;
-    expect(
-      sessionMocks.startP2PSession.mock.calls[1][0]._iceServersManager,
-    ).toBe(firstManager);
+    const firstManager = sessionMocks.startP2PSession.mock.calls[0][0]._iceServersManager;
+    expect(sessionMocks.startP2PSession.mock.calls[1][0]._iceServersManager).toBe(firstManager);
 
     await room.leave();
     expect(room._iceServersManager).toBe(firstManager);
@@ -223,8 +220,7 @@ describe('P2PRoom', () => {
       peerId: 'a',
       localStream: stream,
       localTrackSlots: [{ id: 'primary-video', kind: 'video', track: null }],
-      onLocalStream: ({ stream: nextStream }) =>
-        localStreamEvents.push(nextStream),
+      onLocalStream: ({ stream: nextStream }) => localStreamEvents.push(nextStream),
     });
 
     try {
@@ -232,14 +228,8 @@ describe('P2PRoom', () => {
       await flushAsyncWork();
 
       await room.setLocalTrack('primary-video', first);
-      expect(sessions[0].setLocalTrack).toHaveBeenCalledWith(
-        'primary-video',
-        first,
-      );
-      expect(sessions[1].setLocalTrack).toHaveBeenCalledWith(
-        'primary-video',
-        first,
-      );
+      expect(sessions[0].setLocalTrack).toHaveBeenCalledWith('primary-video', first);
+      expect(sessions[1].setLocalTrack).toHaveBeenCalledWith('primary-video', first);
       expect(stream.getTracks()).toEqual([first]);
 
       await room.setLocalTrack('primary-video', second);
@@ -314,10 +304,7 @@ describe('P2PRoom', () => {
       sessionDeferred.resolve(session);
       await flushAsyncWork();
 
-      expect(session.setLocalTrack).toHaveBeenCalledWith(
-        'primary-video',
-        first,
-      );
+      expect(session.setLocalTrack).toHaveBeenCalledWith('primary-video', first);
       expect(room.pairs.has('b')).toBe(false);
 
       await room.setLocalTrack('primary-video', second);
@@ -325,10 +312,7 @@ describe('P2PRoom', () => {
       await flushAsyncWork();
       await flushAsyncWork();
 
-      expect(session.setLocalTrack).toHaveBeenLastCalledWith(
-        'primary-video',
-        second,
-      );
+      expect(session.setLocalTrack).toHaveBeenLastCalledWith('primary-video', second);
       expect(session.setLocalTrack).toHaveBeenCalledTimes(2);
       expect(room.pairs.get('b')).toBe(session);
     } finally {
@@ -348,9 +332,7 @@ describe('P2PRoom', () => {
     });
 
     try {
-      await expect(room.setLocalTrack('missing', null)).rejects.toThrow(
-        'unknown slot "missing"',
-      );
+      await expect(room.setLocalTrack('missing', null)).rejects.toThrow('unknown slot "missing"');
       await expect(room.setLocalTrack('microphone', video)).rejects.toThrow(
         'must be audio, got video',
       );
@@ -384,9 +366,7 @@ describe('P2PRoom', () => {
     const failure = createResolvedSession();
     const cause = new Error('outside negotiated envelope');
     failure.setLocalTrack.mockRejectedValue(cause);
-    sessionMocks.startP2PSession
-      .mockResolvedValueOnce(success)
-      .mockResolvedValueOnce(failure);
+    sessionMocks.startP2PSession.mockResolvedValueOnce(success).mockResolvedValueOnce(failure);
     const signaling = createTestRoomSignaling();
     const track = createVideoTrack();
     const room = await joinP2PRoom({
@@ -408,9 +388,7 @@ describe('P2PRoom', () => {
 
       expect(replacementError).toBeInstanceOf(LocalTrackReplacementError);
       expect(replacementError.slotId).toBe('primary-video');
-      expect(replacementError.failures).toEqual([
-        { memberId: 'c', error: cause },
-      ]);
+      expect(replacementError.failures).toEqual([{ memberId: 'c', error: cause }]);
       expect(room.localStream.getTracks()).toEqual([track]);
 
       const late = createResolvedSession();
@@ -437,9 +415,7 @@ describe('P2PRoom', () => {
       signaling,
       peerId: 'a',
       getLocalStream: () => ownedStream,
-      localTrackSlots: [
-        { id: 'primary-video', kind: 'video', track: ownedTrack },
-      ],
+      localTrackSlots: [{ id: 'primary-video', kind: 'video', track: ownedTrack }],
     });
 
     try {
@@ -614,11 +590,7 @@ describe('P2PRoom', () => {
       },
       {
         members: ['a', 'b', 'c'],
-        memberPresence: [
-          { memberId: 'a' },
-          { memberId: 'b' },
-          { memberId: 'c' },
-        ],
+        memberPresence: [{ memberId: 'a' }, { memberId: 'b' }, { memberId: 'c' }],
         memberCount: 3,
         memberCapacity: 3,
       },
@@ -693,9 +665,7 @@ describe('P2PRoom', () => {
       { memberId: 'c' },
     ]);
     expect(room.memberCount).toBe(3);
-    expect(logs).toEqual([
-      ['[Room] Duplicate memberId(s) in presence snapshot ignored: b, c'],
-    ]);
+    expect(logs).toEqual([['[Room] Duplicate memberId(s) in presence snapshot ignored: b, c']]);
 
     await room.dispose();
   });
@@ -740,18 +710,12 @@ describe('P2PRoom', () => {
       onMembersChanged: (detail) => membersChanged.push(detail),
     });
 
-    signaling.emitPeers([
-      { memberId: 'a', data: { muted: false } },
-      { memberId: 'b' },
-    ]);
+    signaling.emitPeers([{ memberId: 'a', data: { muted: false } }, { memberId: 'b' }]);
     await flushAsyncWork();
     expect(membersChanged).toHaveLength(1);
 
     // Same members, only 'a' presence data changes (e.g. mute toggle).
-    signaling.emitPeers([
-      { memberId: 'a', data: { muted: true } },
-      { memberId: 'b' },
-    ]);
+    signaling.emitPeers([{ memberId: 'a', data: { muted: true } }, { memberId: 'b' }]);
     await flushAsyncWork();
 
     expect(room.members).toEqual(['a', 'b']);
@@ -762,10 +726,7 @@ describe('P2PRoom', () => {
     ]);
 
     // An identical snapshot does not re-fire.
-    signaling.emitPeers([
-      { memberId: 'a', data: { muted: true } },
-      { memberId: 'b' },
-    ]);
+    signaling.emitPeers([{ memberId: 'a', data: { muted: true } }, { memberId: 'b' }]);
     await flushAsyncWork();
     expect(membersChanged).toHaveLength(2);
 
@@ -861,10 +822,7 @@ describe('P2PRoom', () => {
     signaling.emitPeers(['c', 'b']);
     await flushAsyncWork();
 
-    expect(room.remoteMemberStreams).toEqual([
-      previousStreams[1],
-      previousStreams[0],
-    ]);
+    expect(room.remoteMemberStreams).toEqual([previousStreams[1], previousStreams[0]]);
     expect(room.remoteMemberStreams[0]).toBe(previousStreams[1]);
     expect(room.remoteMemberStreams[1]).toBe(previousStreams[0]);
 
@@ -1018,9 +976,7 @@ describe('P2PRoom', () => {
     signaling.emitPeers([]);
     await flushAsyncWork();
 
-    expect(alone).toEqual([
-      { members: [], memberCount: 0, reason: 'dropped' },
-    ]);
+    expect(alone).toEqual([{ members: [], memberCount: 0, reason: 'dropped' }]);
 
     await room.dispose();
   });
@@ -1057,10 +1013,7 @@ describe('P2PRoom', () => {
       { peerId: 'b', memberId: 'b', stream: null, reason: 'left' },
       { peerId: 'c', memberId: 'c', stream: null, reason: 'dropped' },
     ]);
-    expect(logs).toEqual([
-      ['[Room] Member "b" left (left)'],
-      ['[Room] Member "c" left (dropped)'],
-    ]);
+    expect(logs).toEqual([['[Room] Member "b" left (left)'], ['[Room] Member "c" left (dropped)']]);
 
     await room.dispose();
   });
@@ -1085,9 +1038,7 @@ describe('P2PRoom', () => {
     });
     await flushAsyncWork();
 
-    expect(alone).toEqual([
-      { members: [], memberCount: 0, reason: 'dropped' },
-    ]);
+    expect(alone).toEqual([{ members: [], memberCount: 0, reason: 'dropped' }]);
 
     await room.dispose();
   });
@@ -1115,9 +1066,7 @@ describe('P2PRoom', () => {
     });
     await flushAsyncWork();
 
-    expect(alone).toEqual([
-      { members: [], memberCount: 0, reason: 'left' },
-    ]);
+    expect(alone).toEqual([{ members: [], memberCount: 0, reason: 'left' }]);
 
     await room.dispose();
   });
@@ -1456,9 +1405,7 @@ describe('P2PRoom', () => {
 
     expect(signaling.leave).toHaveBeenCalledWith('a');
     expect(session.dispose).toHaveBeenCalled();
-    expect(memberLeft).toEqual([
-      { memberId: 'b', stream: null, reason: 'left' },
-    ]);
+    expect(memberLeft).toEqual([{ memberId: 'b', stream: null, reason: 'left' }]);
     expect(signaling.cleanupSignaling).not.toHaveBeenCalled();
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
 
@@ -1559,20 +1506,14 @@ describe('P2PRoom', () => {
 
   describe('memberCapacity once joined', () => {
     async function joinWithCapacity(peerId, memberCapacity) {
-      sessionMocks.startP2PSession.mockImplementation(async () =>
-        createResolvedSession(),
-      );
-      sessionMocks.joinP2PSession.mockImplementation(async () =>
-        createResolvedSession(),
-      );
+      sessionMocks.startP2PSession.mockImplementation(async () => createResolvedSession());
+      sessionMocks.joinP2PSession.mockImplementation(async () => createResolvedSession());
       const signaling = createTestRoomSignaling();
       const room = await watchP2PRoom({ signaling, peerId, memberCapacity });
       signaling.emitPeers([]);
       await room.join();
       const connectedTo = () =>
-        signaling.createPeerSignaling.mock.calls.map(
-          ([{ remotePeerId }]) => remotePeerId,
-        );
+        signaling.createPeerSignaling.mock.calls.map(([{ remotePeerId }]) => remotePeerId);
       return { room, signaling, connectedTo };
     }
 
@@ -1888,9 +1829,7 @@ describe('P2PRoom', () => {
     await flushAsyncWork();
 
     expect(sessionMocks.startP2PSession).toHaveBeenCalledOnce();
-    expect(errors).toEqual([
-      { peerId: 'b', memberId: 'b', error: startupError },
-    ]);
+    expect(errors).toEqual([{ peerId: 'b', memberId: 'b', error: startupError }]);
     expect(peerLeft).toHaveLength(0);
 
     await room.dispose();
@@ -1898,9 +1837,7 @@ describe('P2PRoom', () => {
 
   it('propagates startup error codes through the error event', async () => {
     const actualSession = await vi.importActual('../src/session.js');
-    sessionMocks.startP2PSession.mockImplementation(
-      actualSession.startP2PSession,
-    );
+    sessionMocks.startP2PSession.mockImplementation(actualSession.startP2PSession);
     const signaling = createTestRoomSignaling();
     const errors = [];
 

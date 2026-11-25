@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { attachRemoteStream } from '../src/remote-stream.js';
 
 function createVideoTrack() {
@@ -37,13 +37,9 @@ describe('attachRemoteStream', () => {
 
     const detach = attachRemoteStream(peer, { onStream });
 
-    peer.dispatchEvent(
-      new CustomEvent('track', { detail: { track, streams: [stream] } }),
-    );
+    peer.dispatchEvent(new CustomEvent('track', { detail: { track, streams: [stream] } }));
 
-    expect(onStream).toHaveBeenCalledWith(
-      expect.objectContaining({ stream, track }),
-    );
+    expect(onStream).toHaveBeenCalledWith(expect.objectContaining({ stream, track }));
 
     detach();
     track.stop();
@@ -108,8 +104,8 @@ describe('attachRemoteStream', () => {
   });
 
   it('throws when callbacks are not functions', () => {
-    expect(() =>
-      attachRemoteStream(new EventTarget(), { onTrack: 'not a function' }),
-    ).toThrow(/onTrack must be a function/);
+    expect(() => attachRemoteStream(new EventTarget(), { onTrack: 'not a function' })).toThrow(
+      /onTrack must be a function/,
+    );
   });
 });

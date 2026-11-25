@@ -15,13 +15,7 @@
   --tile-min-width: 30rem;
 
   font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 * {
@@ -95,10 +89,7 @@ button:disabled {
 
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(var(--tile-min-width, 100%)), 1fr)
-  );
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--tile-min-width, 100%)), 1fr));
   gap: var(--gap);
 }
 

@@ -42,12 +42,7 @@ function removeSocket(ws, reason = 'dropped') {
   if (socketsByRoomPeer.get(key) === ws) {
     socketsByRoomPeer.delete(key);
   }
-  broadcastPeers(
-    info.roomId,
-    reason === 'left'
-      ? [{ memberId: info.peerId, reason: 'left' }]
-      : [],
-  );
+  broadcastPeers(info.roomId, reason === 'left' ? [{ memberId: info.peerId, reason: 'left' }] : []);
 }
 
 wss.on('connection', (ws) => {

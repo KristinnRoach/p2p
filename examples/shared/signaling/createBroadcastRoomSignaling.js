@@ -4,9 +4,7 @@ const presenceSweepMs = 3000;
 
 export function createBroadcastRoomSignaling(roomId) {
   const channel =
-    'BroadcastChannel' in globalThis
-      ? new BroadcastChannel(roomChannelName(roomId))
-      : undefined;
+    'BroadcastChannel' in globalThis ? new BroadcastChannel(roomChannelName(roomId)) : undefined;
   const key = peersKey(roomId);
 
   return {
@@ -28,16 +26,9 @@ export function createBroadcastRoomSignaling(roomId) {
       await updatePresenceData(roomId, key, peerId, data);
     },
     onPeers: (callback) => {
-      const emitCurrentPresence = () =>
-        callback(readActivePresence(roomId, key));
+      const emitCurrentPresence = () => callback(readActivePresence(roomId, key));
       const emitPresenceTransition = (storedState) =>
-        callback(
-          readActivePresence(
-            roomId,
-            key,
-            normalizePresenceState(storedState),
-          ),
-        );
+        callback(readActivePresence(roomId, key, normalizePresenceState(storedState)));
       const onStorage = (event) => {
         if (event.key !== key) return;
         emitPresenceTransition(parseJson(event.newValue, { members: [] }));
@@ -77,9 +68,7 @@ export function clearBroadcastRoomSignaling(roomId) {
 function createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }) {
   const pair = pairId(localPeerId, remotePeerId);
   const channel =
-    'BroadcastChannel' in globalThis
-      ? new BroadcastChannel(roomChannelName(roomId))
-      : undefined;
+    'BroadcastChannel' in globalThis ? new BroadcastChannel(roomChannelName(roomId)) : undefined;
   const keys = {
     offer: `${prefix}${roomId}:pair:${pair}:offer`,
     answer: `${prefix}${roomId}:pair:${pair}:answer`,
@@ -142,10 +131,8 @@ function createBrowserMeshPairSource({ roomId, localPeerId, remotePeerId }) {
         remoteCandidateIndex = candidates.length;
       });
     },
-    sendIceRestartRequest: async (request) =>
-      writeJson(roomId, keys.localRestartRequest, request),
-    onIceRestartRequest: (callback) =>
-      subscribe(keys.remoteRestartRequest, callback),
+    sendIceRestartRequest: async (request) => writeJson(roomId, keys.localRestartRequest, request),
+    onIceRestartRequest: (callback) => subscribe(keys.remoteRestartRequest, callback),
   };
 }
 
@@ -227,23 +214,16 @@ function refreshPresence(roomId, key, peerId, data) {
   return updatePresence(roomId, key, (peers) => {
     let found = false;
     const activePeers = peers
-      .filter(
-        (entry) =>
-          entry.peerId === peerId || now - entry.lastSeen < presenceTtlMs,
-      )
+      .filter((entry) => entry.peerId === peerId || now - entry.lastSeen < presenceTtlMs)
       .map((entry) => {
         if (entry.peerId !== peerId) return entry;
         found = true;
-        return data === undefined
-          ? { ...entry, lastSeen: now }
-          : { peerId, lastSeen: now, data };
+        return data === undefined ? { ...entry, lastSeen: now } : { peerId, lastSeen: now, data };
       });
 
     if (!found) {
       activePeers.push(
-        data === undefined
-          ? { peerId, lastSeen: now }
-          : { peerId, lastSeen: now, data },
+        data === undefined ? { peerId, lastSeen: now } : { peerId, lastSeen: now, data },
       );
     }
     return activePeers;
@@ -252,9 +232,7 @@ function refreshPresence(roomId, key, peerId, data) {
 
 function updatePresenceData(roomId, key, peerId, data) {
   return updatePresence(roomId, key, (peers) =>
-    peers.map((entry) =>
-      entry.peerId === peerId ? { ...entry, data } : entry,
-    ),
+    peers.map((entry) => (entry.peerId === peerId ? { ...entry, data } : entry)),
   );
 }
 

@@ -18,10 +18,7 @@ Instead of using raw lowercase tags (`<p2p-room>`), use the exported Solid wrapp
 ```tsx
 import { P2PRoom, P2PVideoGrid } from '@kidlib/p2p/components/solid';
 
-<P2PRoom
-  roomId='demo'
-  createSignaling={({ roomId }) => createRoomSignalingForApp(roomId)}
->
+<P2PRoom roomId="demo" createSignaling={({ roomId }) => createRoomSignalingForApp(roomId)}>
   <P2PVideoGrid />
 </P2PRoom>;
 ```
@@ -32,7 +29,7 @@ Imperative access (call `join()` on mount, expose `room`, etc.) works just by pa
 
 ```tsx
 let room!: P2PRoomElement;
-return <P2PRoom ref={room} roomId='demo' />;
+return <P2PRoom ref={room} roomId="demo" />;
 ```
 
 ### Two paths to a room: wrapper components vs. `useP2PRoom`

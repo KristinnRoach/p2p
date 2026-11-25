@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vite-plus/test';
 import { defineP2PComponents } from '@kidlib/p2p/components';
 
 afterEach(() => {
@@ -7,9 +7,7 @@ afterEach(() => {
 
 describe('@kidlib/p2p/components', () => {
   it('defines the room primitives and joins through injected signaling', async () => {
-    const createSignaling = vi.fn(({ roomId }) =>
-      createTestRoomSignaling(roomId),
-    );
+    const createSignaling = vi.fn(({ roomId }) => createTestRoomSignaling(roomId));
     defineP2PComponents({
       createSignaling,
       getLocalStream: () => null,
@@ -34,9 +32,9 @@ describe('@kidlib/p2p/components', () => {
       memberCount: 0,
       openDataChannels: 0,
     });
-    expect(
-      room.querySelector('p2p-room-status').shadowRoot.textContent,
-    ).toContain('Status: joined');
+    expect(room.querySelector('p2p-room-status').shadowRoot.textContent).toContain(
+      'Status: joined',
+    );
   });
 
   it('keeps local chat useful before peers connect', async () => {

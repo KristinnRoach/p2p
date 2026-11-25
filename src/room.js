@@ -4,10 +4,7 @@ import { createRoomSignaling } from './signaling.js';
 import { log } from './logger.js';
 import { createIceServersManager } from './ice-servers.js';
 import { rtcConfig as defaultRtcConfig } from './config.js';
-import {
-  assertLocalTrackKind,
-  normalizeLocalTrackSlots,
-} from './local-track-slots.js';
+import { assertLocalTrackKind, normalizeLocalTrackSlots } from './local-track-slots.js';
 
 const PRESENCE_HEARTBEAT_MS = 5000;
 
@@ -29,9 +26,7 @@ export async function joinP2PRoom(options = {}) {
   } catch (error) {
     void room
       .dispose()
-      .catch((disposeError) =>
-        log('[Room] dispose after failed join threw:', disposeError),
-      );
+      .catch((disposeError) => log('[Room] dispose after failed join threw:', disposeError));
     throw error;
   }
 }
@@ -53,9 +48,7 @@ export async function watchP2PRoom(options = {}) {
   } catch (error) {
     void room
       .dispose()
-      .catch((disposeError) =>
-        log('[Room] dispose after failed watch threw:', disposeError),
-      );
+      .catch((disposeError) => log('[Room] dispose after failed watch threw:', disposeError));
     throw error;
   }
 }
@@ -124,11 +117,7 @@ export class P2PRoom extends EventTarget {
     if (createSignaling && !roomId) {
       throw new Error('P2PRoom: roomId is required with createSignaling');
     }
-    if (
-      typeof memberCapacity !== 'number' ||
-      Number.isNaN(memberCapacity) ||
-      memberCapacity <= 0
-    ) {
+    if (typeof memberCapacity !== 'number' || Number.isNaN(memberCapacity) || memberCapacity <= 0) {
       throw new Error('P2PRoom: memberCapacity must be a positive number');
     }
     if (presenceData !== undefined) {
@@ -146,17 +135,10 @@ export class P2PRoom extends EventTarget {
     this._ownsLocalStream = false;
     this._ownedLocalTracks = new Set();
     this._localTrackSlots = new Map(
-      normalizeLocalTrackSlots(localTrackSlots, 'P2PRoom').map((slot) => [
-        slot.id,
-        slot,
-      ]),
+      normalizeLocalTrackSlots(localTrackSlots, 'P2PRoom').map((slot) => [slot.id, slot]),
     );
     this._localTrackSlotVersion = 0;
-    if (
-      this._localTrackSlots.size > 0 &&
-      !this.localStream &&
-      !getLocalStream
-    ) {
+    if (this._localTrackSlots.size > 0 && !this.localStream && !getLocalStream) {
       this.localStream = new MediaStream();
     }
     this._syncAllSlotTracksToLocalStream();
@@ -268,8 +250,7 @@ export class P2PRoom extends EventTarget {
       const stream = this.remoteStreams.get(memberId);
       if (!stream) return;
       const previous = this._remoteMemberStreamEntries.get(memberId);
-      const entry =
-        previous?.stream === stream ? previous : { memberId, stream };
+      const entry = previous?.stream === stream ? previous : { memberId, stream };
       this._remoteMemberStreamEntries.set(memberId, entry);
       streams.push(entry);
       seen.add(memberId);
@@ -312,8 +293,7 @@ export class P2PRoom extends EventTarget {
     this._disposePromise = (async () => {
       await Promise.allSettled([pendingJoin, pendingLeave].filter(Boolean));
       const signaling = this.signaling;
-      const shouldLeave =
-        this._joinStarted || this._joined || this._leavePending;
+      const shouldLeave = this._joinStarted || this._joined || this._leavePending;
       try {
         if (shouldLeave && signaling) {
           await Promise.resolve(signaling.leave(this.peerId));
@@ -390,9 +370,7 @@ export class P2PRoom extends EventTarget {
       await Promise.resolve(signaling.refreshPresence(this.peerId, data));
       return;
     }
-    throw new Error(
-      'P2PRoom.setPresenceData: signaling does not support presence data updates',
-    );
+    throw new Error('P2PRoom.setPresenceData: signaling does not support presence data updates');
   }
 
   /**
@@ -424,9 +402,7 @@ export class P2PRoom extends EventTarget {
       }),
     );
     const failures = results.flatMap((result, index) =>
-      result.status === 'rejected'
-        ? [{ memberId: pairs[index][0], error: result.reason }]
-        : [],
+      result.status === 'rejected' ? [{ memberId: pairs[index][0], error: result.reason }] : [],
     );
     if (failures.length > 0) {
       throw new LocalTrackReplacementError(slotId, failures);
@@ -439,9 +415,7 @@ export class P2PRoom extends EventTarget {
     if (this._leavePromise) return this._leavePromise;
 
     this._leavePromise =
-      this._state === 'joining' && this._joinPromise
-        ? this._leaveAfterJoin()
-        : this._leave();
+      this._state === 'joining' && this._joinPromise ? this._leaveAfterJoin() : this._leave();
     this._leavePromise.then(
       () => {
         this._leavePromise = null;
@@ -460,8 +434,7 @@ export class P2PRoom extends EventTarget {
       throw createAbortError();
     }
     const cleanup = this.signaling.onPeers((snapshot) => {
-      const { members: memberPresence, explicitlyLeft } =
-        normalizePresenceSnapshot(snapshot);
+      const { members: memberPresence, explicitlyLeft } = normalizePresenceSnapshot(snapshot);
       const memberIds = memberPresence.map((member) => member.memberId);
       const previousRemoteMemberIds = this._memberIds.filter(
         (memberId) => memberId !== this.peerId,
@@ -470,10 +443,7 @@ export class P2PRoom extends EventTarget {
       const departureReasons = new Map(
         previousRemoteMemberIds
           .filter((memberId) => !nextMemberIds.has(memberId))
-          .map((memberId) => [
-            memberId,
-            explicitlyLeft.has(memberId) ? 'left' : 'dropped',
-          ]),
+          .map((memberId) => [memberId, explicitlyLeft.has(memberId) ? 'left' : 'dropped']),
       );
       if (!this._presenceSeen) {
         this._presenceSeen = true;
@@ -481,10 +451,7 @@ export class P2PRoom extends EventTarget {
         this._presenceWaiters.clear();
       }
       this._setMembers(memberPresence);
-      if (
-        (this._state === 'watching' || this._state === 'joining') &&
-        this._isFull(memberIds)
-      ) {
+      if ((this._state === 'watching' || this._state === 'joining') && this._isFull(memberIds)) {
         this._emitFull(memberIds);
       }
       this._syncMembers(memberIds, departureReasons);
@@ -667,14 +634,9 @@ export class P2PRoom extends EventTarget {
   _syncMembers(memberIds, departureReasons = new Map()) {
     if (this._state !== 'active') return;
     const allowedMemberIds = this._allowedMemberIds(memberIds);
-    const remoteMemberIds = new Set(
-      allowedMemberIds.filter((id) => id !== this.peerId),
-    );
+    const remoteMemberIds = new Set(allowedMemberIds.filter((id) => id !== this.peerId));
     for (const memberId of remoteMemberIds) this._connectMember(memberId);
-    const managedMemberIds = new Set([
-      ...this.pairs.keys(),
-      ...this._controllers.keys(),
-    ]);
+    const managedMemberIds = new Set([...this.pairs.keys(), ...this._controllers.keys()]);
     for (const memberId of managedMemberIds) {
       if (!remoteMemberIds.has(memberId)) {
         this._closeMember(memberId, {
@@ -696,9 +658,7 @@ export class P2PRoom extends EventTarget {
     this._hadRemoteMembers = false;
     const reasons = [...departureReasons.values()];
     const reason =
-      reasons.length > 0 && reasons.every((value) => value === 'left')
-        ? 'left'
-        : 'dropped';
+      reasons.length > 0 && reasons.every((value) => value === 'left') ? 'left' : 'dropped';
     this._emitAlone(reason);
     if (this.autoDisposeWhenAlone) {
       void this.dispose().catch(() => {});
@@ -720,8 +680,7 @@ export class P2PRoom extends EventTarget {
       remotePeerId: remoteMemberId,
     });
     const role = this.peerId < remoteMemberId ? 'initiator' : 'joiner';
-    const createSession =
-      role === 'initiator' ? startP2PSession : joinP2PSession;
+    const createSession = role === 'initiator' ? startP2PSession : joinP2PSession;
     const initialLocalTrackSlotVersion = this._localTrackSlotVersion;
 
     this._controllers.set(remoteMemberId, controller);
@@ -770,16 +729,9 @@ export class P2PRoom extends EventTarget {
           return;
         }
         try {
-          for (const type of [
-            'iceReconnecting',
-            'iceReconnected',
-            'iceReconnectFailed',
-          ]) {
+          for (const type of ['iceReconnecting', 'iceReconnected', 'iceReconnectFailed']) {
             pair.on(type, (detail) => {
-              if (
-                this._state === 'active' &&
-                !controller.signal.aborted
-              ) {
+              if (this._state === 'active' && !controller.signal.aborted) {
                 this._emit(type, {
                   ...detail,
                   memberId: remoteMemberId,
@@ -888,10 +840,7 @@ export class P2PRoom extends EventTarget {
   _releaseOwnedLocalStream() {
     if (!this._ownsLocalStream) return;
 
-    const tracksToStop = new Set([
-      ...this.localStream.getTracks(),
-      ...this._ownedLocalTracks,
-    ]);
+    const tracksToStop = new Set([...this.localStream.getTracks(), ...this._ownedLocalTracks]);
     for (const slot of this._localTrackSlots.values()) {
       if (this._ownedLocalTracks.has(slot.track)) {
         slot.track = null;
@@ -1009,8 +958,7 @@ export class P2PRoom extends EventTarget {
     this.dataChannels.set(memberId, channel);
     this._emit('dataChannel', { peerId: memberId, memberId, channel });
 
-    const onOpen = () =>
-      this._emit('dataChannelOpen', { peerId: memberId, memberId, channel });
+    const onOpen = () => this._emit('dataChannelOpen', { peerId: memberId, memberId, channel });
     const onMessage = (event) => {
       this._emit('dataChannelMessage', {
         peerId: memberId,
@@ -1250,9 +1198,7 @@ function normalizePresenceSnapshot(snapshot) {
     Array.isArray(snapshot?.departed)
       ? snapshot.departed
           .filter(
-            (departure) =>
-              departure?.reason === 'left' &&
-              typeof departure.memberId === 'string',
+            (departure) => departure?.reason === 'left' && typeof departure.memberId === 'string',
           )
           .map((departure) => departure.memberId)
       : [],
@@ -1268,11 +1214,7 @@ function normalizePresenceSnapshot(snapshot) {
   }
 
   if (duplicates.size > 0) {
-    log(
-      `[Room] Duplicate memberId(s) in presence snapshot ignored: ${[
-        ...duplicates,
-      ].join(', ')}`,
-    );
+    log(`[Room] Duplicate memberId(s) in presence snapshot ignored: ${[...duplicates].join(', ')}`);
   }
 
   return { members: [...byMemberId.values()], explicitlyLeft };

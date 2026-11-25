@@ -1,5 +1,5 @@
 import { createComputed, createRoot } from 'solid-js';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vite-plus/test';
 
 const roomMocks = vi.hoisted(() => ({
   watchP2PRoom: vi.fn(),
@@ -9,11 +9,7 @@ const roomMocks = vi.hoisted(() => ({
 
 vi.mock('../src/room.js', () => roomMocks);
 
-import {
-  attachMediaStream,
-  createMediaPlayback,
-  useP2PRoom,
-} from '../src/adapters/solid.js';
+import { attachMediaStream, createMediaPlayback, useP2PRoom } from '../src/adapters/solid.js';
 
 function createFakeRoom(overrides = {}) {
   const target = new EventTarget();
@@ -95,10 +91,7 @@ describe('attachMediaStream', () => {
     const blockedError = new DOMException('play blocked', 'NotAllowedError');
     const onPlaybackStarted = vi.fn();
     const video = createFakeVideo({
-      play: vi
-        .fn()
-        .mockRejectedValueOnce(blockedError)
-        .mockResolvedValueOnce(undefined),
+      play: vi.fn().mockRejectedValueOnce(blockedError).mockResolvedValueOnce(undefined),
     });
 
     const controller = attachMediaStream(video, stream, {
@@ -119,10 +112,7 @@ describe('createMediaPlayback', () => {
     const stream = new MediaStream();
     const blockedError = new DOMException('play blocked', 'NotAllowedError');
     const video = createFakeVideo({
-      play: vi
-        .fn()
-        .mockRejectedValueOnce(blockedError)
-        .mockResolvedValueOnce(undefined),
+      play: vi.fn().mockRejectedValueOnce(blockedError).mockResolvedValueOnce(undefined),
     });
 
     let playback;
@@ -217,9 +207,7 @@ describe('useP2PRoom', () => {
       ),
     });
     const secondRoom = createFakeRoom();
-    roomMocks.watchP2PRoom
-      .mockResolvedValueOnce(firstRoom)
-      .mockResolvedValueOnce(secondRoom);
+    roomMocks.watchP2PRoom.mockResolvedValueOnce(firstRoom).mockResolvedValueOnce(secondRoom);
 
     let solidRoom;
     const cleanup = createRoot((dispose) => {
@@ -255,9 +243,7 @@ describe('useP2PRoom', () => {
           }),
       ),
     });
-    roomMocks.watchP2PRoom
-      .mockResolvedValueOnce(firstRoom)
-      .mockResolvedValueOnce(createFakeRoom());
+    roomMocks.watchP2PRoom.mockResolvedValueOnce(firstRoom).mockResolvedValueOnce(createFakeRoom());
 
     let solidRoom;
     const cleanup = createRoot((dispose) => {
@@ -383,9 +369,7 @@ describe('useP2PRoom', () => {
     expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(2);
 
     resolveSlowDispose();
-    await vi.waitFor(() =>
-      expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(3),
-    );
+    await vi.waitFor(() => expect(roomMocks.watchP2PRoom).toHaveBeenCalledTimes(3));
 
     cleanup();
   });
@@ -445,9 +429,7 @@ describe('useP2PRoom', () => {
       dispose: vi.fn(() => Promise.reject(new Error('leave failed'))),
     });
     const secondRoom = createFakeRoom({ roomId: 'room-b' });
-    roomMocks.watchP2PRoom
-      .mockResolvedValueOnce(firstRoom)
-      .mockResolvedValueOnce(secondRoom);
+    roomMocks.watchP2PRoom.mockResolvedValueOnce(firstRoom).mockResolvedValueOnce(secondRoom);
 
     let solidRoom;
     const cleanup = createRoot((dispose) => {
@@ -478,9 +460,7 @@ describe('useP2PRoom', () => {
       dispose: vi.fn(() => leavePromise),
     });
     const secondRoom = createFakeRoom({ roomId: 'room-b', members: ['peer-b'] });
-    roomMocks.watchP2PRoom
-      .mockResolvedValueOnce(firstRoom)
-      .mockResolvedValueOnce(secondRoom);
+    roomMocks.watchP2PRoom.mockResolvedValueOnce(firstRoom).mockResolvedValueOnce(secondRoom);
 
     let solidRoom;
     const cleanup = createRoot((dispose) => {
@@ -561,16 +541,12 @@ describe('useP2PRoom', () => {
     fakeRoom.emit('localStream', { stream });
 
     fakeRoom.members = ['peer-b'];
-    fakeRoom.memberPresence = [
-      { memberId: 'peer-b', data: { displayName: 'Ben' } },
-    ];
+    fakeRoom.memberPresence = [{ memberId: 'peer-b', data: { displayName: 'Ben' } }];
     fakeRoom.memberCount = 1;
     fakeRoom.remoteMemberStreams = [{ memberId: 'peer-b', stream }];
     fakeRoom.emit('membersChanged', {
       members: ['peer-b'],
-      memberPresence: [
-        { memberId: 'peer-b', data: { displayName: 'Ben' } },
-      ],
+      memberPresence: [{ memberId: 'peer-b', data: { displayName: 'Ben' } }],
       memberCount: 1,
       memberCapacity: 4,
     });
@@ -581,9 +557,7 @@ describe('useP2PRoom', () => {
       { memberId: 'peer-b', data: { displayName: 'Ben' } },
     ]);
     expect(solidRoom.memberCount()).toBe(1);
-    expect(solidRoom.remoteMemberStreams()).toEqual([
-      { memberId: 'peer-b', stream },
-    ]);
+    expect(solidRoom.remoteMemberStreams()).toEqual([{ memberId: 'peer-b', stream }]);
 
     dispose();
   });
@@ -629,9 +603,7 @@ describe('useP2PRoom', () => {
       peerId: 'peer-a',
     });
 
-    expect(solidRoom.remoteMemberStreams()).toEqual([
-      { memberId: 'peer-b', stream },
-    ]);
+    expect(solidRoom.remoteMemberStreams()).toEqual([{ memberId: 'peer-b', stream }]);
 
     fakeRoom.remoteMemberStreams = [];
     fakeRoom.emit('memberStreamRemoved', { memberId: 'peer-b', stream });

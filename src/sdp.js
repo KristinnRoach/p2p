@@ -101,10 +101,7 @@ export async function setRemoteDescription(pc, sdp, drainQueue) {
   }
 
   if (!isValidSignalingState(pc, sdp.type)) {
-    log(
-      `Ignoring ${sdp.type} - unexpected signaling state:`,
-      pc.signalingState,
-    );
+    log(`Ignoring ${sdp.type} - unexpected signaling state:`, pc.signalingState);
     return false;
   }
 

@@ -8,24 +8,14 @@ import type {
 
 export * from '../web-components.js';
 
-type RoomEventTargetAttrs<
-  E extends Event,
-  CurrentTarget extends Element = P2PRoomElement,
-> = E & {
+type RoomEventTargetAttrs<E extends Event, CurrentTarget extends Element = P2PRoomElement> = E & {
   currentTarget: CurrentTarget;
   target: Element;
 };
 
-export type P2PRoomChangeEvent = RoomEventTargetAttrs<
-  CustomEvent<P2PRoomSnapshot>
->;
-export type P2PChatMessageEvent = RoomEventTargetAttrs<
-  CustomEvent<P2PChatMessage>,
-  HTMLElement
->;
-export type P2PRoomChatMessageEvent = RoomEventTargetAttrs<
-  CustomEvent<P2PChatMessage>
->;
+export type P2PRoomChangeEvent = RoomEventTargetAttrs<CustomEvent<P2PRoomSnapshot>>;
+export type P2PChatMessageEvent = RoomEventTargetAttrs<CustomEvent<P2PChatMessage>, HTMLElement>;
+export type P2PRoomChatMessageEvent = RoomEventTargetAttrs<CustomEvent<P2PChatMessage>>;
 
 type BaseHTMLAttrs<E extends HTMLElement> = JSX.HTMLAttributes<E>;
 
@@ -74,18 +64,12 @@ export declare function P2PRoom(
   } & BaseHTMLAttrs<P2PRoomElement>,
 ): JSX.Element;
 
-export declare function P2PVideoGrid(
-  props: BaseHTMLAttrs<HTMLElement>,
-): JSX.Element;
+export declare function P2PVideoGrid(props: BaseHTMLAttrs<HTMLElement>): JSX.Element;
 export declare function P2PChat(
   props: {
     maxMessages?: number | string;
     onChatMessage?: (event: P2PChatMessageEvent) => void;
   } & BaseHTMLAttrs<HTMLElement>,
 ): JSX.Element;
-export declare function P2PRoomControls(
-  props: BaseHTMLAttrs<HTMLElement>,
-): JSX.Element;
-export declare function P2PRoomStatus(
-  props: BaseHTMLAttrs<HTMLElement>,
-): JSX.Element;
+export declare function P2PRoomControls(props: BaseHTMLAttrs<HTMLElement>): JSX.Element;
+export declare function P2PRoomStatus(props: BaseHTMLAttrs<HTMLElement>): JSX.Element;

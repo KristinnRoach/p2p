@@ -16,8 +16,7 @@ export function Room({ createSignaling }) {
       peerId: crypto.randomUUID(),
       createSignaling,
       presenceData: { displayName: 'Ada' },
-      getLocalStream: () =>
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
+      getLocalStream: () => navigator.mediaDevices.getUserMedia({ video: true, audio: true }),
       memberCapacity: 6,
     });
   }
@@ -30,10 +29,7 @@ export function Room({ createSignaling }) {
 
   return (
     <main>
-      <button
-        onClick={() => join('demo-room')}
-        disabled={room.state() === 'joined'}
-      >
+      <button onClick={() => join('demo-room')} disabled={room.state() === 'joined'}>
         Join
       </button>
       <button onClick={exit} disabled={room.state() !== 'joined'}>
@@ -44,17 +40,11 @@ export function Room({ createSignaling }) {
         {room.state()} - {room.memberCount()} / {room.memberCapacity() ?? '-'}
       </p>
 
-      <Show when={room.errorKind()}>
-        {(kind) => <p>Could not join room: {kind()}</p>}
-      </Show>
+      <Show when={room.errorKind()}>{(kind) => <p>Could not join room: {kind()}</p>}</Show>
 
-      <Show when={room.localStream()}>
-        {(stream) => <Video stream={stream()} muted />}
-      </Show>
+      <Show when={room.localStream()}>{(stream) => <Video stream={stream()} muted />}</Show>
 
-      <For each={room.remoteMemberStreams()}>
-        {(remote) => <Video stream={remote.stream} />}
-      </For>
+      <For each={room.remoteMemberStreams()}>{(remote) => <Video stream={remote.stream} />}</For>
     </main>
   );
 }
@@ -71,9 +61,7 @@ function Video(props: { stream: MediaStream; muted?: boolean }) {
     <>
       <video ref={video} autoplay muted={props.muted} playsInline />
       <Show when={playback.playbackBlocked()}>
-        <button onClick={() => playback.resumePlayback()}>
-          Continue call
-        </button>
+        <button onClick={() => playback.resumePlayback()}>Continue call</button>
       </Show>
     </>
   );

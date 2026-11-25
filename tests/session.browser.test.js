@@ -1,5 +1,5 @@
-import { server } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { server } from 'vite-plus/test/browser';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { startP2PSession, joinP2PSession } from '../src/session.js';
 import { P2P_ERROR_CODES } from '../src/peer.js';
 import {
@@ -294,8 +294,7 @@ describe('P2P session helpers', () => {
 
     try {
       const primarySender = host.peer._localTrackSenders.get('primary-video');
-      const secondarySender =
-        host.peer._localTrackSenders.get('secondary-video');
+      const secondarySender = host.peer._localTrackSenders.get('secondary-video');
 
       expect(primarySender).toBeDefined();
       expect(secondarySender).toBeDefined();
@@ -362,44 +361,41 @@ describe('P2P session helpers', () => {
     },
   );
 
-  itNeedsDataChannelLoopback(
-    'delivers initiator media tracks to the joiner',
-    async () => {
-      const { a, b } = createLoopbackSignaling();
-      const initiatorStream = createVideoStream();
-      const joinerStream = createVideoStream();
-      const [host, guest] = await Promise.all([
-        startP2PSession({
-          signaling: a,
-          localStream: initiatorStream,
-          rtcConfig: loopbackRtcConfig,
-        }),
-        joinP2PSession({
-          signaling: b,
-          localStream: joinerStream,
-          rtcConfig: loopbackRtcConfig,
-        }),
-      ]);
+  itNeedsDataChannelLoopback('delivers initiator media tracks to the joiner', async () => {
+    const { a, b } = createLoopbackSignaling();
+    const initiatorStream = createVideoStream();
+    const joinerStream = createVideoStream();
+    const [host, guest] = await Promise.all([
+      startP2PSession({
+        signaling: a,
+        localStream: initiatorStream,
+        rtcConfig: loopbackRtcConfig,
+      }),
+      joinP2PSession({
+        signaling: b,
+        localStream: joinerStream,
+        rtcConfig: loopbackRtcConfig,
+      }),
+    ]);
 
-      try {
-        const guestRemoteStream = await waitForRemoteStream(guest);
-        const onLateRemoteStream = vi.fn();
-        guest.on('remoteStream', onLateRemoteStream);
+    try {
+      const guestRemoteStream = await waitForRemoteStream(guest);
+      const onLateRemoteStream = vi.fn();
+      guest.on('remoteStream', onLateRemoteStream);
 
-        expect(guestRemoteStream.getVideoTracks()).toHaveLength(1);
-        expect(guestRemoteStream.getVideoTracks()[0].readyState).toBe('live');
-        expect(onLateRemoteStream).toHaveBeenCalledWith(
-          expect.objectContaining({ stream: guestRemoteStream }),
-          expect.any(CustomEvent),
-        );
-      } finally {
-        host.dispose();
-        guest.dispose();
-        for (const track of initiatorStream.getTracks()) track.stop();
-        for (const track of joinerStream.getTracks()) track.stop();
-      }
-    },
-  );
+      expect(guestRemoteStream.getVideoTracks()).toHaveLength(1);
+      expect(guestRemoteStream.getVideoTracks()[0].readyState).toBe('live');
+      expect(onLateRemoteStream).toHaveBeenCalledWith(
+        expect.objectContaining({ stream: guestRemoteStream }),
+        expect.any(CustomEvent),
+      );
+    } finally {
+      host.dispose();
+      guest.dispose();
+      for (const track of initiatorStream.getTracks()) track.stop();
+      for (const track of joinerStream.getTracks()) track.stop();
+    }
+  });
 
   itNeedsDataChannelLoopback(
     'delivers initiator media tracks when using browser tab signaling',
@@ -447,46 +443,41 @@ describe('P2P session helpers', () => {
     },
   );
 
-  itNeedsDataChannelLoopback(
-    'calls onRemoteStream after session resolves',
-    async () => {
-      const { a, b } = createLoopbackSignaling();
-      const initiatorStream = createVideoStream();
-      const joinerStream = createVideoStream();
-      const onRemoteStream = vi.fn();
-      const [host, guest] = await Promise.all([
-        startP2PSession({
-          signaling: a,
-          localStream: initiatorStream,
-          rtcConfig: loopbackRtcConfig,
-        }),
-        joinP2PSession({
-          signaling: b,
-          localStream: joinerStream,
-          rtcConfig: loopbackRtcConfig,
-          onRemoteStream,
-        }),
-      ]);
+  itNeedsDataChannelLoopback('calls onRemoteStream after session resolves', async () => {
+    const { a, b } = createLoopbackSignaling();
+    const initiatorStream = createVideoStream();
+    const joinerStream = createVideoStream();
+    const onRemoteStream = vi.fn();
+    const [host, guest] = await Promise.all([
+      startP2PSession({
+        signaling: a,
+        localStream: initiatorStream,
+        rtcConfig: loopbackRtcConfig,
+      }),
+      joinP2PSession({
+        signaling: b,
+        localStream: joinerStream,
+        rtcConfig: loopbackRtcConfig,
+        onRemoteStream,
+      }),
+    ]);
 
-      try {
-        expect(onRemoteStream).toHaveBeenCalledWith(
-          expect.objectContaining({
-            stream: expect.any(MediaStream),
-            track: expect.any(MediaStreamTrack),
-          }),
-          expect.any(CustomEvent),
-        );
-        expect(
-          onRemoteStream.mock.calls[0][0].stream.getVideoTracks(),
-        ).toHaveLength(1);
-      } finally {
-        host.dispose();
-        guest.dispose();
-        for (const track of initiatorStream.getTracks()) track.stop();
-        for (const track of joinerStream.getTracks()) track.stop();
-      }
-    },
-  );
+    try {
+      expect(onRemoteStream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stream: expect.any(MediaStream),
+          track: expect.any(MediaStreamTrack),
+        }),
+        expect.any(CustomEvent),
+      );
+      expect(onRemoteStream.mock.calls[0][0].stream.getVideoTracks()).toHaveLength(1);
+    } finally {
+      host.dispose();
+      guest.dispose();
+      for (const track of initiatorStream.getTracks()) track.stop();
+      for (const track of joinerStream.getTracks()) track.stop();
+    }
+  });
 
   itNeedsDataChannelLoopback(
     'calls onRemoteTrack during startup before the session promise resolves',
@@ -687,9 +678,7 @@ describe('P2P session helpers', () => {
   it('propagates start timeout errors', async () => {
     const { b } = createLoopbackSignaling();
 
-    await expect(
-      joinP2PSession({ signaling: b, startTimeoutMs: 1 }),
-    ).rejects.toMatchObject({
+    await expect(joinP2PSession({ signaling: b, startTimeoutMs: 1 })).rejects.toMatchObject({
       message: expect.stringMatching(/timed out/),
       code: P2P_ERROR_CODES.START_TIMEOUT,
     });

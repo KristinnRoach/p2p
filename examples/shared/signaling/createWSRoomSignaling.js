@@ -22,10 +22,7 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
 
   const waitForOpen = () => {
     if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
-    if (
-      socket.readyState === WebSocket.CLOSING ||
-      socket.readyState === WebSocket.CLOSED
-    ) {
+    if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {
       return Promise.reject(closedError ?? new Error('WebSocket is closed'));
     }
     return openPromise;
@@ -40,9 +37,7 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
   };
 
   const emitPeers = (departed = []) => {
-    const members = [...knownPeers]
-      .sort()
-      .map((memberId) => ({ memberId }));
+    const members = [...knownPeers].sort().map((memberId) => ({ memberId }));
     const snapshot = {
       members,
       ...(departed.length > 0 ? { departed } : {}),
@@ -133,10 +128,7 @@ export function createWebSocketRoomSignaling({ url, roomId }) {
       manuallyClosed = true;
       peerListeners.clear();
       messageListeners.clear();
-      if (
-        socket.readyState === WebSocket.OPEN ||
-        socket.readyState === WebSocket.CONNECTING
-      ) {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
         socket.close();
       }
     },
